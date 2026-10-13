@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Source_Firm__c</fullName>
+    <description>Firm code this profile reads files for, matching Import Batch Source Firm. Used to choose between profiles when two firms send identical layouts.</description>
+    <inlineHelpText>The firm code whose files this mapping reads.</inlineHelpText>
+    <label>Source Firm</label>
+    <length>80</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Error_Message__c</fullName>
+    <description>Reason the batch failed or stopped at Mapping Review (parse error, incomplete mapping profile, unexpected exception). Shown to reviewers and included in notifications.</description>
+    <inlineHelpText>Explains why this import failed or needs a mapping review, if it did.</inlineHelpText>
+    <label>Error Message</label>
+    <length>5000</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

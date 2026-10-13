@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Row_Number__c</fullName>
+    <description>Position of the row among the file's non-blank data rows (1 = first data row after the header). Lets reviewers and firms trace any staging row back to the original file.</description>
+    <inlineHelpText>The position of this row in the original file.</inlineHelpText>
+    <label>Row Number</label>
+    <precision>6</precision>
+    <required>false</required>
+    <scale>0</scale>
+    <type>Number</type>
+    <unique>false</unique>
+</CustomField>

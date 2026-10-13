@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Column_Map_Required_When_Active</fullName>
+    <active>true</active>
+    <description>Prevents activating a profile that cannot map any columns.</description>
+    <errorConditionFormula>AND(ISPICKVAL(Status__c, "Active"), ISBLANK(Column_Map__c))</errorConditionFormula>
+    <errorDisplayField>Column_Map__c</errorDisplayField>
+    <errorMessage>An Active mapping profile needs a Column Map.</errorMessage>
+</ValidationRule>

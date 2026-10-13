@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Mapping_Profile__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The mapping profile applied to this file. Blank while the batch is in Mapping Review because no profile matched. Recorded so every batch shows exactly which column mapping produced its staging rows.</description>
+    <inlineHelpText>The saved column mapping used to read this file.</inlineHelpText>
+    <label>Mapping Profile</label>
+    <referenceTo>Mapping_Profile__c</referenceTo>
+    <relationshipLabel>Import Batches</relationshipLabel>
+    <relationshipName>Import_Batches</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

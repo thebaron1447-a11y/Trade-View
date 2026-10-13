@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Column_Map__c</fullName>
+    <description>JSON object mapping each source column header to a canonical field: repCode, advisorName, firmName, fundName, tradeDate, amount, transactionType, or IGNORE. Every column in the file must appear, so nothing is silently dropped.</description>
+    <inlineHelpText>How each column in the file maps to a trade field. Every column must be mapped or marked IGNORE.</inlineHelpText>
+    <label>Column Map</label>
+    <length>32768</length>
+    <type>LongTextArea</type>
+    <visibleLines>8</visibleLines>
+</CustomField>

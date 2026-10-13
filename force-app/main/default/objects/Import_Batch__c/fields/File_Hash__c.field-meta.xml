@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>File_Hash__c</fullName>
+    <caseSensitive>false</caseSensitive>
+    <description>SHA-256 hash of the raw file contents, computed by the inbound endpoint and checked against the push job's own hash. Unique, so the same file can never be loaded twice when a job is re-run.</description>
+    <externalId>true</externalId>
+    <inlineHelpText>System-generated fingerprint used to block duplicate imports. Do not edit.</inlineHelpText>
+    <label>File Hash</label>
+    <length>64</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>true</unique>
+</CustomField>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Source_Fund_Name__c</fullName>
+    <description>Fund name as reported in the file. Resolved to a Fund (Product2) through the Fund Alias table.</description>
+    <inlineHelpText>The fund name reported in the file.</inlineHelpText>
+    <label>Source Fund Name</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

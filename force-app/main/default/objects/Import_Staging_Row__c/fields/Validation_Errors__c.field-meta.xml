@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Validation_Errors__c</fullName>
+    <description>Problems found while normalizing the row, one per line (unparseable date, missing amount, unknown transaction type, wrong number of columns). A row with errors is never matched or loaded.</description>
+    <inlineHelpText>Lists anything wrong with this row that must be fixed before it can load.</inlineHelpText>
+    <label>Validation Errors</label>
+    <length>5000</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

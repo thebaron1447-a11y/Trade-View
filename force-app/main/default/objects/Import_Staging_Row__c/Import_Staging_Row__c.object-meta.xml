@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>One row of a received file, kept raw (as JSON) and normalized into canonical fields using the batch's mapping profile. Matching (phase 3) and loading (phase 4) work from these rows.</description>
+    <enableActivities>false</enableActivities>
+    <enableBulkApi>true</enableBulkApi>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <enableSharing>true</enableSharing>
+    <enableStreamingApi>true</enableStreamingApi>
+    <externalSharingModel>ControlledByParent</externalSharingModel>
+    <label>Import Staging Row</label>
+    <nameField>
+        <displayFormat>ISR-{0000000}</displayFormat>
+        <label>Row Id</label>
+        <type>AutoNumber</type>
+    </nameField>
+    <pluralLabel>Import Staging Rows</pluralLabel>
+    <sharingModel>ControlledByParent</sharingModel>
+    <visibility>Public</visibility>
+</CustomObject>

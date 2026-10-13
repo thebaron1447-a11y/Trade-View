@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Trade_Date__c</fullName>
+    <description>Trade date parsed using the mapping profile's declared date format, never guessed per row. Blank if the value could not be parsed (see Validation Errors).</description>
+    <inlineHelpText>The trade date, converted from the file's date format.</inlineHelpText>
+    <label>Trade Date</label>
+    <required>false</required>
+    <type>Date</type>
+</CustomField>

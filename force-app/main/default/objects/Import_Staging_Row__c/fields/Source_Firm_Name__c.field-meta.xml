@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Source_Firm_Name__c</fullName>
+    <description>Firm or branch name as reported in the file. When blank and the mapping profile is a single-firm feed, filled with the profile's firm name. Resolved to an Account through the Firm Alias table.</description>
+    <inlineHelpText>The firm name reported in the file, if any.</inlineHelpText>
+    <label>Source Firm Name</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

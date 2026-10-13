@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Firm_Required_For_Single_Firm_Feed</fullName>
+    <active>true</active>
+    <description>Single-firm feeds fill missing firm names from this lookup.</description>
+    <errorConditionFormula>AND(Single_Firm_Feed__c, ISBLANK(Firm__c))</errorConditionFormula>
+    <errorDisplayField>Firm__c</errorDisplayField>
+    <errorMessage>Select the Firm when Single Firm Feed is checked.</errorMessage>
+</ValidationRule>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Transaction_Type__c</fullName>
+    <description>Direction of the trade, derived using the profile's direction convention: a type column (BUY/SELL, ACHAT/RACHAT and similar) or the sign of the amount.</description>
+    <inlineHelpText>Whether the fund was bought or sold.</inlineHelpText>
+    <label>Transaction Type</label>
+    <required>false</required>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Purchase</fullName>
+                <default>false</default>
+                <label>Purchase</label>
+            </value>
+            <value>
+                <fullName>Redemption</fullName>
+                <default>false</default>
+                <label>Redemption</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

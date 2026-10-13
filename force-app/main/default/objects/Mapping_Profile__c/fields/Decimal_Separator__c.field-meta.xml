@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Decimal_Separator__c</fullName>
+    <description>Decimal separator used in amounts. Period means 1,234.56. Comma means 1 234,56 or 1.234,56, common in French-language exports.</description>
+    <inlineHelpText>Choose Comma if this firm writes amounts like 1 234,56.</inlineHelpText>
+    <label>Decimal Separator</label>
+    <required>true</required>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Period</fullName>
+                <default>false</default>
+                <label>Period</label>
+            </value>
+            <value>
+                <fullName>Comma</fullName>
+                <default>false</default>
+                <label>Comma</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

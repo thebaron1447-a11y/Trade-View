@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Single_Firm_Feed__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>When checked, the profile's Firm fills in a missing firm name on rows from this feed. Leave unchecked for aggregator feeds that contain multiple dealers.</description>
+    <inlineHelpText>Check only if every row in this feed always comes from the same firm.</inlineHelpText>
+    <label>Single Firm Feed</label>
+    <type>Checkbox</type>
+</CustomField>

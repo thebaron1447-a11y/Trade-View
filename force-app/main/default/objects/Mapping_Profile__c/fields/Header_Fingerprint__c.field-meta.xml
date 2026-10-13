@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Header_Fingerprint__c</fullName>
+    <description>SHA-256 of the file's normalized header row (trimmed, lower-cased, single-spaced, joined with |). Used to pick the profile automatically. External ID for fast lookup; not unique, because a Draft and an Active version can share a layout.</description>
+    <externalId>true</externalId>
+    <inlineHelpText>System-generated identifier for the file layout. Do not edit.</inlineHelpText>
+    <label>Header Fingerprint</label>
+    <length>64</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

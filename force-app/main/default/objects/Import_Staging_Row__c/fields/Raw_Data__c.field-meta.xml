@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Raw_Data__c</fullName>
+    <description>The original row as JSON, keyed by the file's own column headers, before any mapping. Kept unchanged for audit and so a corrected mapping profile can be re-applied without re-sending the file.</description>
+    <inlineHelpText>The row exactly as it appeared in the file. Do not edit.</inlineHelpText>
+    <label>Raw Data</label>
+    <length>32768</length>
+    <type>LongTextArea</type>
+    <visibleLines>5</visibleLines>
+</CustomField>

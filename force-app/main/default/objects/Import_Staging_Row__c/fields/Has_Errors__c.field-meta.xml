@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Has_Errors__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>True when Validation Errors is not blank. Set by Apex. Exists because roll-up summaries cannot filter on long text fields; drives Import Batch Error Row Count.</description>
+    <inlineHelpText>Checked when this row has validation errors. Set automatically.</inlineHelpText>
+    <label>Has Errors</label>
+    <type>Checkbox</type>
+</CustomField>

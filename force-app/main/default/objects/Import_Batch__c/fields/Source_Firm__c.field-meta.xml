@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Source_Firm__c</fullName>
+    <description>Code of the firm that sent the file, supplied by the push job (the firm's folder name in the data lake). Used to choose between mapping profiles and shown to reviewers for context.</description>
+    <inlineHelpText>The external firm this trade file came from.</inlineHelpText>
+    <label>Source Firm</label>
+    <length>80</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>
