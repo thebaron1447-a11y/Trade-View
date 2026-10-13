@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Firm__c</fullName>
+    <deleteConstraint>Restrict</deleteConstraint>
+    <description>The firm that issued the code. Rep codes are only meaningful within a firm, so every Tier 1 match filters on this field.</description>
+    <inlineHelpText>The firm that issued this code.</inlineHelpText>
+    <label>Firm</label>
+    <referenceTo>Account</referenceTo>
+    <relationshipLabel>Rep Codes</relationshipLabel>
+    <relationshipName>Rep_Codes</relationshipName>
+    <required>true</required>
+    <type>Lookup</type>
+</CustomField>

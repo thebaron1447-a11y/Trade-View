@@ -1,0 +1,44 @@
+{
+  "records": [
+    {
+      "attributes": {
+        "type": "Account",
+        "referenceId": "FirmBarder"
+      },
+      "Name": "Barder & Company",
+      "Description": "Synthetic firm. Trap: name arrives as Barder and Co / Barder and C."
+    },
+    {
+      "attributes": {
+        "type": "Account",
+        "referenceId": "FirmNorthgate"
+      },
+      "Name": "Northgate Wealth Partners Inc.",
+      "Description": "Synthetic firm. Trap: shared team code 8800 with a departed member; dormant code 5521."
+    },
+    {
+      "attributes": {
+        "type": "Account",
+        "referenceId": "FirmLumiere"
+      },
+      "Name": "Lumière Valeurs Mobilières Ltée",
+      "Description": "Synthetic firm. Trap: French name and accents dropped in files; shared code 7700 split 60/40."
+    },
+    {
+      "attributes": {
+        "type": "Account",
+        "referenceId": "FirmKestrelInc"
+      },
+      "Name": "Kestrel Capital Inc.",
+      "Description": "Synthetic firm. Trap: normalizes to the same key as Kestrel Capital Ltd. and both use rep code 1001."
+    },
+    {
+      "attributes": {
+        "type": "Account",
+        "referenceId": "FirmKestrelLtd"
+      },
+      "Name": "Kestrel Capital Ltd.",
+      "Description": "Synthetic firm. Trap: normalizes to the same key as Kestrel Capital Inc. and both use rep code 1001."
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Signed_Amount__c</fullName>
+    <description>Amount with direction applied: positive for purchases, negative for redemptions. This is the value TradeAllocator splits across advisors.</description>
+    <formula>IF(ISPICKVAL(Transaction_Type__c, "Redemption"), -Amount__c, Amount__c)</formula>
+    <formulaTreatBlanksAs>BlankAsZero</formulaTreatBlanksAs>
+    <inlineHelpText>The trade amount as it affects net sales. Redemptions show as negative.</inlineHelpText>
+    <label>Signed Amount</label>
+    <precision>18</precision>
+    <scale>2</scale>
+    <type>Currency</type>
+</CustomField>

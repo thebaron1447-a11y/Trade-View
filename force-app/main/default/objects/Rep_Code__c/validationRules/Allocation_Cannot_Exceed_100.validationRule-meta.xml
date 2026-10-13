@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Allocation_Cannot_Exceed_100</fullName>
+    <active>true</active>
+    <description>Blocks active assignments on a code from totalling more than 100%. Percent values evaluate as decimals in formulas (100% = 1). Totals under 100 are allowed here and caught at processing time.</description>
+    <errorConditionFormula>Active_Allocation_Total__c &gt; 1</errorConditionFormula>
+    <errorMessage>Active allocations on this rep code total more than 100%. Reduce or end-date another advisor's share first.</errorMessage>
+</ValidationRule>

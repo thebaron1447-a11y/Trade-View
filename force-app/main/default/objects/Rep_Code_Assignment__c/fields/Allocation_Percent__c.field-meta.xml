@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Allocation_Percent__c</fullName>
+    <description>This advisor's share of trades on the code. Active assignments on a code must total 100. Solo codes use 100.</description>
+    <inlineHelpText>This advisor's share of each trade, for example 60. All advisors on the code must add up to 100.</inlineHelpText>
+    <label>Allocation Percent</label>
+    <precision>5</precision>
+    <required>true</required>
+    <scale>2</scale>
+    <type>Percent</type>
+</CustomField>

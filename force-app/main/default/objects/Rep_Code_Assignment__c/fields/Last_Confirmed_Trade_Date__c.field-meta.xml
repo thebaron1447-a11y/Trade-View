@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Last_Confirmed_Trade_Date__c</fullName>
+    <description>Trade date of the most recent loaded trade confirmed under this code and advisor. Updated by the load job. Used to detect dormant codes reactivating and as the inferred end-date boundary when a reassignment is confirmed.</description>
+    <inlineHelpText>The most recent trade confirmed for this advisor under this code. System-maintained. Do not edit.</inlineHelpText>
+    <label>Last Confirmed Trade Date</label>
+    <required>false</required>
+    <type>Date</type>
+</CustomField>

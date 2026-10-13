@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Trade_Date__c</fullName>
+    <description>Date the trade was placed, as reported by the source firm. Determines which Rep Code Assignments (and splits) apply.</description>
+    <inlineHelpText>The date the trade was placed.</inlineHelpText>
+    <label>Trade Date</label>
+    <required>true</required>
+    <type>Date</type>
+</CustomField>

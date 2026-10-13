@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Junction between a Rep Code and an Advisor (Contact) for a period of time, with the advisor's allocation percent. Solo codes have one assignment at 100%. Holds the effective dates used for reassignment detection.</description>
+    <enableActivities>false</enableActivities>
+    <enableBulkApi>true</enableBulkApi>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <enableSharing>true</enableSharing>
+    <enableStreamingApi>true</enableStreamingApi>
+    <externalSharingModel>ControlledByParent</externalSharingModel>
+    <label>Rep Code Assignment</label>
+    <nameField>
+        <displayFormat>RCA-{00000}</displayFormat>
+        <label>Assignment Number</label>
+        <type>AutoNumber</type>
+    </nameField>
+    <pluralLabel>Rep Code Assignments</pluralLabel>
+    <sharingModel>ControlledByParent</sharingModel>
+    <visibility>Public</visibility>
+</CustomObject>

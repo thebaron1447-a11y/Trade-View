@@ -1,0 +1,129 @@
+{
+  "records": [
+    {
+      "attributes": {
+        "type": "Rep_Code_Assignment__c",
+        "referenceId": "AsJulia3102"
+      },
+      "Rep_Code__c": "@RcNorth3102",
+      "Advisor__c": "@AdvJulia",
+      "Allocation_Percent__c": 100,
+      "Effective_Start_Date__c": "2019-03-01",
+      "Last_Confirmed_Trade_Date__c": "2024-05-28",
+      "Effective_End_Date__c": "2024-05-28",
+      "End_Date_Source__c": "Inferred from Review"
+    },
+    {
+      "attributes": {
+        "type": "Rep_Code_Assignment__c",
+        "referenceId": "AsJulia457"
+      },
+      "Rep_Code__c": "@RcBarder457",
+      "Advisor__c": "@AdvJulia",
+      "Allocation_Percent__c": 100,
+      "Effective_Start_Date__c": "2024-06-15",
+      "Last_Confirmed_Trade_Date__c": "2026-09-28"
+    },
+    {
+      "attributes": {
+        "type": "Rep_Code_Assignment__c",
+        "referenceId": "AsMarcus2210"
+      },
+      "Rep_Code__c": "@RcBarder2210",
+      "Advisor__c": "@AdvMarcus",
+      "Allocation_Percent__c": 100,
+      "Effective_Start_Date__c": "2018-01-08",
+      "Last_Confirmed_Trade_Date__c": "2025-11-14"
+    },
+    {
+      "attributes": {
+        "type": "Rep_Code_Assignment__c",
+        "referenceId": "AsTom5521"
+      },
+      "Rep_Code__c": "@RcNorth5521",
+      "Advisor__c": "@AdvTom",
+      "Allocation_Percent__c": 100,
+      "Effective_Start_Date__c": "2020-09-01",
+      "Last_Confirmed_Trade_Date__c": "2025-02-03"
+    },
+    {
+      "attributes": {
+        "type": "Rep_Code_Assignment__c",
+        "referenceId": "AsElise7700"
+      },
+      "Rep_Code__c": "@RcLum7700",
+      "Advisor__c": "@AdvElise",
+      "Allocation_Percent__c": 60,
+      "Effective_Start_Date__c": "2021-01-04",
+      "Last_Confirmed_Trade_Date__c": "2026-09-30"
+    },
+    {
+      "attributes": {
+        "type": "Rep_Code_Assignment__c",
+        "referenceId": "AsMarc7700"
+      },
+      "Rep_Code__c": "@RcLum7700",
+      "Advisor__c": "@AdvMarc",
+      "Allocation_Percent__c": 40,
+      "Effective_Start_Date__c": "2021-01-04",
+      "Last_Confirmed_Trade_Date__c": "2026-09-30"
+    },
+    {
+      "attributes": {
+        "type": "Rep_Code_Assignment__c",
+        "referenceId": "AsAisha8800"
+      },
+      "Rep_Code__c": "@RcNorth8800",
+      "Advisor__c": "@AdvAisha",
+      "Allocation_Percent__c": 50,
+      "Effective_Start_Date__c": "2022-04-01",
+      "Last_Confirmed_Trade_Date__c": "2026-09-25"
+    },
+    {
+      "attributes": {
+        "type": "Rep_Code_Assignment__c",
+        "referenceId": "AsDaniel8800"
+      },
+      "Rep_Code__c": "@RcNorth8800",
+      "Advisor__c": "@AdvDaniel",
+      "Allocation_Percent__c": 30,
+      "Effective_Start_Date__c": "2022-04-01",
+      "Last_Confirmed_Trade_Date__c": "2026-09-25"
+    },
+    {
+      "attributes": {
+        "type": "Rep_Code_Assignment__c",
+        "referenceId": "AsSam8800"
+      },
+      "Rep_Code__c": "@RcNorth8800",
+      "Advisor__c": "@AdvSam",
+      "Allocation_Percent__c": 20,
+      "Effective_Start_Date__c": "2022-04-01",
+      "Last_Confirmed_Trade_Date__c": "2026-03-27",
+      "Effective_End_Date__c": "2026-03-31",
+      "End_Date_Source__c": "Confirmed by Firm"
+    },
+    {
+      "attributes": {
+        "type": "Rep_Code_Assignment__c",
+        "referenceId": "AsRyan1001"
+      },
+      "Rep_Code__c": "@RcKesInc1001",
+      "Advisor__c": "@AdvRyan",
+      "Allocation_Percent__c": 100,
+      "Effective_Start_Date__c": "2023-02-01",
+      "Last_Confirmed_Trade_Date__c": "2026-09-15"
+    },
+    {
+      "attributes": {
+        "type": "Rep_Code_Assignment__c",
+        "referenceId": "AsMegan1001"
+      },
+      "Rep_Code__c": "@RcKesLtd1001",
+      "Advisor__c": "@AdvMegan",
+      "Allocation_Percent__c": 100,
+      "Effective_Start_Date__c": "2021-06-01",
+      "Last_Confirmed_Trade_Date__c": "2026-08-30"
+    }
+  ]
+}

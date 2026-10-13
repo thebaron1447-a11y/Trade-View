@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Effective_End_Date__c</fullName>
+    <description>Last date this advisor is known to have held the code. Firms do not report transfers, so this is normally set by the system when a reviewer confirms a suspected reassignment, using Last Confirmed Trade Date as the boundary. Blank means no reassignment has been detected; it does not prove the code is still held by this advisor.</description>
+    <inlineHelpText>The last date this advisor is known to have used this code. Usually set automatically when a code transfer is confirmed during review.</inlineHelpText>
+    <label>Effective End Date</label>
+    <required>false</required>
+    <type>Date</type>
+</CustomField>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Allocation_Percent_Range</fullName>
+    <active>true</active>
+    <description>Keeps each advisor's share within a valid range.</description>
+    <errorConditionFormula>OR(Allocation_Percent__c &lt;= 0, Allocation_Percent__c &gt; 1)</errorConditionFormula>
+    <errorDisplayField>Allocation_Percent__c</errorDisplayField>
+    <errorMessage>Allocation Percent must be greater than 0 and no more than 100.</errorMessage>
+</ValidationRule>

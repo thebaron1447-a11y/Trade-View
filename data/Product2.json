@@ -1,0 +1,54 @@
+{
+  "records": [
+    {
+      "attributes": {
+        "type": "Product2",
+        "referenceId": "FundWWFA"
+      },
+      "Name": "Wealth World Fund - Series A",
+      "ProductCode": "WWF-A",
+      "Description": "Mutual fund, Series A",
+      "IsActive": true
+    },
+    {
+      "attributes": {
+        "type": "Product2",
+        "referenceId": "FundWWFF"
+      },
+      "Name": "Wealth World Fund - Series F",
+      "ProductCode": "WWF-F",
+      "Description": "Mutual fund, Series F",
+      "IsActive": true
+    },
+    {
+      "attributes": {
+        "type": "Product2",
+        "referenceId": "FundWWE"
+      },
+      "Name": "Wealth World ETF",
+      "ProductCode": "WWE",
+      "Description": "Exchange-traded fund",
+      "IsActive": true
+    },
+    {
+      "attributes": {
+        "type": "Product2",
+        "referenceId": "FundCDFA"
+      },
+      "Name": "Canadian Dividend Fund - Series A",
+      "ProductCode": "CDF-A",
+      "Description": "Mutual fund, Series A",
+      "IsActive": true
+    },
+    {
+      "attributes": {
+        "type": "Product2",
+        "referenceId": "FundGBFF"
+      },
+      "Name": "Global Bond Fund - Series F",
+      "ProductCode": "GBF-F",
+      "Description": "Mutual fund, Series F",
+      "IsActive": true
+    }
+  ]
+}

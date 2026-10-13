@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Rep_Code__c</fullName>
+    <description>The code this assignment belongs to. Master-detail so allocations roll up to the code's Active Allocation Total.</description>
+    <inlineHelpText>The dealer code this advisor shares or holds.</inlineHelpText>
+    <label>Rep Code</label>
+    <referenceTo>Rep_Code__c</referenceTo>
+    <relationshipLabel>Assignments</relationshipLabel>
+    <relationshipName>Assignments</relationshipName>
+    <relationshipOrder>0</relationshipOrder>
+    <reparentableMasterDetail>false</reparentableMasterDetail>
+    <type>MasterDetail</type>
+    <writeRequiresMasterRead>false</writeRequiresMasterRead>
+</CustomField>

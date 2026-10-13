@@ -1,0 +1,67 @@
+{
+  "records": [
+    {
+      "attributes": {
+        "type": "Firm_Alias__c",
+        "referenceId": "FA1"
+      },
+      "Name": "Barder & Company",
+      "Normalized_Key__c": "barder",
+      "Firm__c": "@FirmBarder"
+    },
+    {
+      "attributes": {
+        "type": "Firm_Alias__c",
+        "referenceId": "FA2"
+      },
+      "Name": "Northgate Wealth Partners Inc.",
+      "Normalized_Key__c": "northgate wealth partners",
+      "Firm__c": "@FirmNorthgate"
+    },
+    {
+      "attributes": {
+        "type": "Firm_Alias__c",
+        "referenceId": "FA3"
+      },
+      "Name": "Northgate WP",
+      "Normalized_Key__c": "northgate wp",
+      "Firm__c": "@FirmNorthgate"
+    },
+    {
+      "attributes": {
+        "type": "Firm_Alias__c",
+        "referenceId": "FA4"
+      },
+      "Name": "Lumière Valeurs Mobilières Ltée",
+      "Normalized_Key__c": "lumière valeurs mobilières",
+      "Firm__c": "@FirmLumiere"
+    },
+    {
+      "attributes": {
+        "type": "Firm_Alias__c",
+        "referenceId": "FA5"
+      },
+      "Name": "Lumiere Valeurs Mobilieres",
+      "Normalized_Key__c": "lumiere valeurs mobilieres",
+      "Firm__c": "@FirmLumiere"
+    },
+    {
+      "attributes": {
+        "type": "Firm_Alias__c",
+        "referenceId": "FA6"
+      },
+      "Name": "Kestrel Capital Inc.",
+      "Normalized_Key__c": "kestrel capital",
+      "Firm__c": "@FirmKestrelInc"
+    },
+    {
+      "attributes": {
+        "type": "Firm_Alias__c",
+        "referenceId": "FA7"
+      },
+      "Name": "Kestrel Capital Ltd.",
+      "Normalized_Key__c": "kestrel capital",
+      "Firm__c": "@FirmKestrelLtd"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Active_Allocation_Total__c</fullName>
+    <description>Total allocation across assignments with no end date. A validation rule blocks it from exceeding 100. Under 100 means a team member left without a new split; processing routes those trades to review. Display and validation only: processing calculates the split in effect on each trade date.</description>
+    <inlineHelpText>Should equal 100%. If it is lower, someone's share needs to be reassigned before trades can load.</inlineHelpText>
+    <label>Active Allocation Total</label>
+    <summarizedField>Rep_Code_Assignment__c.Allocation_Percent__c</summarizedField>
+    <summaryFilterItems>
+        <field>Rep_Code_Assignment__c.Effective_End_Date__c</field>
+        <operation>equals</operation>
+        <value></value>
+    </summaryFilterItems>
+    <summaryForeignKey>Rep_Code_Assignment__c.Rep_Code__c</summaryForeignKey>
+    <summaryOperation>sum</summaryOperation>
+    <type>Summary</type>
+</CustomField>

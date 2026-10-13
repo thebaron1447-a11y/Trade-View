@@ -1,0 +1,76 @@
+{
+  "records": [
+    {
+      "attributes": {
+        "type": "Fund_Alias__c",
+        "referenceId": "FU1"
+      },
+      "Name": "Wealth World Fund - Series A",
+      "Normalized_Key__c": "wealth world fund series a",
+      "Fund__c": "@FundWWFA"
+    },
+    {
+      "attributes": {
+        "type": "Fund_Alias__c",
+        "referenceId": "FU2"
+      },
+      "Name": "Wealth World Fund A",
+      "Normalized_Key__c": "wealth world fund a",
+      "Fund__c": "@FundWWFA"
+    },
+    {
+      "attributes": {
+        "type": "Fund_Alias__c",
+        "referenceId": "FU3"
+      },
+      "Name": "WEALTH WORLD FD SER A",
+      "Normalized_Key__c": "wealth world fd ser a",
+      "Fund__c": "@FundWWFA"
+    },
+    {
+      "attributes": {
+        "type": "Fund_Alias__c",
+        "referenceId": "FU4"
+      },
+      "Name": "Wealth World Fund - Series F",
+      "Normalized_Key__c": "wealth world fund series f",
+      "Fund__c": "@FundWWFF"
+    },
+    {
+      "attributes": {
+        "type": "Fund_Alias__c",
+        "referenceId": "FU5"
+      },
+      "Name": "Wealth World ETF",
+      "Normalized_Key__c": "wealth world etf",
+      "Fund__c": "@FundWWE"
+    },
+    {
+      "attributes": {
+        "type": "Fund_Alias__c",
+        "referenceId": "FU6"
+      },
+      "Name": "Canadian Dividend Fund - Series A",
+      "Normalized_Key__c": "canadian dividend fund series a",
+      "Fund__c": "@FundCDFA"
+    },
+    {
+      "attributes": {
+        "type": "Fund_Alias__c",
+        "referenceId": "FU7"
+      },
+      "Name": "Cdn Dividend Fund A",
+      "Normalized_Key__c": "cdn dividend fund a",
+      "Fund__c": "@FundCDFA"
+    },
+    {
+      "attributes": {
+        "type": "Fund_Alias__c",
+        "referenceId": "FU8"
+      },
+      "Name": "Global Bond Fund - Series F",
+      "Normalized_Key__c": "global bond fund series f",
+      "Fund__c": "@FundGBFF"
+    }
+  ]
+}

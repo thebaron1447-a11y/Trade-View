@@ -1,0 +1,52 @@
+{
+  "records": [
+    {
+      "attributes": {
+        "type": "Account",
+        "referenceId": "BrBarderOak"
+      },
+      "Name": "Barder & Company - Oakville",
+      "ParentId": "@FirmBarder"
+    },
+    {
+      "attributes": {
+        "type": "Account",
+        "referenceId": "BrBarderHam"
+      },
+      "Name": "Barder & Company - Hamilton",
+      "ParentId": "@FirmBarder"
+    },
+    {
+      "attributes": {
+        "type": "Account",
+        "referenceId": "BrNorthTor"
+      },
+      "Name": "Northgate Wealth Partners - Toronto",
+      "ParentId": "@FirmNorthgate"
+    },
+    {
+      "attributes": {
+        "type": "Account",
+        "referenceId": "BrLumMtl"
+      },
+      "Name": "Lumière Valeurs Mobilières - Montréal",
+      "ParentId": "@FirmLumiere"
+    },
+    {
+      "attributes": {
+        "type": "Account",
+        "referenceId": "BrKesInc"
+      },
+      "Name": "Kestrel Capital Inc. - Calgary",
+      "ParentId": "@FirmKestrelInc"
+    },
+    {
+      "attributes": {
+        "type": "Account",
+        "referenceId": "BrKesLtd"
+      },
+      "Name": "Kestrel Capital Ltd. - Vancouver",
+      "ParentId": "@FirmKestrelLtd"
+    }
+  ]
+}

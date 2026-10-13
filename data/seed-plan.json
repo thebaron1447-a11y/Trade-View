@@ -1,0 +1,66 @@
+[
+  {
+    "sobject": "Account",
+    "saveRefs": true,
+    "resolveRefs": false,
+    "files": [
+      "Account-firms.json"
+    ]
+  },
+  {
+    "sobject": "Account",
+    "saveRefs": true,
+    "resolveRefs": true,
+    "files": [
+      "Account-branches.json"
+    ]
+  },
+  {
+    "sobject": "Contact",
+    "saveRefs": true,
+    "resolveRefs": true,
+    "files": [
+      "Contact.json"
+    ]
+  },
+  {
+    "sobject": "Product2",
+    "saveRefs": true,
+    "resolveRefs": false,
+    "files": [
+      "Product2.json"
+    ]
+  },
+  {
+    "sobject": "Rep_Code__c",
+    "saveRefs": true,
+    "resolveRefs": true,
+    "files": [
+      "Rep_Code__c.json"
+    ]
+  },
+  {
+    "sobject": "Rep_Code_Assignment__c",
+    "saveRefs": false,
+    "resolveRefs": true,
+    "files": [
+      "Rep_Code_Assignment__c.json"
+    ]
+  },
+  {
+    "sobject": "Firm_Alias__c",
+    "saveRefs": false,
+    "resolveRefs": true,
+    "files": [
+      "Firm_Alias__c.json"
+    ]
+  },
+  {
+    "sobject": "Fund_Alias__c",
+    "saveRefs": false,
+    "resolveRefs": true,
+    "files": [
+      "Fund_Alias__c.json"
+    ]
+  }
+]

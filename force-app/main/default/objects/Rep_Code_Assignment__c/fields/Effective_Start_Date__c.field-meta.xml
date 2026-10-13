@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Effective_Start_Date__c</fullName>
+    <description>First date this advisor held the code. Tier 1 matching requires the trade date to be on or after this date.</description>
+    <inlineHelpText>The date the advisor started using this code.</inlineHelpText>
+    <label>Effective Start Date</label>
+    <required>true</required>
+    <type>Date</type>
+</CustomField>
