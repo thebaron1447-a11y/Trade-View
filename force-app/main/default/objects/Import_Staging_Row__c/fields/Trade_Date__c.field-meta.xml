@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Trade_Date__c</fullName>
-    <description>Trade date parsed using the mapping profile's declared date format, never guessed per row. Blank if the value could not be parsed (see Validation Errors).</description>
-    <inlineHelpText>The trade date, converted from the file's date format.</inlineHelpText>
-    <label>Trade Date</label>
+    <description>Date from the row, parsed with the mapping profile's declared date format and never guessed: the trade date for Trade rows, the as-of date for AUM rows, or the effective date for Code Roster rows. API name kept from phase 2 to avoid breaking deployed code. Blank if the value could not be parsed (see Validation Errors).</description>
+    <inlineHelpText>The trade date, AUM as-of date or code effective date, depending on the row type.</inlineHelpText>
+    <label>Row Date</label>
     <required>false</required>
     <type>Date</type>
 </CustomField>

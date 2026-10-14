@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Suggested_Resolution__c</fullName>
+    <description>Claude's proposal for who the code belongs to, with reasoning, based on names, firm, branch and other rows (populated from the next drop). A suggestion only: a person must confirm it.</description>
+    <inlineHelpText>Claude's best guess at who this code belongs to. Verify before acting on it.</inlineHelpText>
+    <label>Suggested Resolution</label>
+    <length>5000</length>
+    <type>LongTextArea</type>
+    <visibleLines>4</visibleLines>
+</CustomField>

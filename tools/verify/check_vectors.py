@@ -1,5 +1,5 @@
 """Checks every shared test vector against the Python port of the Apex logic.
-The same vectors are embedded in NameNormalizerTest, CsvParserTest and TradeRowNormalizerVectorTest.
+The same vectors are embedded in NameNormalizerTest, CsvParserTest, TradeRowNormalizerVectorTest and NameMatcherTest.
 Run: python check_vectors.py"""
 import sys, os
 from decimal import Decimal
@@ -37,12 +37,20 @@ for name, text, d in V.CSV_ERRORS:
         pass
 for text, want in V.DELIMITERS:
     check(f"delim {text!r}", port.detect_delimiter(text), want)
+# Phase 3A: advisor name matching
+for rn, f, l, want in V.NAME_COMPAT:
+    check(f"compatible {rn!r} vs {f} {l}", port.is_compatible(rn, f, l), want)
+for v, want in V.FOLD_CASES:
+    check(f"fold {v!r}", port.fold(v), want)
+for a, b, want in V.SIMILARITY:
+    check(f"similarity {a!r} {b!r}", str(port.similarity(a, b)), want)
 
 if fails:
     print("VECTOR FAILURES:\n" + "\n".join(fails))
     sys.exit(1)
 print(f"all vectors pass in the Python port "
       f"({len(V.FIRM_KEYS)} keys, {len(V.DATES)} dates, {len(V.AMOUNTS)} amounts, {len(V.REP_CODES)} codes, "
-      f"{len(V.TYPES)} types, {len(V.CSV) + len(V.CSV_ERRORS)} csv, {len(V.DELIMITERS)} delimiters)")
+      f"{len(V.TYPES)} types, {len(V.CSV) + len(V.CSV_ERRORS)} csv, {len(V.DELIMITERS)} delimiters, "
+      f"{len(V.NAME_COMPAT)} names, {len(V.FOLD_CASES)} folds, {len(V.SIMILARITY)} similarities)")
 
 

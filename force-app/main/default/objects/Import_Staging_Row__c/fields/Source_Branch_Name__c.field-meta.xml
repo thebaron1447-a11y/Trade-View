@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Source_Branch_Name__c</fullName>
+    <description>Branch name as reported in the file. Used to place new advisors from code roster files and as a signal when detecting code reassignments.</description>
+    <inlineHelpText>The branch name reported in the file, if any.</inlineHelpText>
+    <label>Source Branch Name</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

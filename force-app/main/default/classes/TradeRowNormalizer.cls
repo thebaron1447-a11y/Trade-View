@@ -6,6 +6,11 @@
 public inherited sharing class TradeRowNormalizer {
     public static final String PURCHASE = 'Purchase';
     public static final String REDEMPTION = 'Redemption';
+    public static final String ROW_TRADE = 'Trade';
+    public static final String ROW_AUM = 'AUM';
+    public static final String ROW_ROSTER = 'Code Roster';
+    public static final String MATCH_PENDING = 'Pending';
+    public static final String MATCH_INVALID = 'Invalid';
 
     private static final String NBSP = String.fromCharArray(new List<Integer>{ 160 });
     private static final String NARROW_NBSP = String.fromCharArray(new List<Integer>{ 8239 });
@@ -30,6 +35,9 @@ public inherited sharing class TradeRowNormalizer {
         public String decimalSeparator;
         public String directionConvention;
         public String fallbackFirmName;
+        public Boolean roster = false;
+        // Normalized (upper-case letters and digits) values that mark a row as AUM.
+        public Set<String> aumIndicators = new Set<String>();
     }
 
     public static Config configFrom(Mapping_Profile__c profile) {
@@ -38,7 +46,34 @@ public inherited sharing class TradeRowNormalizer {
         cfg.decimalSeparator = profile.Decimal_Separator__c;
         cfg.directionConvention = profile.Direction_Convention__c;
         cfg.fallbackFirmName = (profile.Single_Firm_Feed__c == true && profile.Firm__c != null) ? profile.Firm__r.Name : null;
+        cfg.roster = MappingService.isRoster(profile);
+        if (String.isNotBlank(profile.AUM_Indicator_Values__c)) {
+            for (String v : profile.AUM_Indicator_Values__c.split(',')) {
+                String key = indicatorKey(v);
+                if (String.isNotBlank(key)) {
+                    cfg.aumIndicators.add(key);
+                }
+            }
+        }
         return cfg;
+    }
+
+    @TestVisible
+    private static String indicatorKey(String value) {
+        return value == null ? '' : value.toUpperCase().replaceAll('[^A-Z0-9]', '');
+    }
+
+    /** Roster feed: every row is Code Roster. Otherwise AUM if the rowType (or transactionType) value is an AUM indicator. */
+    @TestVisible
+    private static String rowTypeFor(Map<String, String> byField, Config cfg) {
+        if (cfg.roster == true) {
+            return ROW_ROSTER;
+        }
+        if (cfg.aumIndicators.isEmpty()) {
+            return ROW_TRADE;
+        }
+        String marker = byField.containsKey('rowType') ? byField.get('rowType') : byField.get('transactionType');
+        return cfg.aumIndicators.contains(indicatorKey(marker)) ? ROW_AUM : ROW_TRADE;
     }
 
     public static Import_Staging_Row__c normalize(
@@ -63,26 +98,38 @@ public inherited sharing class TradeRowNormalizer {
             }
         }
 
+        String rowType = rowTypeFor(byField, cfg);
+        row.Row_Type__c = rowType;
         row.Source_Rep_Code__c = textValue(normalizeRepCode(byField.get('repCode')), 'Rep code', 40, true, errors);
-        row.Source_Advisor_Name__c = textValue(byField.get('advisorName'), 'Advisor name', 255, false, errors);
+        row.Source_Advisor_Name__c = textValue(byField.get('advisorName'), 'Advisor name', 255, rowType == ROW_ROSTER, errors);
         String firm = byField.get('firmName');
         if (String.isBlank(firm)) {
             firm = cfg.fallbackFirmName;
         }
         row.Source_Firm_Name__c = textValue(firm, 'Firm name', 255, false, errors);
-        row.Source_Fund_Name__c = textValue(byField.get('fundName'), 'Fund name', 255, true, errors);
+        row.Source_Branch_Name__c = textValue(byField.get('branchName'), 'Branch name', 255, false, errors);
+        // Trades need a fund; AUM may be a total per code; roster rows have no fund.
+        if (rowType != ROW_ROSTER) {
+            row.Source_Fund_Name__c = textValue(byField.get('fundName'), 'Fund name', 255, rowType == ROW_TRADE, errors);
+        }
 
+        String dateLabel = rowType == ROW_TRADE ? 'Trade date' : (rowType == ROW_AUM ? 'As-of date' : 'Effective date');
         String rawDate = byField.get('tradeDate');
         if (String.isBlank(rawDate)) {
-            errors.add('Trade date is missing.');
+            errors.add(dateLabel + ' is missing.');
         } else {
             row.Trade_Date__c = parseDate(rawDate, cfg.dateFormat, errors);
         }
 
-        applyAmountAndDirection(row, byField.get('amount'), byField.get('transactionType'), cfg, errors);
+        if (rowType == ROW_TRADE) {
+            applyAmountAndDirection(row, byField.get('amount'), byField.get('transactionType'), cfg, errors);
+        } else if (rowType == ROW_AUM) {
+            applyAumValue(row, byField.get('amount'), cfg, errors);
+        }
 
         row.Validation_Errors__c = errors.isEmpty() ? null : String.join(errors, '\n').abbreviate(5000);
         row.Has_Errors__c = !errors.isEmpty();
+        row.Match_Status__c = errors.isEmpty() ? MATCH_PENDING : MATCH_INVALID;
         return row;
     }
 
@@ -212,6 +259,24 @@ public inherited sharing class TradeRowNormalizer {
             return;
         }
         errors.add('The mapping profile has no valid Direction Convention.');
+    }
+
+    /** AUM is a balance: zero is valid, negative is not, and there is no direction. */
+    @TestVisible
+    private static void applyAumValue(Import_Staging_Row__c row, String rawAmount, Config cfg, List<String> errors) {
+        if (String.isBlank(rawAmount)) {
+            errors.add('AUM value is missing.');
+            return;
+        }
+        Decimal amount = parseAmount(rawAmount, cfg.decimalSeparator, errors);
+        if (amount == null) {
+            return;
+        }
+        if (amount < 0) {
+            errors.add('AUM value is negative.');
+            return;
+        }
+        row.Amount__c = amount;
     }
 
     // ------------------------------------------------------------------ helpers

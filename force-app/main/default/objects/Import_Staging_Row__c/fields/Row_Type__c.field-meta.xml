@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Row_Type__c</fullName>
+    <description>Kind of row after normalization. Drives which validations apply, which matching rules run and what the row becomes when loaded (Trade, AUM Snapshot or Rep Code Assignment).</description>
+    <inlineHelpText>Shows whether this row is a trade, an AUM balance or an advisor code entry.</inlineHelpText>
+    <label>Row Type</label>
+    <required>false</required>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Trade</fullName>
+                <default>false</default>
+                <label>Trade</label>
+            </value>
+            <value>
+                <fullName>AUM</fullName>
+                <default>false</default>
+                <label>AUM</label>
+            </value>
+            <value>
+                <fullName>Code Roster</fullName>
+                <default>false</default>
+                <label>Code Roster</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

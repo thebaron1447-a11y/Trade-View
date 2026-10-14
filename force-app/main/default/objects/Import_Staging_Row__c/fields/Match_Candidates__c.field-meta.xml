@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Match_Candidates__c</fullName>
+    <description>JSON list of candidate firms or funds with similarity scores, kept when a name could not be resolved automatically. Input to review and to Claude in the next drop.</description>
+    <inlineHelpText>Possible matches considered for this row. System-maintained.</inlineHelpText>
+    <label>Match Candidates</label>
+    <length>32768</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Firm__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The firm the code belongs to, from the row's resolved firm.</description>
+    <inlineHelpText>The firm that issued this code.</inlineHelpText>
+    <label>Firm</label>
+    <referenceTo>Account</referenceTo>
+    <relationshipLabel>Code Follow-Ups</relationshipLabel>
+    <relationshipName>Code_Follow_Ups</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

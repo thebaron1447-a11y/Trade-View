@@ -1,0 +1,12 @@
+IA Code,Rep Name,Firm,Branch,Product,Txn Type,Trade Date,Amount
+8800,Aisha Khan,Northgate WP,Toronto,Wealth World Fund - Series F,BUY,13/09/2026,250000
+8800,Daniel Okafor,Northgate WP,Toronto,Global Bond Fund - Series F,SELL,03/09/2026,40000
+5521,Tom Reilly,,Toronto,Canadian Dividend Fund - Series A,BUY,18/09/2026,90000
+3102,Julia Morales,Northgate Wealth Partners Inc.,Toronto,Wealth World Fund - Series A,Buy,15/05/2024,30000
+8800,,Northgate WP,Toronto,Wealth World Fund - Series A,P,20/09/2026,"1,200,000"
+8800,Aisha Khan,Northgate WP,Toronto,Wealth World ETF,SELL,31/09/2026,15000
+5521,Tom Reilly,Northgate WP,Toronto,Wealth World ETF,SWITCH,21/09/2026,5000
+3102,,Northgate WP,Toronto,Wealth World Fund - Series F,BUY,10/09/2026,55000
+5521,,Northgate WP,Toronto,Wealth World ETF,BUY,22/09/2026,18000
+8800,,Northgate WP,Toronto,,POSITION,30/09/2026,9800000
+5521,Tom Reilly,Northgate WP,Toronto,,POSITION,30/09/2026,640000

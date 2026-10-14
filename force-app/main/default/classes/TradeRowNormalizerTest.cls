@@ -128,4 +128,93 @@ private class TradeRowNormalizerTest {
         Assert.isTrue(row.Validation_Errors__c.contains('no valid Date Format'), 'errors: ' + row.Validation_Errors__c);
         Assert.isTrue(row.Validation_Errors__c.contains('no valid Direction Convention'), 'errors: ' + row.Validation_Errors__c);
     }
+
+    // ------------------------------------------------------------------ phase 3A: AUM, roster, branch
+
+    private static final List<String> MIXED_HEADERS = new List<String>{ 'Date', 'Rep', 'Advisor', 'Branch', 'Fund', 'Side', 'Amount' };
+    private static final List<String> MIXED_COLUMNS = new List<String>{
+        'tradeDate', 'repCode', 'advisorName', 'branchName', 'fundName', 'transactionType', 'amount'
+    };
+
+    private static TradeRowNormalizer.Config aumConfig() {
+        TradeRowNormalizer.Config cfg = config(TestDataFactory.TYPE_COLUMN);
+        cfg.aumIndicators = new Set<String>{ 'POSITION', 'AUM' };
+        return cfg;
+    }
+
+    private static Import_Staging_Row__c mixed(List<String> values, TradeRowNormalizer.Config cfg) {
+        return TradeRowNormalizer.normalize(MIXED_HEADERS, values, MIXED_COLUMNS, cfg, 1);
+    }
+
+    @IsTest
+    static void aumRowsAreRecognizedFromTheTypeColumn() {
+        Import_Staging_Row__c aum = mixed(new List<String>{ '09/30/2026', '5521', 'Tom Reilly', 'Toronto', '', 'Position', '640,000' }, aumConfig());
+        Assert.isFalse(aum.Has_Errors__c, 'errors: ' + aum.Validation_Errors__c);
+        Assert.areEqual('AUM', aum.Row_Type__c, 'row type');
+        Assert.areEqual(640000.00, aum.Amount__c, 'balance');
+        Assert.isNull(aum.Transaction_Type__c, 'AUM has no direction');
+        Assert.isNull(aum.Source_Fund_Name__c, 'fund optional for AUM');
+        Assert.areEqual('Toronto', aum.Source_Branch_Name__c, 'branch captured');
+        Assert.areEqual('Pending', aum.Match_Status__c, 'ready for matching');
+
+        Import_Staging_Row__c zero = mixed(new List<String>{ '09/30/2026', '5521', '', '', '', 'AUM', '0' }, aumConfig());
+        Assert.isFalse(zero.Has_Errors__c, 'zero AUM is valid: ' + zero.Validation_Errors__c);
+
+        Import_Staging_Row__c negative = mixed(new List<String>{ '09/30/2026', '5521', '', '', '', 'AUM', '-5' }, aumConfig());
+        Assert.isTrue(negative.Validation_Errors__c.contains('AUM value is negative'), 'errors: ' + negative.Validation_Errors__c);
+        Assert.areEqual('Invalid', negative.Match_Status__c, 'invalid rows are never matched');
+
+        Import_Staging_Row__c missing = mixed(new List<String>{ '', '5521', '', '', '', 'AUM', '' }, aumConfig());
+        Assert.isTrue(missing.Validation_Errors__c.contains('As-of date is missing'), 'errors: ' + missing.Validation_Errors__c);
+        Assert.isTrue(missing.Validation_Errors__c.contains('AUM value is missing'), 'errors: ' + missing.Validation_Errors__c);
+
+        Import_Staging_Row__c trade = mixed(new List<String>{ '09/30/2026', '5521', 'Tom Reilly', 'Toronto', 'Fund', 'BUY', '100' }, aumConfig());
+        Assert.areEqual('Trade', trade.Row_Type__c, 'non-indicator values stay trades');
+        Assert.areEqual('Purchase', trade.Transaction_Type__c, 'direction still applies');
+    }
+
+    @IsTest
+    static void aumRowsAreRecognizedFromARowTypeColumn() {
+        List<String> headers = new List<String>{ 'Date', 'Rep', 'Fund', 'Record', 'Amount' };
+        List<String> columns = new List<String>{ 'tradeDate', 'repCode', 'fundName', 'rowType', 'amount' };
+        TradeRowNormalizer.Config cfg = config(TestDataFactory.SIGNED);
+        cfg.aumIndicators = new Set<String>{ 'AUM' };
+        Import_Staging_Row__c aum = TradeRowNormalizer.normalize(headers, new List<String>{ '09/30/2026', '457', '', 'aum', '$1,850,000.00' }, columns, cfg, 1);
+        Assert.areEqual('AUM', aum.Row_Type__c, 'row type column, case-insensitive');
+        Assert.areEqual(1850000.00, aum.Amount__c, 'balance');
+        Import_Staging_Row__c trade = TradeRowNormalizer.normalize(headers, new List<String>{ '09/30/2026', '457', 'Fund', 'TRADE', '-$100' }, columns, cfg, 2);
+        Assert.areEqual('Trade', trade.Row_Type__c, 'trade row');
+        Assert.areEqual('Redemption', trade.Transaction_Type__c, 'signed amount still sets direction');
+    }
+
+    @IsTest
+    static void rosterRowsNeedCodeAdvisorAndEffectiveDate() {
+        List<String> headers = new List<String>{ 'Rep Code', 'Advisor Name', 'Branch', 'Effective Date' };
+        List<String> columns = new List<String>{ 'repCode', 'advisorName', 'branchName', 'tradeDate' };
+        TradeRowNormalizer.Config cfg = config(TestDataFactory.TYPE_COLUMN);
+        cfg.roster = true;
+        Import_Staging_Row__c ok = TradeRowNormalizer.normalize(headers, new List<String>{ '2210', 'Priya Nair', 'Hamilton', '09/15/2026' }, columns, cfg, 1);
+        Assert.isFalse(ok.Has_Errors__c, 'errors: ' + ok.Validation_Errors__c);
+        Assert.areEqual('Code Roster', ok.Row_Type__c, 'row type');
+        Assert.areEqual(Date.newInstance(2026, 9, 15), ok.Trade_Date__c, 'effective date');
+        Assert.isNull(ok.Amount__c, 'no amount on roster rows');
+        Import_Staging_Row__c bad = TradeRowNormalizer.normalize(headers, new List<String>{ '2210', '', 'Hamilton', '' }, columns, cfg, 2);
+        Assert.isTrue(bad.Validation_Errors__c.contains('Advisor name is missing'), 'errors: ' + bad.Validation_Errors__c);
+        Assert.isTrue(bad.Validation_Errors__c.contains('Effective date is missing'), 'errors: ' + bad.Validation_Errors__c);
+    }
+
+    @IsTest
+    static void configReadsFeedTypeAndIndicators() {
+        Mapping_Profile__c p = new Mapping_Profile__c(
+            Date_Format__c = 'MM/DD/YYYY',
+            Decimal_Separator__c = 'Period',
+            Direction_Convention__c = TestDataFactory.TYPE_COLUMN,
+            AUM_Indicator_Values__c = ' Position, bal ,, AUM-Total'
+        );
+        TradeRowNormalizer.Config cfg = TradeRowNormalizer.configFrom(p);
+        Assert.areEqual(new Set<String>{ 'POSITION', 'BAL', 'AUMTOTAL' }, cfg.aumIndicators, 'normalized indicators');
+        Assert.isFalse(cfg.roster, 'blank feed type is Trade Activity');
+        p.Feed_Type__c = MappingService.FEED_ROSTER;
+        Assert.isTrue(TradeRowNormalizer.configFrom(p).roster, 'roster feed');
+    }
 }

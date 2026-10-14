@@ -2,7 +2,7 @@
  * Reads the file attached to a Received Import_Batch__c, selects its mapping profile by header
  * fingerprint, and writes one Import_Staging_Row__c per data row.
  *
- * Outcomes: Staged (rows written, possibly with row-level validation errors),
+ * Outcomes: Staged (rows written, possibly with row-level validation errors; matching is then queued),
  * Mapping Review (no Active profile for this layout, or the profile is incomplete),
  * Failed (the file could not be read or parsed; Error_Message__c says why).
  * All-or-nothing: on failure no staging rows are kept.
@@ -98,6 +98,11 @@ public with sharing class ImportBatchProcessor implements Queueable {
         batch.Status__c = STATUS_STAGED;
         batch.Error_Message__c = null;
         update as user batch;
+        // Matching runs as its own job so each stage has full limits. Apex tests cannot chain queueable
+        // jobs, so tests run TradeMatcher directly.
+        if (!Test.isRunningTest()) {
+            System.enqueueJob(new TradeMatcher(new Set<Id>{ batch.Id }));
+        }
     }
 
     private static String loadFile(Id batchId) {

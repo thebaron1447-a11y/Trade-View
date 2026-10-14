@@ -5,12 +5,14 @@ Added after the phase 2 org gate found two such failures.
    ("Message parameter cannot be null") when the message argument is null, which turns a
    passing assertion into a failure. A message is accepted only if it contains a string
    literal, because 'label: ' + null is 'label: null' while String.valueOf(null) is null.
+3. Files that start with a UTF-8 byte order mark (Windows PowerShell 5 adds one with -Encoding utf8);
+   Apex fails to compile them with "Invalid identifier ''" at line 1.
 2. String.isBlank / isNotBlank on whitespace-significant values. isBlank('\t') is true, so a
    tab delimiter was rejected as blank. Flags isBlank on names containing delim/separator/token.
 """
 import glob, re, sys
 
-files = sys.argv[1:] or glob.glob("../../force-app/main/default/classes/*.cls")
+files = sys.argv[1:] or glob.glob("/home/claude/build/force-app/main/default/classes/*.cls")
 problems = []
 
 
@@ -74,7 +76,10 @@ MESSAGE_POS = {"areEqual": 2, "areNotEqual": 2, "isTrue": 1, "isFalse": 1, "isNu
 BARE_REF = re.compile(r"^[A-Za-z_][\w]*(?:\[[^\]]*\])?(?:\.[A-Za-z_]\w*(?:\[[^\]]*\])?)*$")
 
 for path in files:
-    code = open(path, encoding="utf-8").read()
+    raw = open(path, "rb").read()
+    if raw.startswith(b"\xef\xbb\xbf"):
+        problems.append(f"{path.split('/')[-1]}:1 starts with a byte order mark; Apex rejects it (Invalid identifier '')")
+    code = raw.decode("utf-8-sig")
     code = re.sub(r"//[^\n]*", lambda m: " " * len(m.group(0)), code)
     name = path.split("/")[-1]
     for method, pos in MESSAGE_POS.items():

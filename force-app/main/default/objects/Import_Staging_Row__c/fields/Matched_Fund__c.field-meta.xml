@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Matched_Fund__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Fund resolved from the row's fund name through the Fund Alias table. Required for Trade rows; optional for AUM rows reported as a total per code. Lookups to Product2 must be optional and clear on delete.</description>
+    <inlineHelpText>The fund this row was matched to.</inlineHelpText>
+    <label>Matched Fund</label>
+    <referenceTo>Product2</referenceTo>
+    <relationshipLabel>Staging Rows</relationshipLabel>
+    <relationshipName>Staging_Rows</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

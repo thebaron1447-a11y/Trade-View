@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Match_Flags__c</fullName>
+    <description>Semicolon-separated machine-readable flags explaining the outcome, for example FUND_UNRESOLVED;DORMANT_CODE_REACTIVATED. Used for filtering, reporting and the review screen.</description>
+    <inlineHelpText>Short codes explaining why this row was matched, held or sent to review.</inlineHelpText>
+    <label>Match Flags</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

@@ -9,11 +9,21 @@ public inherited sharing class MappingService {
 
     public static final String IGNORE = 'IGNORE';
     public static final Set<String> CANONICAL_FIELDS = new Set<String>{
-        'repCode', 'advisorName', 'firmName', 'fundName', 'tradeDate', 'amount', 'transactionType', IGNORE
+        'repCode', 'advisorName', 'firmName', 'branchName', 'fundName', 'tradeDate', 'amount', 'transactionType',
+        'rowType', IGNORE
     };
+    // tradeDate is the row date: trade date, AUM as-of date, or code effective date.
     public static final List<String> REQUIRED_FIELDS = new List<String>{ 'repCode', 'fundName', 'tradeDate', 'amount' };
+    public static final List<String> ROSTER_REQUIRED_FIELDS = new List<String>{ 'repCode', 'advisorName', 'tradeDate' };
     public static final String CONVENTION_TYPE_COLUMN = 'Type Column';
     public static final String CONVENTION_SIGNED = 'Signed Amount';
+    public static final String FEED_TRADE_ACTIVITY = 'Trade Activity';
+    public static final String FEED_ROSTER = 'Advisor Code Roster';
+
+    /** Blank Feed Type is treated as Trade Activity (profiles created before the field existed). */
+    public static Boolean isRoster(Mapping_Profile__c profile) {
+        return profile.Feed_Type__c == FEED_ROSTER;
+    }
 
     private static final String NBSP = String.fromCharArray(new List<Integer>{ 160 });
 
@@ -43,7 +53,7 @@ public inherited sharing class MappingService {
     public static Mapping_Profile__c findActiveProfile(String headerFingerprint, String sourceFirm) {
         List<Mapping_Profile__c> profiles = [
             SELECT Id, Name, Source_Firm__c, Firm__c, Firm__r.Name, Column_Map__c, Date_Format__c,
-                Decimal_Separator__c, Direction_Convention__c, Single_Firm_Feed__c
+                Decimal_Separator__c, Direction_Convention__c, Single_Firm_Feed__c, Feed_Type__c, AUM_Indicator_Values__c
             FROM Mapping_Profile__c
             WHERE Header_Fingerprint__c = :headerFingerprint AND Status__c = 'Active'
             WITH USER_MODE
@@ -105,17 +115,28 @@ public inherited sharing class MappingService {
                 problems.add('More than one column is mapped to ' + f + '.');
             }
         }
-        for (String f : REQUIRED_FIELDS) {
+        Boolean roster = isRoster(profile);
+        for (String f : roster ? ROSTER_REQUIRED_FIELDS : REQUIRED_FIELDS) {
             if (!fieldCounts.containsKey(f)) {
                 problems.add('No column is mapped to ' + f + ', which is required.');
             }
         }
-        Boolean hasType = fieldCounts.containsKey('transactionType');
-        if (profile.Direction_Convention__c == CONVENTION_TYPE_COLUMN && !hasType) {
-            problems.add('Direction Convention is Type Column, but no column is mapped to transactionType.');
-        }
-        if (profile.Direction_Convention__c == CONVENTION_SIGNED && hasType) {
-            problems.add('Direction Convention is Signed Amount, so the transactionType column must be mapped to IGNORE.');
+        // Direction and AUM settings only apply to Trade Activity feeds; roster files have neither.
+        if (!roster) {
+            Boolean hasType = fieldCounts.containsKey('transactionType');
+            if (profile.Direction_Convention__c == CONVENTION_TYPE_COLUMN && !hasType) {
+                problems.add('Direction Convention is Type Column, but no column is mapped to transactionType.');
+            }
+            if (profile.Direction_Convention__c == CONVENTION_SIGNED && hasType) {
+                problems.add('Direction Convention is Signed Amount, so the transactionType column must be mapped to IGNORE.');
+            }
+            Boolean hasRowType = fieldCounts.containsKey('rowType');
+            if (hasRowType && String.isBlank(profile.AUM_Indicator_Values__c)) {
+                problems.add('A column is mapped to rowType, so AUM Indicator Values must list the values that mark AUM rows.');
+            }
+            if (String.isNotBlank(profile.AUM_Indicator_Values__c) && !hasRowType && !hasType) {
+                problems.add('AUM Indicator Values is set, but no rowType or transactionType column exists to read it from.');
+            }
         }
         if (!problems.isEmpty()) {
             throw new MappingException(String.join(problems, '\n'));

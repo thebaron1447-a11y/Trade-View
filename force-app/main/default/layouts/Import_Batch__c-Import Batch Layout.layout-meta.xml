@@ -38,6 +38,18 @@
             </layoutItems>
             <layoutItems>
                 <behavior>Readonly</behavior>
+                <field>Matched_Row_Count__c</field>
+            </layoutItems>
+            <layoutItems>
+                <behavior>Readonly</behavior>
+                <field>Review_Row_Count__c</field>
+            </layoutItems>
+            <layoutItems>
+                <behavior>Readonly</behavior>
+                <field>Held_Row_Count__c</field>
+            </layoutItems>
+            <layoutItems>
+                <behavior>Readonly</behavior>
                 <field>File_Hash__c</field>
             </layoutItems>
             <layoutItems>
@@ -73,13 +85,14 @@
     <relatedLists>
         <fields>NAME</fields>
         <fields>Row_Number__c</fields>
+        <fields>Row_Type__c</fields>
         <fields>Source_Rep_Code__c</fields>
         <fields>Source_Advisor_Name__c</fields>
         <fields>Source_Fund_Name__c</fields>
         <fields>Trade_Date__c</fields>
-        <fields>Transaction_Type__c</fields>
         <fields>Amount__c</fields>
-        <fields>Has_Errors__c</fields>
+        <fields>Match_Status__c</fields>
+        <fields>Match_Flags__c</fields>
         <relatedList>Import_Staging_Row__c.Import_Batch__c</relatedList>
     </relatedLists>
     <showEmailCheckbox>false</showEmailCheckbox>

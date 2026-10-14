@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Rep_Code_Value__c</fullName>
+    <description>The code exactly as normalized from the file. Needed because an unknown code has no Rep Code record to look up.</description>
+    <inlineHelpText>The dealer code that needs follow-up.</inlineHelpText>
+    <label>Rep Code Value</label>
+    <length>40</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

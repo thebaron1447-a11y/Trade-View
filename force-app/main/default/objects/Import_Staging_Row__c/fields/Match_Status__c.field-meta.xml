@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Match_Status__c</fullName>
+    <description>Outcome of matching. Pending: not yet matched (or released for re-matching). Matched: firm, code and advisor credit resolved deterministically. Needs Review: ambiguous; a reviewer (and, from the next drop, Claude) decides. Held: waiting on a Code Follow-Up. Invalid: the row has validation errors and is never matched.</description>
+    <inlineHelpText>Where this row is in matching.</inlineHelpText>
+    <label>Match Status</label>
+    <required>false</required>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Pending</fullName>
+                <default>true</default>
+                <label>Pending</label>
+            </value>
+            <value>
+                <fullName>Matched</fullName>
+                <default>false</default>
+                <label>Matched</label>
+            </value>
+            <value>
+                <fullName>Needs Review</fullName>
+                <default>false</default>
+                <label>Needs Review</label>
+            </value>
+            <value>
+                <fullName>Held</fullName>
+                <default>false</default>
+                <label>Held</label>
+            </value>
+            <value>
+                <fullName>Invalid</fullName>
+                <default>false</default>
+                <label>Invalid</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

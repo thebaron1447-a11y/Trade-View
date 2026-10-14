@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>To-do item for a dealer code that is unknown, ended, dormant, suspected reassigned or incompletely split. Rows on that code are held, never orphaned, until someone resolves the follow-up; resolving it re-matches the held rows automatically.</description>
+    <enableActivities>false</enableActivities>
+    <enableBulkApi>true</enableBulkApi>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <enableSharing>true</enableSharing>
+    <enableStreamingApi>true</enableStreamingApi>
+    <externalSharingModel>ReadWrite</externalSharingModel>
+    <label>Code Follow-Up</label>
+    <nameField>
+        <displayFormat>CFU-{00000}</displayFormat>
+        <label>Follow-Up Number</label>
+        <type>AutoNumber</type>
+    </nameField>
+    <pluralLabel>Code Follow-Ups</pluralLabel>
+    <sharingModel>ReadWrite</sharingModel>
+    <visibility>Public</visibility>
+</CustomObject>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Credited_Advisor__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Set by matching when the whole row is credited to one advisor: a solo code, or a team code where the row names exactly one active member (confirmed rule: 100% to that person). Blank means the row splits by the team's percentages.</description>
+    <inlineHelpText>The advisor who receives full credit for this row, when it is not split across a team.</inlineHelpText>
+    <label>Credited Advisor</label>
+    <referenceTo>Contact</referenceTo>
+    <relationshipLabel>Credited Staging Rows</relationshipLabel>
+    <relationshipName>Credited_Staging_Rows</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

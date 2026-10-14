@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Matched_Rep_Code__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Rep Code record found for the row's code at the matched firm. Blank for codes not yet set up in Salesforce (those rows are held on a Code Follow-Up).</description>
+    <inlineHelpText>The dealer code record this row belongs to.</inlineHelpText>
+    <label>Matched Rep Code</label>
+    <referenceTo>Rep_Code__c</referenceTo>
+    <relationshipLabel>Staging Rows</relationshipLabel>
+    <relationshipName>Staging_Rows</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

@@ -129,4 +129,55 @@ private class MappingServiceTest {
             Assert.isTrue(e.getMessage().contains('More than one Active mapping profile'), 'message: ' + e.getMessage());
         }
     }
+
+    // ------------------------------------------------------------------ phase 3A: feed types and AUM settings
+
+    @IsTest
+    static void rosterProfilesNeedCodeAdvisorAndDateButNoDirection() {
+        List<String> headers = new List<String>{ 'Rep Code', 'Advisor Name', 'Branch', 'Effective Date' };
+        Mapping_Profile__c p = TestDataFactory.profile(
+            'BARDER', headers,
+            new Map<String, String>{ 'Rep Code' => 'repCode', 'Advisor Name' => 'advisorName', 'Branch' => 'branchName', 'Effective Date' => 'tradeDate' },
+            'MM/DD/YYYY', 'Period', TestDataFactory.TYPE_COLUMN
+        );
+        p.Feed_Type__c = MappingService.FEED_ROSTER;
+        Assert.areEqual(
+            new List<String>{ 'repCode', 'advisorName', 'branchName', 'tradeDate' },
+            MappingService.resolveColumns(headers, p),
+            'roster columns resolve without fund, amount or transaction type'
+        );
+        p.Column_Map__c = System.JSON.serialize(new Map<String, String>{ 'Rep Code' => 'repCode', 'Advisor Name' => 'IGNORE', 'Branch' => 'branchName', 'Effective Date' => 'tradeDate' });
+        String problems = problemsFor(headers, p);
+        Assert.isTrue(problems.contains('No column is mapped to advisorName'), 'problems: ' + problems);
+    }
+
+    @IsTest
+    static void aumSettingsMustBeConsistent() {
+        List<String> headers = new List<String>{ 'Trade Dt', 'Dealer Rep #', 'Fund', 'Gross Amt', 'Record Type' };
+        Map<String, String> m = new Map<String, String>{
+            'Trade Dt' => 'tradeDate', 'Dealer Rep #' => 'repCode', 'Fund' => 'fundName', 'Gross Amt' => 'amount', 'Record Type' => 'rowType'
+        };
+        Mapping_Profile__c p = TestDataFactory.profile('BARDER', headers, m, 'MM/DD/YYYY', 'Period', TestDataFactory.SIGNED);
+        String noIndicators = problemsFor(headers, p);
+        Assert.isTrue(noIndicators.contains('AUM Indicator Values must list'), 'problems: ' + noIndicators);
+        p.AUM_Indicator_Values__c = 'AUM';
+        Assert.areEqual(5, MappingService.resolveColumns(headers, p).size(), 'valid once indicators are set');
+
+        m.put('Record Type', 'IGNORE');
+        p.Column_Map__c = System.JSON.serialize(m);
+        String nowhere = problemsFor(headers, p);
+        Assert.isTrue(nowhere.contains('no rowType or transactionType column'), 'problems: ' + nowhere);
+    }
+
+    @IsTest
+    static void findActiveProfileReturnsFeedSettings() {
+        Mapping_Profile__c p = profileWith(validMap(), TestDataFactory.SIGNED);
+        p.Feed_Type__c = MappingService.FEED_TRADE_ACTIVITY;
+        p.AUM_Indicator_Values__c = 'AUM';
+        insert p;
+        Mapping_Profile__c found = MappingService.findActiveProfile(MappingService.fingerprint(HEADERS), 'BARDER');
+        Assert.areEqual('AUM', found.AUM_Indicator_Values__c, 'indicators selected');
+        Assert.areEqual(MappingService.FEED_TRADE_ACTIVITY, found.Feed_Type__c, 'feed type selected');
+        Assert.isFalse(MappingService.isRoster(found), 'not a roster');
+    }
 }

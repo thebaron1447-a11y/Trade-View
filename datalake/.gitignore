@@ -1,2 +1,4 @@
 processed/
 failed/
+inbox/*
+!inbox/.gitkeep

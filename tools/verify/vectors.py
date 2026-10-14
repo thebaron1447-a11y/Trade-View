@@ -99,3 +99,37 @@ FINGERPRINTS = [  # header lists whose SHA-256 the Apex test must reproduce exac
     ["Trade Dt", "Dealer Rep #", "Gross Amt"],
     ["  Date de transaction ", "Code représentant", "MONTANT"],
 ]
+
+# ---------------------------------------------------------------- phase 3A: NameMatcher
+NAME_COMPAT = [  # (row name, first, last, expected)
+    ("Julia Morales", "Julia", "Morales", True),
+    ("J. Morales", "Julia", "Morales", True),
+    ("Morales", "Julia", "Morales", True),
+    ("Morales, Julia", "Julia", "Morales", True),
+    ("JULIA  MORALES", "Julia", "Morales", True),
+    ("Jorge Morales", "Julia", "Morales", False),
+    ("Julia Moralez", "Julia", "Morales", False),
+    ("Elise Gagnon", "Élise", "Gagnon", True),
+    ("Élise Gagnon et Marc-André Roy", "Élise", "Gagnon", True),
+    ("Élise Gagnon et Marc-André Roy", "Marc-André", "Roy", True),
+    ("Marc Andre Roy", "Marc-André", "Roy", True),
+    ("M. Roy", "Marc-André", "Roy", True),
+    ("Priya Nair", "Marcus", "Bell", False),
+    ("P. Nair", "Priya", "Nair", True),
+    ("Northgate Team", "Aisha", "Khan", False),
+    ("Ryan Chen", "Megan", "Chen", False),
+    ("", "Julia", "Morales", False),
+    ("Julia Morales", None, "Morales", True),
+]
+FOLD_CASES = [
+    ("Élise", "elise"), ("Marc-André Roy", "marc andre roy"), ("  BÉRUBÉ, Zoë ", "berube zoe"),
+    ("Cœur", "coeur"), (None, ""), ("R&D 2", "r d 2"),
+]
+SIMILARITY = [
+    ("etf wealth world fund a", "wealth world fund a", "0.826"),
+    ("northgate wealth partner", "northgate wealth partners", "0.960"),
+    ("abc", "abc", "1.000"),
+    ("abc", "xyz", "0.000"),
+    ("", "", "1"),
+    ("abc", "abd", "0.667"),
+]

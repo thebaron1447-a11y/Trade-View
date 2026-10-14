@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Amount__c</fullName>
-    <description>Gross trade amount as a positive number, after removing currency symbols, thousands separators and any sign used to indicate direction. Rounded to 2 decimals.</description>
-    <inlineHelpText>The dollar value of the trade.</inlineHelpText>
+    <description>For Trade rows, the gross trade amount as a positive number after removing currency symbols, thousands separators and any sign used to indicate direction. For AUM rows, the reported balance (zero or more). Blank for Code Roster rows. Rounded to 2 decimals.</description>
+    <inlineHelpText>The dollar value of the trade, or the AUM balance for AUM rows.</inlineHelpText>
     <label>Amount</label>
     <precision>18</precision>
     <required>false</required>

@@ -1,0 +1,537 @@
+/**
+ * Deterministic matching (tiers 1 and 2) for staged rows. For each Pending row it resolves the firm,
+ * the rep code, who gets the credit, and the fund, then marks the row:
+ *   Matched       everything resolved without doubt
+ *   Needs Review  a name is ambiguous or unresolved (a reviewer, and in the next drop Claude, decides)
+ *   Held          the code is unknown, ended, dormant, suspected reassigned or incompletely split;
+ *                 the row waits on a Code Follow-Up and is never orphaned
+ * Code Roster rows are classified (confirms an existing holder, new holder, or new code) for review.
+ *
+ * Re-running is safe: only Pending rows are processed, and resolving a follow-up sets its rows back to Pending.
+ */
+public with sharing class TradeMatcher implements Queueable {
+    public static final String MATCHED = 'Matched';
+    public static final String REVIEW = 'Needs Review';
+    public static final String HELD = 'Held';
+    public static final String PENDING = 'Pending';
+    public static final String STATUS_PENDING_REVIEW = 'Pending Review';
+
+    public static final String REASON_UNKNOWN = 'Unknown Code';
+    public static final String REASON_ENDED = 'Code Ended';
+    public static final String REASON_DORMANT = 'Code Dormant';
+    public static final String REASON_REASSIGNED = 'Reassignment Suspected';
+    public static final String REASON_ALLOCATION = 'Allocation Incomplete';
+
+    @TestVisible
+    private static final Integer DORMANCY_DAYS = 180;
+    // A fuzzy name match is accepted only if it is very close and clearly better than the next option.
+    @TestVisible
+    private static final Decimal AUTO_ACCEPT = 0.9;
+    @TestVisible
+    private static final Decimal MARGIN = 0.1;
+    private static final Integer MAX_CANDIDATES = 3;
+
+    private final Set<Id> batchIds;
+
+    public TradeMatcher(Set<Id> batchIds) {
+        this.batchIds = batchIds;
+    }
+
+    public void execute(QueueableContext context) {
+        run(batchIds);
+    }
+
+    // ================================================================== orchestration
+
+    public static void run(Set<Id> batchIds) {
+        Map<Id, Import_Batch__c> batches = new Map<Id, Import_Batch__c>(
+            [
+                SELECT Id, Status__c, Source_Firm__c
+                FROM Import_Batch__c
+                WHERE Id IN :batchIds AND Status__c IN ('Staged', 'Pending Review')
+                WITH USER_MODE
+            ]
+        );
+        if (batches.isEmpty()) {
+            return;
+        }
+        List<Import_Staging_Row__c> rows = [
+            SELECT Id, Import_Batch__c, Row_Type__c, Source_Rep_Code__c, Source_Advisor_Name__c, Source_Firm_Name__c,
+                Source_Fund_Name__c, Trade_Date__c, Amount__c, Code_Follow_Up__c
+            FROM Import_Staging_Row__c
+            WHERE Import_Batch__c IN :batches.keySet() AND Has_Errors__c = FALSE
+                AND (Match_Status__c = 'Pending' OR Match_Status__c = NULL)
+            WITH USER_MODE
+            ORDER BY Import_Batch__c, Row_Number__c
+            LIMIT 10000
+        ];
+
+        Set<Id> touchedFollowUps = new Set<Id>();
+        if (!rows.isEmpty()) {
+            Reference ref = new Reference(rows);
+            Map<String, CodeFollowUpService.Draft> drafts = new Map<String, CodeFollowUpService.Draft>();
+            Map<Id, String> heldKeyByRow = new Map<Id, String>();
+            for (Import_Staging_Row__c row : rows) {
+                if (row.Code_Follow_Up__c != null) {
+                    touchedFollowUps.add(row.Code_Follow_Up__c);
+                }
+                String sourceFirm = batches.get(row.Import_Batch__c).Source_Firm__c;
+                Outcome o = row.Row_Type__c == TradeRowNormalizer.ROW_ROSTER ? matchRoster(row, ref) : matchActivity(row, ref);
+                apply(row, o);
+                if (o.status == HELD) {
+                    CodeFollowUpService.Draft d = CodeFollowUpService.draftFor(sourceFirm, row, o.reason);
+                    CodeFollowUpService.Draft existing = drafts.get(d.key);
+                    drafts.put(d.key, existing == null ? d : existing.combine(d));
+                    heldKeyByRow.put(row.Id, d.key);
+                }
+            }
+            Map<String, Id> followUpIds = CodeFollowUpService.saveDrafts(drafts.values());
+            // User-mode DML checks edit access on every populated field. The queried rows carry the batch
+            // master-detail and source fields, which matching must not write, so only the results are sent.
+            List<Import_Staging_Row__c> results = new List<Import_Staging_Row__c>();
+            for (Import_Staging_Row__c row : rows) {
+                String key = heldKeyByRow.get(row.Id);
+                Import_Staging_Row__c result = matchResult(row);
+                result.Code_Follow_Up__c = key == null ? null : followUpIds.get(key);
+                results.add(result);
+            }
+            update as user results;
+            touchedFollowUps.addAll(followUpIds.values());
+        }
+        CodeFollowUpService.recount(touchedFollowUps);
+
+        List<Import_Batch__c> statusUpdates = new List<Import_Batch__c>();
+        for (Import_Batch__c b : batches.values()) {
+            if (b.Status__c != STATUS_PENDING_REVIEW) {
+                statusUpdates.add(new Import_Batch__c(Id = b.Id, Status__c = STATUS_PENDING_REVIEW));
+            }
+        }
+        update as user statusUpdates;
+    }
+
+    // ================================================================== matching rules
+
+    @TestVisible
+    private class Outcome {
+        public String status = MATCHED;
+        public String reason;
+        public String method = 'Exact';
+        public Id firmId;
+        public Id repCodeId;
+        public Id fundId;
+        public Id creditedAdvisorId;
+        public List<String> flags = new List<String>();
+        public List<String> notes = new List<String>();
+        public List<Map<String, Object>> candidates = new List<Map<String, Object>>();
+
+        public void hold(String holdReason, String code, String note) {
+            this.status = HELD;
+            this.reason = holdReason;
+            flag(code, note);
+        }
+
+        public void review(String code, String note) {
+            if (this.status != HELD) {
+                this.status = REVIEW;
+            }
+            flag(code, note);
+        }
+
+        public void flag(String code, String note) {
+            if (code != null) {
+                flags.add(code);
+            }
+            if (note != null) {
+                notes.add(note);
+            }
+        }
+    }
+
+    @TestVisible
+    private static Outcome matchActivity(Import_Staging_Row__c row, Reference ref) {
+        Outcome o = new Outcome();
+        if (!resolveFirm(row, ref, o)) {
+            return o;
+        }
+        Rep_Code__c code = ref.code(o.firmId, row.Source_Rep_Code__c);
+        if (code == null) {
+            o.hold(REASON_UNKNOWN, 'UNKNOWN_CODE', 'Code ' + row.Source_Rep_Code__c + ' is not set up for this firm.');
+            resolveFund(row, ref, o);
+            return o;
+        }
+        o.repCodeId = code.Id;
+
+        List<Rep_Code_Assignment__c> active = activeOn(code, row.Trade_Date__c);
+        if (active.isEmpty()) {
+            if (endedBefore(code, row.Trade_Date__c)) {
+                o.hold(REASON_ENDED, 'CODE_ENDED', 'Every assignment on code ' + code.Name + ' ended before ' + row.Trade_Date__c.format() + '.');
+            } else {
+                o.review('DATE_BEFORE_CODE_START', 'The row date is before anyone held code ' + code.Name + '.');
+            }
+            resolveFund(row, ref, o);
+            return o;
+        }
+
+        String name = row.Source_Advisor_Name__c;
+        Boolean named = String.isNotBlank(name);
+        List<Rep_Code_Assignment__c> compatible = new List<Rep_Code_Assignment__c>();
+        if (named) {
+            for (Rep_Code_Assignment__c a : active) {
+                if (NameMatcher.isCompatible(name, a.Advisor__r.FirstName, a.Advisor__r.LastName)) {
+                    compatible.add(a);
+                }
+            }
+        }
+        Boolean team = active.size() > 1;
+        Boolean dormant = isDormant(active, row.Trade_Date__c);
+
+        if (named && compatible.isEmpty()) {
+            o.hold(
+                REASON_REASSIGNED,
+                team ? 'TEAM_CHANGE_SUSPECTED' : 'REASSIGNMENT_SUSPECTED',
+                '"' + name + '" does not match ' + (team ? 'any current member of team code ' : 'the current holder of code ') + code.Name + '.'
+            );
+        } else if (!named && dormant) {
+            o.hold(REASON_DORMANT, 'DORMANT_CODE_NO_NAME', 'Code ' + code.Name + ' has had no confirmed activity for over ' + DORMANCY_DAYS + ' days and the row names no advisor.');
+        } else {
+            if (dormant) {
+                o.flag('DORMANT_CODE_REACTIVATED', 'Code ' + code.Name + ' was dormant, but the advisor name confirms the current holder.');
+            }
+            if (compatible.size() == 1) {
+                o.creditedAdvisorId = compatible[0].Advisor__c;
+                if (team) {
+                    o.flag('SINGLE_ADVISOR_CREDIT', 'Row names one team member: 100% credited to ' + fullName(compatible[0]) + '.');
+                }
+            } else if (!team) {
+                o.creditedAdvisorId = active[0].Advisor__c;
+            } else if (totalPercent(active) != 100) {
+                o.hold(REASON_ALLOCATION, 'ALLOCATION_INCOMPLETE', 'Team code ' + code.Name + ' has active shares totalling ' + totalPercent(active).stripTrailingZeros().toPlainString() + '%, not 100%.');
+            } else {
+                o.flag('TEAM_SPLIT', 'Split across team code ' + code.Name + ' by its percentages.');
+            }
+        }
+        resolveFund(row, ref, o);
+        return o;
+    }
+
+    @TestVisible
+    private static Outcome matchRoster(Import_Staging_Row__c row, Reference ref) {
+        Outcome o = new Outcome();
+        if (!resolveFirm(row, ref, o)) {
+            return o;
+        }
+        List<Contact> people = new List<Contact>();
+        for (Contact c : ref.contactsAtFirm(o.firmId)) {
+            if (NameMatcher.isCompatible(row.Source_Advisor_Name__c, c.FirstName, c.LastName)) {
+                people.add(c);
+            }
+        }
+        if (people.size() == 1) {
+            o.creditedAdvisorId = people[0].Id;
+        } else if (people.isEmpty()) {
+            o.flag('NEW_ADVISOR', 'No advisor named "' + row.Source_Advisor_Name__c + '" exists at this firm yet.');
+        } else {
+            o.flag('ADVISOR_AMBIGUOUS', 'More than one advisor at this firm could be "' + row.Source_Advisor_Name__c + '".');
+        }
+
+        Rep_Code__c code = ref.code(o.firmId, row.Source_Rep_Code__c);
+        if (code == null) {
+            o.review('ROSTER_NEW_CODE', 'Code ' + row.Source_Rep_Code__c + ' is new: approving this row sets it up.');
+            return o;
+        }
+        o.repCodeId = code.Id;
+        for (Rep_Code_Assignment__c a : code.Assignments__r) {
+            if (a.Effective_End_Date__c == null && NameMatcher.isCompatible(row.Source_Advisor_Name__c, a.Advisor__r.FirstName, a.Advisor__r.LastName)) {
+                o.flag('ROSTER_CONFIRMS', 'Confirms ' + fullName(a) + ' as a current holder of code ' + code.Name + '.');
+                return o;
+            }
+        }
+        o.review('ROSTER_NEW_HOLDER', 'Code ' + code.Name + ' is listed for "' + row.Source_Advisor_Name__c + '", who is not a current holder: approving ends the old assignment.');
+        return o;
+    }
+
+    // ================================================================== resolution helpers
+
+    private static Boolean resolveFirm(Import_Staging_Row__c row, Reference ref, Outcome o) {
+        String key = NameNormalizer.firmKey(row.Source_Firm_Name__c);
+        if (key == null) {
+            o.review('FIRM_MISSING', 'The row has no firm name and the feed is not a single-firm feed.');
+            return false;
+        }
+        Resolution r = ref.resolve(key, ref.firmIdsByKey, ref.firmAliasKeys, ref.firmNames);
+        if (r.id == null) {
+            o.review(r.ambiguous ? 'FIRM_AMBIGUOUS' : 'FIRM_UNRESOLVED', r.ambiguous ? 'Firm name "' + row.Source_Firm_Name__c + '" matches more than one firm.' : 'Firm name "' + row.Source_Firm_Name__c + '" does not match any known firm.');
+            addCandidates(o, 'firm', r.candidates);
+            return false;
+        }
+        o.firmId = r.id;
+        if (r.fuzzy) {
+            o.method = 'Fuzzy';
+            o.flag('FIRM_FUZZY', 'Firm "' + row.Source_Firm_Name__c + '" matched to ' + ref.firmNames.get(r.id) + ' by close spelling.');
+        }
+        return true;
+    }
+
+    private static void resolveFund(Import_Staging_Row__c row, Reference ref, Outcome o) {
+        String key = NameNormalizer.firmKey(row.Source_Fund_Name__c);
+        if (key == null) {
+            return; // AUM total per code; Trade rows without a fund never reach matching.
+        }
+        Resolution r = ref.resolve(key, ref.fundIdsByKey, ref.fundAliasKeys, ref.fundNames);
+        if (r.id == null) {
+            o.review(r.ambiguous ? 'FUND_AMBIGUOUS' : 'FUND_UNRESOLVED', 'Fund name "' + row.Source_Fund_Name__c + '" could not be matched to a single fund.');
+            addCandidates(o, 'fund', r.candidates);
+            return;
+        }
+        o.fundId = r.id;
+        if (r.fuzzy) {
+            o.method = 'Fuzzy';
+            o.flag('FUND_FUZZY', 'Fund "' + row.Source_Fund_Name__c + '" matched to ' + ref.fundNames.get(r.id) + ' by close spelling.');
+        }
+    }
+
+    private static void addCandidates(Outcome o, String kind, List<Map<String, Object>> found) {
+        for (Map<String, Object> c : found) {
+            c.put('type', kind);
+            o.candidates.add(c);
+        }
+    }
+
+    @TestVisible
+    private static List<Rep_Code_Assignment__c> activeOn(Rep_Code__c code, Date d) {
+        List<Rep_Code_Assignment__c> active = new List<Rep_Code_Assignment__c>();
+        for (Rep_Code_Assignment__c a : code.Assignments__r) {
+            if (a.Effective_Start_Date__c <= d && (a.Effective_End_Date__c == null || a.Effective_End_Date__c >= d)) {
+                active.add(a);
+            }
+        }
+        return active;
+    }
+
+    private static Boolean endedBefore(Rep_Code__c code, Date d) {
+        for (Rep_Code_Assignment__c a : code.Assignments__r) {
+            if (a.Effective_End_Date__c != null && a.Effective_End_Date__c < d) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @TestVisible
+    private static Boolean isDormant(List<Rep_Code_Assignment__c> active, Date d) {
+        Date latest;
+        for (Rep_Code_Assignment__c a : active) {
+            if (a.Last_Confirmed_Trade_Date__c != null && (latest == null || a.Last_Confirmed_Trade_Date__c > latest)) {
+                latest = a.Last_Confirmed_Trade_Date__c;
+            }
+        }
+        return latest != null && latest.daysBetween(d) > DORMANCY_DAYS;
+    }
+
+    private static Decimal totalPercent(List<Rep_Code_Assignment__c> active) {
+        Decimal total = 0;
+        for (Rep_Code_Assignment__c a : active) {
+            total += a.Allocation_Percent__c == null ? 0 : a.Allocation_Percent__c;
+        }
+        return total;
+    }
+
+    private static String fullName(Rep_Code_Assignment__c a) {
+        return ((a.Advisor__r.FirstName == null ? '' : a.Advisor__r.FirstName + ' ') + a.Advisor__r.LastName).trim();
+    }
+
+    /** A record holding only the fields matching writes, for user-mode update. */
+    @TestVisible
+    private static Import_Staging_Row__c matchResult(Import_Staging_Row__c row) {
+        return new Import_Staging_Row__c(
+            Id = row.Id,
+            Match_Status__c = row.Match_Status__c,
+            Match_Method__c = row.Match_Method__c,
+            Matched_Firm__c = row.Matched_Firm__c,
+            Matched_Rep_Code__c = row.Matched_Rep_Code__c,
+            Matched_Fund__c = row.Matched_Fund__c,
+            Credited_Advisor__c = row.Credited_Advisor__c,
+            Match_Flags__c = row.Match_Flags__c,
+            Match_Notes__c = row.Match_Notes__c,
+            Match_Candidates__c = row.Match_Candidates__c
+        );
+    }
+
+    private static void apply(Import_Staging_Row__c row, Outcome o) {
+        row.Match_Status__c = o.status;
+        row.Match_Method__c = o.status == MATCHED ? o.method : null;
+        row.Matched_Firm__c = o.firmId;
+        row.Matched_Rep_Code__c = o.repCodeId;
+        row.Matched_Fund__c = o.fundId;
+        row.Credited_Advisor__c = o.creditedAdvisorId;
+        row.Match_Flags__c = o.flags.isEmpty() ? null : String.join(o.flags, ';').abbreviate(255);
+        row.Match_Notes__c = o.notes.isEmpty() ? null : String.join(o.notes, '\n').abbreviate(5000);
+        row.Match_Candidates__c = o.candidates.isEmpty() ? null : System.JSON.serialize(o.candidates).abbreviate(32768);
+    }
+
+    // ================================================================== reference data
+
+    @TestVisible
+    private class Resolution {
+        public Id id;
+        public Boolean fuzzy = false;
+        public Boolean ambiguous = false;
+        public List<Map<String, Object>> candidates = new List<Map<String, Object>>();
+    }
+
+    /** Everything matching needs, loaded with a fixed number of queries regardless of row count. */
+    @TestVisible
+    private with sharing class Reference {
+        public Map<String, Set<Id>> firmIdsByKey = new Map<String, Set<Id>>();
+        public Map<String, Set<Id>> fundIdsByKey = new Map<String, Set<Id>>();
+        public List<String> firmAliasKeys = new List<String>();
+        public List<String> fundAliasKeys = new List<String>();
+        public Map<Id, String> firmNames = new Map<Id, String>();
+        public Map<Id, String> fundNames = new Map<Id, String>();
+        private Map<String, Rep_Code__c> codesByFirmAndValue = new Map<String, Rep_Code__c>();
+        private Map<Id, List<Contact>> contactsByFirm = new Map<Id, List<Contact>>();
+        private Map<String, Resolution> cache = new Map<String, Resolution>();
+
+        public Reference(List<Import_Staging_Row__c> rows) {
+            for (Firm_Alias__c fa : [
+                SELECT Normalized_Key__c, Firm__c, Firm__r.Name
+                FROM Firm_Alias__c
+                WHERE Normalized_Key__c != NULL AND Firm__c != NULL
+                WITH USER_MODE
+                LIMIT 5000
+            ]) {
+                index(firmIdsByKey, firmAliasKeys, fa.Normalized_Key__c, fa.Firm__c);
+                firmNames.put(fa.Firm__c, fa.Firm__r.Name);
+            }
+            for (Fund_Alias__c fa : [
+                SELECT Normalized_Key__c, Fund__c, Fund__r.Name
+                FROM Fund_Alias__c
+                WHERE Normalized_Key__c != NULL AND Fund__c != NULL
+                WITH USER_MODE
+                LIMIT 5000
+            ]) {
+                index(fundIdsByKey, fundAliasKeys, fa.Normalized_Key__c, fa.Fund__c);
+                fundNames.put(fa.Fund__c, fa.Fund__r.Name);
+            }
+
+            Set<Id> firmIds = new Set<Id>();
+            Set<String> codes = new Set<String>();
+            Boolean anyRoster = false;
+            for (Import_Staging_Row__c row : rows) {
+                String key = NameNormalizer.firmKey(row.Source_Firm_Name__c);
+                if (key != null) {
+                    Resolution r = resolve(key, firmIdsByKey, firmAliasKeys, firmNames);
+                    if (r.id != null) {
+                        firmIds.add(r.id);
+                    }
+                }
+                if (row.Source_Rep_Code__c != null) {
+                    codes.add(row.Source_Rep_Code__c);
+                }
+                anyRoster = anyRoster || row.Row_Type__c == TradeRowNormalizer.ROW_ROSTER;
+            }
+            for (Rep_Code__c rc : [
+                SELECT Id, Name, Firm__c,
+                    (SELECT Id, Advisor__c, Advisor__r.FirstName, Advisor__r.LastName, Allocation_Percent__c,
+                        Effective_Start_Date__c, Effective_End_Date__c, Last_Confirmed_Trade_Date__c
+                     FROM Assignments__r)
+                FROM Rep_Code__c
+                WHERE Firm__c IN :firmIds AND Name IN :codes
+                WITH USER_MODE
+            ]) {
+                codesByFirmAndValue.put(rc.Firm__c + '|' + rc.Name.toUpperCase(), rc);
+            }
+            if (anyRoster && !firmIds.isEmpty()) {
+                Map<Id, Id> firmOf = new Map<Id, Id>();
+                for (Account a : [SELECT Id, ParentId FROM Account WHERE Id IN :firmIds OR ParentId IN :firmIds WITH USER_MODE]) {
+                    firmOf.put(a.Id, firmIds.contains(a.Id) ? a.Id : a.ParentId);
+                }
+                for (Contact c : [SELECT Id, FirstName, LastName, AccountId FROM Contact WHERE AccountId IN :firmOf.keySet() WITH USER_MODE]) {
+                    Id firm = firmOf.get(c.AccountId);
+                    if (!contactsByFirm.containsKey(firm)) {
+                        contactsByFirm.put(firm, new List<Contact>());
+                    }
+                    contactsByFirm.get(firm).add(c);
+                }
+            }
+        }
+
+        public Rep_Code__c code(Id firmId, String value) {
+            return value == null ? null : codesByFirmAndValue.get(firmId + '|' + value.toUpperCase());
+        }
+
+        public List<Contact> contactsAtFirm(Id firmId) {
+            return contactsByFirm.containsKey(firmId) ? contactsByFirm.get(firmId) : new List<Contact>();
+        }
+
+        /** Exact alias key first; otherwise the closest alias per record, accepted only if clearly the best. */
+        public Resolution resolve(String key, Map<String, Set<Id>> idsByKey, List<String> aliasKeys, Map<Id, String> names) {
+            String cacheKey = (idsByKey === firmIdsByKey ? 'firm|' : 'fund|') + key;
+            if (cache.containsKey(cacheKey)) {
+                return cache.get(cacheKey);
+            }
+            Resolution r = new Resolution();
+            Set<Id> exact = idsByKey.get(key);
+            if (exact != null && exact.size() == 1) {
+                r.id = new List<Id>(exact)[0];
+            } else if (exact != null) {
+                r.ambiguous = true;
+                for (Id candidate : exact) {
+                    r.candidates.add(new Map<String, Object>{ 'id' => candidate, 'name' => names.get(candidate), 'score' => 1 });
+                }
+            } else {
+                Map<Id, Decimal> best = new Map<Id, Decimal>();
+                for (String aliasKey : aliasKeys) {
+                    Decimal score = NameMatcher.similarity(key, aliasKey);
+                    for (Id candidate : idsByKey.get(aliasKey)) {
+                        if (!best.containsKey(candidate) || score > best.get(candidate)) {
+                            best.put(candidate, score);
+                        }
+                    }
+                }
+                List<Scored> ranked = new List<Scored>();
+                for (Id candidate : best.keySet()) {
+                    ranked.add(new Scored(candidate, best.get(candidate)));
+                }
+                ranked.sort();
+                if (!ranked.isEmpty() && ranked[0].score >= AUTO_ACCEPT && (ranked.size() == 1 || ranked[1].score <= ranked[0].score - MARGIN)) {
+                    r.id = ranked[0].id;
+                    r.fuzzy = true;
+                } else {
+                    for (Integer i = 0; i < ranked.size() && i < MAX_CANDIDATES; i++) {
+                        r.candidates.add(new Map<String, Object>{ 'id' => ranked[i].id, 'name' => names.get(ranked[i].id), 'score' => ranked[i].score });
+                    }
+                }
+            }
+            cache.put(cacheKey, r);
+            return r;
+        }
+
+        private void index(Map<String, Set<Id>> idsByKey, List<String> aliasKeys, String key, Id recordId) {
+            if (!idsByKey.containsKey(key)) {
+                idsByKey.put(key, new Set<Id>());
+                aliasKeys.add(key);
+            }
+            idsByKey.get(key).add(recordId);
+        }
+    }
+
+    /** Sorts by score descending, then by Id so results are stable. */
+    private class Scored implements Comparable {
+        public Id id;
+        public Decimal score;
+
+        public Scored(Id id, Decimal score) {
+            this.id = id;
+            this.score = score;
+        }
+
+        public Integer compareTo(Object other) {
+            Scored that = (Scored) other;
+            if (score != that.score) {
+                return score > that.score ? -1 : 1;
+            }
+            return String.valueOf(id).compareTo(String.valueOf(that.id));
+        }
+    }
+}

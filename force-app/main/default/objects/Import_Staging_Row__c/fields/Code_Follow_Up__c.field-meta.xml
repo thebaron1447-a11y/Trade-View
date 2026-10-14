@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Code_Follow_Up__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The follow-up holding this row because its code is unknown, ended, dormant, suspected reassigned or incompletely split. Held rows are never loaded or orphaned; they are re-matched automatically when the follow-up is resolved.</description>
+    <inlineHelpText>The follow-up item this row is waiting on, if any.</inlineHelpText>
+    <label>Code Follow-Up</label>
+    <referenceTo>Code_Follow_Up__c</referenceTo>
+    <relationshipLabel>Held Rows</relationshipLabel>
+    <relationshipName>Held_Rows</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

@@ -16,6 +16,10 @@
             </layoutItems>
             <layoutItems>
                 <behavior>Edit</behavior>
+                <field>Feed_Type__c</field>
+            </layoutItems>
+            <layoutItems>
+                <behavior>Edit</behavior>
                 <field>Source_Firm__c</field>
             </layoutItems>
             <layoutItems>
@@ -25,6 +29,10 @@
             <layoutItems>
                 <behavior>Edit</behavior>
                 <field>Single_Firm_Feed__c</field>
+            </layoutItems>
+            <layoutItems>
+                <behavior>Edit</behavior>
+                <field>AUM_Indicator_Values__c</field>
             </layoutItems>
         </layoutColumns>
         <layoutColumns>

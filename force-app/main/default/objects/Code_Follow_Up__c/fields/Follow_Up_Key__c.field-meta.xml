@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Follow_Up_Key__c</fullName>
+    <caseSensitive>false</caseSensitive>
+    <description>Source firm, code and reason joined, for example NORTHGATE|5521|Code Dormant. Unique, so repeat files add rows to the existing follow-up instead of creating duplicates.</description>
+    <externalId>true</externalId>
+    <inlineHelpText>System-generated. Do not edit.</inlineHelpText>
+    <label>Follow-Up Key</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>true</unique>
+</CustomField>

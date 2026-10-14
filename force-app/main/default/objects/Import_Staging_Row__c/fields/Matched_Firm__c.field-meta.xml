@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Matched_Firm__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Firm Account resolved from the row's firm name through the Firm Alias table (exact key, or a close fuzzy match accepted automatically). Blank when the firm is unresolved or ambiguous.</description>
+    <inlineHelpText>The firm this row was matched to.</inlineHelpText>
+    <label>Matched Firm</label>
+    <referenceTo>Account</referenceTo>
+    <relationshipLabel>Matched Staging Rows</relationshipLabel>
+    <relationshipName>Matched_Staging_Rows</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

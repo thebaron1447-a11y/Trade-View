@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Feed_Type__c</fullName>
+    <description>Kind of file this profile reads. Trade Activity files contain trade rows and AUM rows mixed together. Advisor Code Roster files list dealer codes and the advisors who hold them, and feed code setup rather than trades. Blank is treated as Trade Activity.</description>
+    <inlineHelpText>Choose Advisor Code Roster for files that list advisor codes; otherwise Trade Activity.</inlineHelpText>
+    <label>Feed Type</label>
+    <required>false</required>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Trade Activity</fullName>
+                <default>true</default>
+                <label>Trade Activity</label>
+            </value>
+            <value>
+                <fullName>Advisor Code Roster</fullName>
+                <default>false</default>
+                <label>Advisor Code Roster</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Rep_Code__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The existing Rep Code record when the code is known but ended, dormant, suspected reassigned or incompletely split. Blank for codes never set up.</description>
+    <inlineHelpText>The code record, if the code already exists in Salesforce.</inlineHelpText>
+    <label>Rep Code</label>
+    <referenceTo>Rep_Code__c</referenceTo>
+    <relationshipLabel>Code Follow-Ups</relationshipLabel>
+    <relationshipName>Code_Follow_Ups</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

@@ -289,3 +289,344 @@ def normalize_row(headers, values, canonical, cfg, row_number):
                     out["amount"] = a
     out["errors"] = errors
     return out
+
+
+# ================================================================ phase 3A: normalizer additions
+def indicator_key(v):
+    return re.sub(r"[^A-Z0-9]", "", (v or "").upper())
+
+
+def row_type_for(by, cfg):
+    if cfg.get("roster"):
+        return "Code Roster"
+    inds = cfg.get("aum", set())
+    if not inds:
+        return "Trade"
+    marker = by["rowType"] if "rowType" in by else by.get("transactionType")
+    return "AUM" if indicator_key(marker) in inds else "Trade"
+
+
+def normalize_row3(headers, values, canonical, cfg, row_number):
+    """Phase 3A normalizer: row types, AUM values, roster rows, branch."""
+    errors, out = [], {"row": row_number}
+    if len(values) != len(headers):
+        errors.append(f"Row has {len(values)} values but the header has {len(headers)} columns.")
+    by = {}
+    for i in range(min(len(canonical), len(values))):
+        if canonical[i] != "IGNORE":
+            by[canonical[i]] = clean(values[i])
+    rt = row_type_for(by, cfg)
+    out["rowType"] = rt
+
+    def text(val, label, mx, req):
+        if val is None or val.strip() == "":
+            if req:
+                errors.append(f"{label} is missing.")
+            return None
+        if len(val) > mx:
+            errors.append(f"{label} too long")
+            return val[:mx]
+        return val
+
+    out["repCode"] = text(normalize_rep_code(by.get("repCode")), "Rep code", 40, True)
+    out["advisor"] = text(by.get("advisorName"), "Advisor name", 255, rt == "Code Roster")
+    firm = by.get("firmName")
+    if firm is None or firm.strip() == "":
+        firm = cfg.get("fallbackFirm")
+    out["firm"] = text(firm, "Firm name", 255, False)
+    out["branch"] = text(by.get("branchName"), "Branch name", 255, False)
+    out["fund"] = None
+    if rt != "Code Roster":
+        out["fund"] = text(by.get("fundName"), "Fund name", 255, rt == "Trade")
+    label = {"Trade": "Trade date", "AUM": "As-of date", "Code Roster": "Effective date"}[rt]
+    rd = by.get("tradeDate")
+    out["date"] = None
+    if rd is None or rd.strip() == "":
+        errors.append(f"{label} is missing.")
+    else:
+        out["date"] = parse_date(rd, cfg["dateFormat"], errors)
+    out["type"] = out["amount"] = None
+    ra = by.get("amount")
+    if rt == "Trade":
+        if ra is None or ra.strip() == "":
+            errors.append("Amount is missing.")
+        else:
+            a = parse_amount(ra, cfg["decimalSeparator"], errors)
+            if a is not None:
+                if a == 0:
+                    errors.append("Amount is zero.")
+                elif cfg["direction"] == "Signed Amount":
+                    out["type"] = "Redemption" if a < 0 else "Purchase"
+                    out["amount"] = abs(a)
+                else:
+                    key = re.sub(r"[^A-Z]", "", (by.get("transactionType") or "").upper())
+                    t = TYPE_SYNONYMS.get(key)
+                    if t is None:
+                        errors.append(f'Transaction type "{by.get("transactionType") or ""}" is not recognized as a purchase or redemption.')
+                    else:
+                        out["type"] = t
+                    if a < 0:
+                        errors.append("Amount is negative, but this source shows direction in its type column.")
+                    else:
+                        out["amount"] = a
+    elif rt == "AUM":
+        if ra is None or ra.strip() == "":
+            errors.append("AUM value is missing.")
+        else:
+            a = parse_amount(ra, cfg["decimalSeparator"], errors)
+            if a is not None:
+                if a < 0:
+                    errors.append("AUM value is negative.")
+                else:
+                    out["amount"] = a
+    out["errors"] = errors
+    out["status"] = "Invalid" if errors else "Pending"
+    return out
+
+
+CANONICAL.update({"branchName", "rowType"})
+
+
+def resolve_columns3(headers, column_map, profile):
+    """Mirror of MappingService.resolveColumns with feed types and AUM settings."""
+    problems, cmap = [], {}
+    for h, v in column_map.items():
+        if v not in CANONICAL:
+            problems.append(f"unknown {v}")
+            continue
+        cmap[header_key(h)] = v
+    resolved, seen, counts = [], set(), {}
+    for h in headers:
+        k = header_key(h)
+        if k in seen:
+            problems.append("dup")
+        seen.add(k)
+        c = cmap.get(k)
+        if c is None:
+            problems.append(f"unmapped {h}")
+            resolved.append("IGNORE")
+            continue
+        resolved.append(c)
+        if c != "IGNORE":
+            counts[c] = counts.get(c, 0) + 1
+    problems += [f"multi {f}" for f, n in counts.items() if n > 1]
+    roster = profile.get("feed") == "Advisor Code Roster"
+    req = ["repCode", "advisorName", "tradeDate"] if roster else ["repCode", "fundName", "tradeDate", "amount"]
+    problems += [f"missing {f}" for f in req if f not in counts]
+    if not roster:
+        has_type, has_row = "transactionType" in counts, "rowType" in counts
+        if profile["conv"] == "Type Column" and not has_type:
+            problems.append("type column needs transactionType")
+        if profile["conv"] == "Signed Amount" and has_type:
+            problems.append("signed forbids transactionType")
+        if has_row and not profile.get("aum"):
+            problems.append("rowType needs indicators")
+        if profile.get("aum") and not has_row and not has_type:
+            problems.append("indicators need a column")
+    return resolved, problems
+
+
+# ================================================================ phase 3A: NameMatcher
+FOLD = {'à': 'a', 'á': 'a', 'â': 'a', 'ä': 'a', 'ã': 'a', 'å': 'a', 'ç': 'c', 'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
+        'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i', 'ñ': 'n', 'ò': 'o', 'ó': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o',
+        'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u', 'ý': 'y', 'ÿ': 'y', 'œ': 'oe', 'æ': 'ae'}
+
+
+def fold(v):
+    if v is None:
+        return ""
+    s = v.lower()
+    for a, b in FOLD.items():
+        s = s.replace(a, b)
+    return normalize_space(re.sub(r"[^a-z0-9]", " ", s))
+
+
+def tokens(v):
+    f = fold(v)
+    return [] if f == "" else f.split(" ")
+
+
+def is_compatible(row_name, first, last):
+    rt, lt = tokens(row_name), tokens(last)
+    if not rt or not lt:
+        return False
+    others = list(rt)
+    for t in lt:
+        if t not in others:
+            return False
+        others.remove(t)
+    ft = tokens(first)
+    if not others or not ft:
+        return True
+    f0 = ft[0]
+    return any(t == f0 or (len(t) == 1 and f0.startswith(t)) for t in others)
+
+
+def levenshtein(a, b):
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def similarity(a, b):
+    from decimal import Decimal, ROUND_HALF_UP
+    a, b = a or "", b or ""
+    L = max(len(a), len(b))
+    if L == 0:
+        return Decimal(1)
+    return (Decimal(L - levenshtein(a, b)) / Decimal(L)).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+
+
+# ================================================================ phase 3A: TradeMatcher
+from datetime import date as _date
+from decimal import Decimal as _D
+DORMANCY_DAYS, AUTO_ACCEPT, MARGIN = 180, _D("0.9"), _D("0.1")
+
+
+class World:
+    """Reference data, shaped like what TradeMatcher loads."""
+
+    def __init__(self, firm_aliases, fund_aliases, rep_codes, assignments, contacts, accounts):
+        self.firm_keys, self.fund_keys = {}, {}
+        for key, firm in firm_aliases:
+            self.firm_keys.setdefault(key, set()).add(firm)
+        for key, fund in fund_aliases:
+            self.fund_keys.setdefault(key, set()).add(fund)
+        self.codes = {(rc["firm"], rc["name"].upper()): rc for rc in rep_codes}
+        self.assign = {}
+        for a in assignments:
+            self.assign.setdefault(a["code"], []).append(a)
+        self.contacts = contacts          # ref -> {first,last,account}
+        self.accounts = accounts          # ref -> parent ref or None
+
+    def resolve(self, key, by_key):
+        exact = by_key.get(key)
+        if exact and len(exact) == 1:
+            return dict(id=next(iter(exact)), fuzzy=False, ambiguous=False)
+        if exact:
+            return dict(id=None, fuzzy=False, ambiguous=True)
+        best = {}
+        for ak, ids in by_key.items():
+            sc = similarity(key, ak)
+            for i in ids:
+                if i not in best or sc > best[i]:
+                    best[i] = sc
+        ranked = sorted(best.items(), key=lambda kv: (-kv[1], kv[0]))
+        if ranked and ranked[0][1] >= AUTO_ACCEPT and (len(ranked) == 1 or ranked[1][1] <= ranked[0][1] - MARGIN):
+            return dict(id=ranked[0][0], fuzzy=True, ambiguous=False)
+        return dict(id=None, fuzzy=False, ambiguous=False)
+
+    def firm_contacts(self, firm):
+        return [c for c in self.contacts.values()
+                if c["account"] == firm or self.accounts.get(c["account"]) == firm]
+
+
+def _active(assigns, d):
+    return [a for a in assigns if a["start"] <= d and (a["end"] is None or a["end"] >= d)]
+
+
+def match_row(row, w):
+    """Returns (status, reason, flags, firm, code, fund, credited)."""
+    flags, out = [], dict(status="Matched", reason=None, firm=None, code=None, fund=None, credited=None)
+
+    def hold(reason, flag):
+        out.update(status="Held", reason=reason)
+        flags.append(flag)
+
+    def review(flag):
+        if out["status"] != "Held":
+            out["status"] = "Needs Review"
+        flags.append(flag)
+
+    key = firm_key(row["firm"])
+    if key is None:
+        review("FIRM_MISSING")
+        return out, flags
+    r = w.resolve(key, w.firm_keys)
+    if r["id"] is None:
+        review("FIRM_AMBIGUOUS" if r["ambiguous"] else "FIRM_UNRESOLVED")
+        return out, flags
+    out["firm"] = r["id"]
+    if r["fuzzy"]:
+        flags.append("FIRM_FUZZY")
+
+    def fund():
+        fk = firm_key(row.get("fund"))
+        if fk is None:
+            return
+        fr = w.resolve(fk, w.fund_keys)
+        if fr["id"] is None:
+            review("FUND_AMBIGUOUS" if fr["ambiguous"] else "FUND_UNRESOLVED")
+        else:
+            out["fund"] = fr["id"]
+            if fr["fuzzy"]:
+                flags.append("FUND_FUZZY")
+
+    code = w.codes.get((out["firm"], (row["repCode"] or "").upper()))
+    assigns = w.assign.get(code["ref"], []) if code else []
+
+    if row["rowType"] == "Code Roster":
+        people = [ref for ref, c in w.contacts.items()
+                  if (c["account"] == out["firm"] or w.accounts.get(c["account"]) == out["firm"])
+                  and is_compatible(row["advisor"], c["first"], c["last"])]
+        if len(people) == 1:
+            out["credited"] = people[0]
+        elif not people:
+            flags.append("NEW_ADVISOR")
+        else:
+            flags.append("ADVISOR_AMBIGUOUS")
+        if code is None:
+            review("ROSTER_NEW_CODE")
+            return out, flags
+        out["code"] = code["ref"]
+        for a in assigns:
+            c = w.contacts[a["advisor"]]
+            if a["end"] is None and is_compatible(row["advisor"], c["first"], c["last"]):
+                flags.append("ROSTER_CONFIRMS")
+                return out, flags
+        review("ROSTER_NEW_HOLDER")
+        return out, flags
+
+    if code is None:
+        hold("Unknown Code", "UNKNOWN_CODE")
+        fund()
+        return out, flags
+    out["code"] = code["ref"]
+    d = row["date"]
+    active = _active(assigns, d)
+    if not active:
+        if any(a["end"] is not None and a["end"] < d for a in assigns):
+            hold("Code Ended", "CODE_ENDED")
+        else:
+            review("DATE_BEFORE_CODE_START")
+        fund()
+        return out, flags
+    name = row["advisor"]
+    named = bool(name and name.strip())
+    compat = [a for a in active if named and is_compatible(name, w.contacts[a["advisor"]]["first"], w.contacts[a["advisor"]]["last"])]
+    team = len(active) > 1
+    lasts = [a["last"] for a in active if a["last"] is not None]
+    dormant = bool(lasts) and (d - max(lasts)).days > DORMANCY_DAYS
+    if named and not compat:
+        hold("Reassignment Suspected", "TEAM_CHANGE_SUSPECTED" if team else "REASSIGNMENT_SUSPECTED")
+    elif not named and dormant:
+        hold("Code Dormant", "DORMANT_CODE_NO_NAME")
+    else:
+        if dormant:
+            flags.append("DORMANT_CODE_REACTIVATED")
+        if len(compat) == 1:
+            out["credited"] = compat[0]["advisor"]
+            if team:
+                flags.append("SINGLE_ADVISOR_CREDIT")
+        elif not team:
+            out["credited"] = active[0]["advisor"]
+        elif sum(a["pct"] for a in active) != 100:
+            hold("Allocation Incomplete", "ALLOCATION_INCOMPLETE")
+        else:
+            flags.append("TEAM_SPLIT")
+    fund()
+    return out, flags
