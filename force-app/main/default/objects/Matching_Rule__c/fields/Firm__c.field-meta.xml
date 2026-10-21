@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Firm__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The firm the rule applies to. Blank means the rule applies to every firm.</description>
+    <inlineHelpText>Leave blank for a rule that applies to all firms.</inlineHelpText>
+    <label>Firm</label>
+    <referenceTo>Account</referenceTo>
+    <relationshipLabel>Matching Rules</relationshipLabel>
+    <relationshipName>Matching_Rules</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

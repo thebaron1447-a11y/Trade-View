@@ -3,7 +3,8 @@
  * fingerprint, and writes one Import_Staging_Row__c per data row.
  *
  * Outcomes: Staged (rows written, possibly with row-level validation errors; matching is then queued),
- * Mapping Review (no Active profile for this layout, or the profile is incomplete),
+ * Mapping Review (no Active profile for this layout, or the profile is incomplete; with no profile at all,
+ * Claude is asked to propose one, and activating a profile for this layout re-processes the batch),
  * Failed (the file could not be read or parsed; Error_Message__c says why).
  * All-or-nothing: on failure no staging rows are kept.
  */
@@ -66,13 +67,15 @@ public with sharing class ImportBatchProcessor implements Queueable {
 
         Mapping_Profile__c profile;
         List<String> columns;
+        String fingerprint = MappingService.fingerprint(headers);
         try {
-            profile = MappingService.findActiveProfile(MappingService.fingerprint(headers), batch.Source_Firm__c);
+            profile = MappingService.findActiveProfile(fingerprint, batch.Source_Firm__c);
             if (profile != null) {
                 columns = MappingService.resolveColumns(headers, profile);
             }
         } catch (MappingService.MappingException e) {
             batch.Mapping_Profile__c = profile?.Id;
+            batch.Header_Fingerprint__c = fingerprint;
             batch.Status__c = STATUS_MAPPING_REVIEW;
             batch.Error_Message__c = e.getMessage().abbreviate(5000);
             update as user batch;
@@ -80,8 +83,12 @@ public with sharing class ImportBatchProcessor implements Queueable {
         }
         if (profile == null) {
             batch.Status__c = STATUS_MAPPING_REVIEW;
+            batch.Header_Fingerprint__c = fingerprint;
             batch.Error_Message__c = 'No Active mapping profile matches this file layout. A mapping must be confirmed before the file can be read.';
             update as user batch;
+            if (AiSettings.get().enabled && !Test.isRunningTest()) {
+                System.enqueueJob(new MappingProposalJob(batch.Id));
+            }
             return;
         }
 
@@ -105,7 +112,8 @@ public with sharing class ImportBatchProcessor implements Queueable {
         }
     }
 
-    private static String loadFile(Id batchId) {
+    /** The text of the file attached to the batch. Also used by MappingProposalJob to read sample rows. */
+    public static String loadFile(Id batchId) {
         List<ContentDocumentLink> links = [
             SELECT ContentDocument.LatestPublishedVersionId
             FROM ContentDocumentLink

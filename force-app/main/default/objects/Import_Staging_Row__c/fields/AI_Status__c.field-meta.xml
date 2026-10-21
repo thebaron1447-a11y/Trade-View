@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>AI_Status__c</fullName>
+    <description>State of Claude's suggestion for this row. Blank: not requested yet. Suggested: a valid suggestion is stored. No Suggestion: Claude returned nothing for the row. Invalid: Claude's answer failed validation and was discarded. Failed: the call itself failed. Clear it to request a new suggestion.</description>
+    <inlineHelpText>Whether Claude has suggested an answer for this row.</inlineHelpText>
+    <label>AI Status</label>
+    <required>false</required>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Suggested</fullName>
+                <default>false</default>
+                <label>Suggested</label>
+            </value>
+            <value>
+                <fullName>No Suggestion</fullName>
+                <default>false</default>
+                <label>No Suggestion</label>
+            </value>
+            <value>
+                <fullName>Invalid</fullName>
+                <default>false</default>
+                <label>Invalid</label>
+            </value>
+            <value>
+                <fullName>Failed</fullName>
+                <default>false</default>
+                <label>Failed</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

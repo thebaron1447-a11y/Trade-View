@@ -32,6 +32,17 @@ def split_args(s):
         elif c == "'":
             q = True
             cur += c
+        elif re.match(r"(Map|List|Set)\s*<", s[i:]) and (i == 0 or not (s[i - 1].isalnum() or s[i - 1] == "_")):
+            # Generic type arguments (Map<String, String>) contain commas that do not separate arguments.
+            j, angle = s.index("<", i), 0
+            while j < len(s):
+                angle += {"<": 1, ">": -1}.get(s[j], 0)
+                j += 1
+                if angle == 0:
+                    break
+            cur += s[i:j]
+            i = j
+            continue
         elif c in "([{":
             depth += 1
             cur += c
@@ -94,6 +105,20 @@ for path in files:
     for line, argstr in list(calls(code, "String.isBlank")) + list(calls(code, "String.isNotBlank")):
         if re.search(r"(?i)delim|separator|token", argstr):
             problems.append(f"{name}:{line} String.isBlank({argstr}) treats tab and space as blank; compare to null instead")
+
+# 4. Identifiers Apex rejects at compile time: ending with an underscore, or containing "__" other than the
+#    custom suffixes (__c, __r, __mdt, __e, __x, __b, __Share, __History). Added after the 3B org gate (list_).
+SUFFIX = re.compile(r"__(c|r|mdt|e|x|b|Share|History|Feed)$")
+for f in files:
+    raw = open(f, encoding="utf-8").read()
+    # Comments and strings are blanked but their line breaks kept, so reported line numbers stay right.
+    code = re.sub(r"//[^\n]*|/\*.*?\*/|'(?:\\.|[^'\\])*'",
+                  lambda m: "''" if m.group(0).startswith("'") else "\n" * m.group(0).count("\n"), raw, flags=re.S)
+    for lineno, line in enumerate(code.split("\n"), start=1):
+        for ident in re.findall(r"(?<![\w.])([A-Za-z_]\w*)", line):
+            base = SUFFIX.sub("", ident)
+            if base.endswith("_") or "__" in base:
+                problems.append(f"{f.split('/')[-1]}:{lineno} identifier `{ident}` is not valid Apex (trailing or double underscore)")
 
 print("\n".join(problems) if problems else f"apex lint: no problems in {len(files)} files")
 sys.exit(1 if problems else 0)

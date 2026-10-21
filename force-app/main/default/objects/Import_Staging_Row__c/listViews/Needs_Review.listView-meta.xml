@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ListView xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Needs_Review</fullName>
+    <columns>NAME</columns>
+    <columns>Import_Batch__c</columns>
+    <columns>Row_Type__c</columns>
+    <columns>Source_Firm_Name__c</columns>
+    <columns>Source_Advisor_Name__c</columns>
+    <columns>Source_Fund_Name__c</columns>
+    <columns>Match_Flags__c</columns>
+    <columns>AI_Status__c</columns>
+    <columns>AI_Confidence__c</columns>
+    <filterScope>Everything</filterScope>
+    <filters>
+        <field>Match_Status__c</field>
+        <operation>equals</operation>
+        <value>Needs Review</value>
+    </filters>
+    <label>Needs Review</label>
+</ListView>

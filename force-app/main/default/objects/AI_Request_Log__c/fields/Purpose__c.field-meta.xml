@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Purpose__c</fullName>
+    <description>What the request was for: suggestions on review rows and follow-ups, or a proposed mapping profile for an unknown file layout.</description>
+    <inlineHelpText>What Claude was asked to do.</inlineHelpText>
+    <label>Purpose</label>
+    <required>true</required>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Row Suggestions</fullName>
+                <default>false</default>
+                <label>Row Suggestions</label>
+            </value>
+            <value>
+                <fullName>Mapping Proposal</fullName>
+                <default>false</default>
+                <label>Mapping Proposal</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

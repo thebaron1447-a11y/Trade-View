@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Proposed_From_Batch__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The import batch whose file Claude read to propose this profile.</description>
+    <inlineHelpText>The file this mapping was proposed from.</inlineHelpText>
+    <label>Proposed From Batch</label>
+    <referenceTo>Import_Batch__c</referenceTo>
+    <relationshipLabel>Proposed Mapping Profiles</relationshipLabel>
+    <relationshipName>Proposed_Mapping_Profiles</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

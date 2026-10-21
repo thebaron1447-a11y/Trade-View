@@ -81,6 +81,12 @@ public with sharing class CodeFollowUpService {
             }
             if (existing.Status__c == STATUS_RESOLVED || existing.Status__c == STATUS_CLOSED) {
                 u.Status__c = STATUS_OPEN;
+                // New rows are new evidence: ask Claude again rather than show the old suggestion.
+                u.AI_Status__c = null;
+                u.AI_Confidence__c = null;
+                u.AI_Suggested_Advisor__c = null;
+                u.AI_Request__c = null;
+                u.Suggested_Resolution__c = null;
             }
             updates.add(u);
         }

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Match_Method__c</fullName>
-    <description>How the row was resolved: Exact (alias key and code lookup), Fuzzy (a close name match accepted automatically), Claude or Reviewer (next drop).</description>
+    <description>How the row was resolved: Exact (alias key and code lookup), Fuzzy (a close name match accepted automatically), Claude (a reviewer accepted Claude's suggested firm or fund) or Reviewer (a reviewer chose the firm or fund, or approved a roster row).</description>
     <inlineHelpText>How this row was matched.</inlineHelpText>
     <label>Match Method</label>
     <required>false</required>

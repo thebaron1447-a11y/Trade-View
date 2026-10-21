@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>AI_Rationale__c</fullName>
+    <description>For profiles proposed by Claude: its explanation of each choice and its confidence, followed by the results of the same checks used when reading a file. Read this before setting the profile to Active.</description>
+    <inlineHelpText>Why Claude proposed this mapping, and any problems found. Review before activating.</inlineHelpText>
+    <label>AI Rationale</label>
+    <length>5000</length>
+    <type>LongTextArea</type>
+    <visibleLines>6</visibleLines>
+</CustomField>

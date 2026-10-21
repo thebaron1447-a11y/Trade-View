@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Header_Fingerprint__c</fullName>
+    <description>Fingerprint of the file's header row, saved when no Active mapping matched. When a mapping profile with this fingerprint is set to Active, waiting batches are re-processed automatically.</description>
+    <externalId>true</externalId>
+    <inlineHelpText>Identifies the file layout. System-maintained.</inlineHelpText>
+    <label>Header Fingerprint</label>
+    <length>64</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

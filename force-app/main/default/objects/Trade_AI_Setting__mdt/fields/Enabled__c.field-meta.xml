@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Enabled__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>When unchecked, no Claude requests are made; matching and review work without suggestions.</description>
+    <externalId>false</externalId>
+    <fieldManageability>DeveloperControlled</fieldManageability>
+    <inlineHelpText>Turn Claude suggestions on or off.</inlineHelpText>
+    <label>Enabled</label>
+    <type>Checkbox</type>
+</CustomField>

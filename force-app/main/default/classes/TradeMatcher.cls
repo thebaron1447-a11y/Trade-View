@@ -2,12 +2,14 @@
  * Deterministic matching (tiers 1 and 2) for staged rows. For each Pending row it resolves the firm,
  * the rep code, who gets the credit, and the fund, then marks the row:
  *   Matched       everything resolved without doubt
- *   Needs Review  a name is ambiguous or unresolved (a reviewer, and in the next drop Claude, decides)
+ *   Needs Review  a name is ambiguous or unresolved (Claude suggests, a reviewer decides)
  *   Held          the code is unknown, ended, dormant, suspected reassigned or incompletely split;
  *                 the row waits on a Code Follow-Up and is never orphaned
  * Code Roster rows are classified (confirms an existing holder, new holder, or new code) for review.
  *
  * Re-running is safe: only Pending rows are processed, and resolving a follow-up sets its rows back to Pending.
+ * A reviewer's Firm or Fund Override (set directly or by accepting Claude's suggestion) replaces name matching.
+ * After each run, ClaudeSuggestionJob is queued for anything left in Needs Review or on a follow-up.
  */
 public with sharing class TradeMatcher implements Queueable {
     public static final String MATCHED = 'Matched';
@@ -57,7 +59,8 @@ public with sharing class TradeMatcher implements Queueable {
         }
         List<Import_Staging_Row__c> rows = [
             SELECT Id, Import_Batch__c, Row_Type__c, Source_Rep_Code__c, Source_Advisor_Name__c, Source_Firm_Name__c,
-                Source_Fund_Name__c, Trade_Date__c, Amount__c, Code_Follow_Up__c
+                Source_Fund_Name__c, Trade_Date__c, Amount__c, Code_Follow_Up__c, Firm_Override__c, Fund_Override__c,
+                AI_Suggested_Firm__c, AI_Suggested_Fund__c
             FROM Import_Staging_Row__c
             WHERE Import_Batch__c IN :batches.keySet() AND Has_Errors__c = FALSE
                 AND (Match_Status__c = 'Pending' OR Match_Status__c = NULL)
@@ -107,6 +110,14 @@ public with sharing class TradeMatcher implements Queueable {
             }
         }
         update as user statusUpdates;
+        queueSuggestions(batches.keySet());
+    }
+
+    /** Claude looks at whatever matching could not settle. Tests call ClaudeSuggestionJob directly. */
+    private static void queueSuggestions(Set<Id> batchIds) {
+        if (AiSettings.get().enabled && !Test.isRunningTest() && Limits.getQueueableJobs() < Limits.getLimitQueueableJobs()) {
+            System.enqueueJob(new ClaudeSuggestionJob(batchIds));
+        }
     }
 
     // ================================================================== matching rules
@@ -253,6 +264,16 @@ public with sharing class TradeMatcher implements Queueable {
     // ================================================================== resolution helpers
 
     private static Boolean resolveFirm(Import_Staging_Row__c row, Reference ref, Outcome o) {
+        if (row.Firm_Override__c != null) {
+            Boolean fromClaude = row.Firm_Override__c == row.AI_Suggested_Firm__c;
+            o.firmId = row.Firm_Override__c;
+            o.method = fromClaude ? 'Claude' : 'Reviewer';
+            o.flag(
+                fromClaude ? 'FIRM_FROM_CLAUDE' : 'FIRM_FROM_REVIEWER',
+                'Firm set by a reviewer' + (fromClaude ? ' who accepted Claude\'s suggestion.' : '.')
+            );
+            return true;
+        }
         String key = NameNormalizer.firmKey(row.Source_Firm_Name__c);
         if (key == null) {
             o.review('FIRM_MISSING', 'The row has no firm name and the feed is not a single-firm feed.');
@@ -273,6 +294,18 @@ public with sharing class TradeMatcher implements Queueable {
     }
 
     private static void resolveFund(Import_Staging_Row__c row, Reference ref, Outcome o) {
+        if (row.Fund_Override__c != null) {
+            Boolean fromClaude = row.Fund_Override__c == row.AI_Suggested_Fund__c;
+            o.fundId = row.Fund_Override__c;
+            if (o.method != 'Claude') {
+                o.method = fromClaude ? 'Claude' : 'Reviewer';
+            }
+            o.flag(
+                fromClaude ? 'FUND_FROM_CLAUDE' : 'FUND_FROM_REVIEWER',
+                'Fund set by a reviewer' + (fromClaude ? ' who accepted Claude\'s suggestion.' : '.')
+            );
+            return;
+        }
         String key = NameNormalizer.firmKey(row.Source_Fund_Name__c);
         if (key == null) {
             return; // AUM total per code; Trade rows without a fund never reach matching.
@@ -343,7 +376,7 @@ public with sharing class TradeMatcher implements Queueable {
     /** A record holding only the fields matching writes, for user-mode update. */
     @TestVisible
     private static Import_Staging_Row__c matchResult(Import_Staging_Row__c row) {
-        return new Import_Staging_Row__c(
+        Import_Staging_Row__c result = new Import_Staging_Row__c(
             Id = row.Id,
             Match_Status__c = row.Match_Status__c,
             Match_Method__c = row.Match_Method__c,
@@ -355,6 +388,21 @@ public with sharing class TradeMatcher implements Queueable {
             Match_Notes__c = row.Match_Notes__c,
             Match_Candidates__c = row.Match_Candidates__c
         );
+        if (row.Match_Status__c == REVIEW) {
+            // Back in review (for example a new reason after an override): ask Claude again and let the
+            // reviewer decide again. The overrides stay, so earlier choices are kept.
+            result.AI_Status__c = null;
+            result.AI_Confidence__c = null;
+            result.AI_Suggestion__c = null;
+            result.AI_Suggested_Firm__c = null;
+            result.AI_Suggested_Fund__c = null;
+            result.AI_Suggested_Advisor__c = null;
+            result.AI_Request__c = null;
+            result.Reviewer_Decision__c = null;
+            result.Decided_By__c = null;
+            result.Decided_At__c = null;
+        }
+        return result;
     }
 
     private static void apply(Import_Staging_Row__c row, Outcome o) {
@@ -418,6 +466,9 @@ public with sharing class TradeMatcher implements Queueable {
             Set<String> codes = new Set<String>();
             Boolean anyRoster = false;
             for (Import_Staging_Row__c row : rows) {
+                if (row.Firm_Override__c != null) {
+                    firmIds.add(row.Firm_Override__c);
+                }
                 String key = NameNormalizer.firmKey(row.Source_Firm_Name__c);
                 if (key != null) {
                     Resolution r = resolve(key, firmIdsByKey, firmAliasKeys, firmNames);

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Fund_Override__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Fund chosen by a reviewer, or copied from Claude's suggestion when the reviewer accepts it. Matching uses it instead of the fund name in the file.</description>
+    <inlineHelpText>Pick the correct fund if the file's fund name is wrong or ambiguous, then set Reviewer Decision to Accept.</inlineHelpText>
+    <label>Fund Override</label>
+    <referenceTo>Product2</referenceTo>
+    <relationshipLabel>Override Staging Rows</relationshipLabel>
+    <relationshipName>Override_Staging_Rows</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

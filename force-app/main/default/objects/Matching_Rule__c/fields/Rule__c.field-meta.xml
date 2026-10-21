@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Rule__c</fullName>
+    <description>The instruction in plain language, as Claude will read it. Keep it to one fact or convention per rule.</description>
+    <inlineHelpText>Describe one convention this firm uses, for example: ETF in a fund name always means the Wealth World ETF.</inlineHelpText>
+    <label>Rule</label>
+    <length>1000</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

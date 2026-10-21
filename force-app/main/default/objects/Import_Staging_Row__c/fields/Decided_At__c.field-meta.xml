@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Decided_At__c</fullName>
+    <description>When Reviewer Decision was set. Set by the system for audit.</description>
+    <inlineHelpText>When the review decision was made.</inlineHelpText>
+    <label>Decided At</label>
+    <required>false</required>
+    <type>DateTime</type>
+</CustomField>

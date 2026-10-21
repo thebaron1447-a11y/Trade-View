@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Model_Name__c</fullName>
+    <description>Models API model used, from the Trade AI Setting custom metadata, for example sfdc_ai__DefaultBedrockAnthropicClaude5Sonnet.</description>
+    <inlineHelpText>The Claude model that answered.</inlineHelpText>
+    <label>Model Name</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

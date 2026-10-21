@@ -542,19 +542,27 @@ def match_row(row, w):
             out["status"] = "Needs Review"
         flags.append(flag)
 
-    key = firm_key(row["firm"])
-    if key is None:
-        review("FIRM_MISSING")
-        return out, flags
-    r = w.resolve(key, w.firm_keys)
-    if r["id"] is None:
-        review("FIRM_AMBIGUOUS" if r["ambiguous"] else "FIRM_UNRESOLVED")
-        return out, flags
-    out["firm"] = r["id"]
-    if r["fuzzy"]:
-        flags.append("FIRM_FUZZY")
+    if row.get("firmOverride"):  # phase 3B: reviewer override (possibly an accepted Claude suggestion)
+        out["firm"] = row["firmOverride"]
+        flags.append("FIRM_FROM_CLAUDE" if row["firmOverride"] == row.get("aiFirm") else "FIRM_FROM_REVIEWER")
+    else:
+        key = firm_key(row["firm"])
+        if key is None:
+            review("FIRM_MISSING")
+            return out, flags
+        r = w.resolve(key, w.firm_keys)
+        if r["id"] is None:
+            review("FIRM_AMBIGUOUS" if r["ambiguous"] else "FIRM_UNRESOLVED")
+            return out, flags
+        out["firm"] = r["id"]
+        if r["fuzzy"]:
+            flags.append("FIRM_FUZZY")
 
     def fund():
+        if row.get("fundOverride"):
+            out["fund"] = row["fundOverride"]
+            flags.append("FUND_FROM_CLAUDE" if row["fundOverride"] == row.get("aiFund") else "FUND_FROM_REVIEWER")
+            return
         fk = firm_key(row.get("fund"))
         if fk is None:
             return
@@ -630,3 +638,192 @@ def match_row(row, w):
             flags.append("TEAM_SPLIT")
     fund()
     return out, flags
+
+
+# ================================================================ phase 3B: Claude response handling
+import json as _json
+
+
+class ClaudeError(Exception):
+    pass
+
+
+def apex_abbreviate(s, n):
+    return s if len(s) <= n else s[: n - 3] + "..."
+
+
+def apex_str(v):
+    """String.valueOf / concatenation of a JSON value in Apex."""
+    if v is None:
+        return "null"
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    return str(v)
+
+
+def is_blank(s):
+    return s is None or s.strip() == ""
+
+
+def parse_object(text):
+    """ClaudeService.parseObject: the text from the first '{' to the last '}' as a JSON object."""
+    start = -1 if text is None else text.find("{")
+    finish = -1 if text is None else text.rfind("}")
+    if start < 0 or finish < start:
+        raise ClaudeError("The response contains no JSON object.")
+    try:
+        return _json.loads(text[start:finish + 1])
+    except ValueError:
+        raise ClaudeError("The response is not valid JSON")
+
+
+CONF = {"high": "High", "medium": "Medium", "low": "Low"}
+RECS = {"approve", "reject", "unsure"}
+KEY_ASKS = ["firm", "fund", "advisor"]
+MAX_EXPLANATION = 2000
+
+
+def validate_suggestions(root, items):
+    """ClaudeSuggestionService.validate. items: {key: {"asks": set, "allowed": {ask: set}}}.
+    Returns (usable, {item: suggestion dict}, invalid set, problems list)."""
+    by_item, invalid, problems = {}, set(), []
+    lst = None if root is None else root.get("suggestions")
+    if not isinstance(lst, list):
+        return False, by_item, invalid, ["The response has no \"suggestions\" list."]
+    for index, entry in enumerate(lst, start=1):
+        if not isinstance(entry, dict):
+            problems.append(f"Entry {index} is not an object.")
+            continue
+        item = entry.get("item")
+        if not isinstance(item, str) or item not in items:
+            problems.append(f"Entry {index} refers to an unknown item: {apex_str(item)}.")
+            continue
+        if item in by_item or item in invalid:
+            problems.append(f"Item {item} appears more than once; only the first entry is used.")
+            continue
+        it, issues, s = items[item], [], dict(item=item, firm=None, fund=None, advisor=None,
+                                               recommendation=None, confidence=None, explanation=None)
+        for what in KEY_ASKS:
+            value = entry.get(what)
+            if value is None or what not in it["asks"]:
+                continue
+            if not isinstance(value, str):
+                issues.append(f"{what} must be a key or null.")
+            elif value not in it["allowed"][what]:
+                issues.append(f"{what} \"{value}\" is not one of the candidates sent.")
+            else:
+                s[what] = value
+        rec = entry.get("recommendation")
+        if rec is not None and "recommendation" in it["asks"]:
+            r = rec.strip().lower() if isinstance(rec, str) else None
+            if r is None or r not in RECS:
+                issues.append("recommendation must be approve, reject or unsure.")
+            else:
+                s["recommendation"] = r
+        conf = entry.get("confidence")
+        s["confidence"] = CONF.get(conf.strip().lower()) if isinstance(conf, str) else None
+        if s["confidence"] is None:
+            issues.append("confidence must be High, Medium or Low.")
+        expl = entry.get("explanation")
+        if not isinstance(expl, str) or is_blank(expl):
+            issues.append("explanation is required.")
+        else:
+            s["explanation"] = apex_abbreviate(expl.strip(), MAX_EXPLANATION)
+        if not issues:
+            by_item[item] = s
+        else:
+            invalid.add(item)
+            problems.extend(f"Item {item}: {i}" for i in issues)
+    return True, by_item, invalid, problems
+
+
+FEED_TYPES = {"Trade Activity", "Advisor Code Roster"}
+DATE_FORMATS = {"MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"}
+SEPARATORS = {"Period", "Comma"}
+CONVENTIONS = {"Type Column", "Signed Amount"}
+
+
+def _pick(root, name, allowed, problems):
+    v = root.get(name)
+    if isinstance(v, str) and v in allowed:
+        return v
+    problems.append(f"{name} must be one of: {', '.join(sorted(allowed))}.")
+    return None
+
+
+def validate_proposal(root, headers):
+    """MappingProposalService.validate. Returns (proposal dict or None, problems)."""
+    problems = []
+    p = dict(feedType=_pick(root, "feedType", FEED_TYPES, problems),
+             dateFormat=_pick(root, "dateFormat", DATE_FORMATS, problems),
+             decimalSeparator=_pick(root, "decimalSeparator", SEPARATORS, problems),
+             directionConvention=_pick(root, "directionConvention", CONVENTIONS, problems),
+             aumIndicatorValues=None, confidence=None, explanation=None, columnMap={})
+    aum = root.get("aumIndicatorValues")
+    if aum is not None and not isinstance(aum, str):
+        problems.append("aumIndicatorValues must be text or null.")
+    elif aum is not None and not is_blank(aum):
+        values = aum.strip()
+        if len(values) > 255:
+            problems.append("aumIndicatorValues is longer than 255 characters.")
+        else:
+            p["aumIndicatorValues"] = values
+    conf = root.get("confidence")
+    p["confidence"] = CONF.get(conf.strip().lower()) if isinstance(conf, str) else None
+    if p["confidence"] is None:
+        problems.append("confidence must be High, Medium or Low.")
+    expl = root.get("explanation")
+    if not isinstance(expl, str) or is_blank(expl):
+        problems.append("explanation is required.")
+    else:
+        p["explanation"] = apex_abbreviate(expl.strip(), 3000)
+    raw = root.get("columnMap")
+    if not isinstance(raw, dict):
+        problems.append("columnMap must be an object of \"column header\": \"field\".")
+        return None, problems
+    header_by_key = {header_key(h): h for h in headers}
+    mapped, bad = set(), set()
+    for given, field in raw.items():
+        key = header_key(given)
+        if key not in header_by_key:
+            problems.append(f"columnMap names a column that is not in the file: \"{given}\".")
+        elif key in mapped or key in bad:
+            problems.append(f"Column \"{header_by_key[key]}\" is mapped more than once.")
+        elif not isinstance(field, str) or field not in CANONICAL:
+            bad.add(key)
+            problems.append(f"Column \"{header_by_key[key]}\" is mapped to {apex_str(field)}, which is not a known field.")
+        else:
+            mapped.add(key)
+            p["columnMap"][header_by_key[key]] = field
+    for h in headers:
+        key = header_key(h)
+        if key not in mapped and key not in bad:
+            problems.append(f"Column \"{h}\" has no mapping.")
+            bad.add(key)
+    return (p if not problems else None), problems
+
+
+# ---------------------------------------------------------------- 3B.2: reviewer-facing explanation text
+_KEY = r"[FPARU][0-9]+"
+_SPACE = r"[ \t\r\n]*"
+_BRACKETED = re.compile(_SPACE + r"\(" + _SPACE + "(" + _KEY + "(?:" + _SPACE + "(?:,|/|and|or)" + _SPACE + _KEY + ")*)" + _SPACE + r"\)")
+_BARE = re.compile(r"(?<![A-Za-z0-9_])" + _KEY + r"(?![A-Za-z0-9_])")
+
+def _blank(s):
+    return s is None or s.strip() == ""
+
+def readable(text, name_by_key):
+    """Mirror of ClaudeSuggestionService.readable."""
+    if _blank(text) or not name_by_key:
+        return text
+    def bracket(m):
+        for k in _BARE.findall(m.group(1)):
+            if _blank(name_by_key.get(k)):
+                return m.group(0)
+        return ""
+    def bare(m):
+        name = name_by_key.get(m.group(0))
+        return m.group(0) if _blank(name) else name
+    out = _BRACKETED.sub(bracket, text)
+    out = _BARE.sub(bare, out)
+    return apex_abbreviate(out.strip("".join(chr(i) for i in range(33))), MAX_EXPLANATION)  # Apex trim()

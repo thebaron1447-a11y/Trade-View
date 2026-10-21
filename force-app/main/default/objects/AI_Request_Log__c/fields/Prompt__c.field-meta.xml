@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Prompt__c</fullName>
+    <description>The exact prompt sent, for audit and prompt tuning.</description>
+    <inlineHelpText>What was sent to Claude.</inlineHelpText>
+    <label>Prompt</label>
+    <length>131072</length>
+    <type>LongTextArea</type>
+    <visibleLines>10</visibleLines>
+</CustomField>

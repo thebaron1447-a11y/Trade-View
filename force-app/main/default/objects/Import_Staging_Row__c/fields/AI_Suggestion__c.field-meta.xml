@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>AI_Suggestion__c</fullName>
+    <description>Claude's explanation of its suggestion, citing the evidence, written for the reviewer. For roster rows it also states whether to approve.</description>
+    <inlineHelpText>Why Claude suggests this. Check the evidence before accepting.</inlineHelpText>
+    <label>AI Suggestion</label>
+    <length>5000</length>
+    <type>LongTextArea</type>
+    <visibleLines>4</visibleLines>
+</CustomField>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Max_Items_Per_Request__c</fullName>
+    <precision>3</precision>
+    <required>false</required>
+    <scale>0</scale>
+    <description>How many rows and follow-ups go into one Claude request. Larger requests are cheaper per item but slower.</description>
+    <externalId>false</externalId>
+    <fieldManageability>DeveloperControlled</fieldManageability>
+    <inlineHelpText>Items per Claude request, for example 10.</inlineHelpText>
+    <label>Max Items Per Request</label>
+    <type>Number</type>
+</CustomField>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Require_Two_Person_Rule_Approval__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>When checked, a Matching Rule must be activated by someone other than its author.</description>
+    <externalId>false</externalId>
+    <fieldManageability>DeveloperControlled</fieldManageability>
+    <inlineHelpText>Require a second person to activate matching rules.</inlineHelpText>
+    <label>Require Two-Person Rule Approval</label>
+    <type>Checkbox</type>
+</CustomField>

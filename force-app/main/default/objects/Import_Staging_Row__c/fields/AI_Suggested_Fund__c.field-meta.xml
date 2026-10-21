@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>AI_Suggested_Fund__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Fund Claude suggests for a row whose fund name was unresolved or ambiguous. Lookups to Product2 must be optional and clear on delete.</description>
+    <inlineHelpText>The fund Claude thinks this row refers to.</inlineHelpText>
+    <label>AI Suggested Fund</label>
+    <referenceTo>Product2</referenceTo>
+    <relationshipLabel>AI Suggested Staging Rows</relationshipLabel>
+    <relationshipName>AI_Suggested_Staging_Rows</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

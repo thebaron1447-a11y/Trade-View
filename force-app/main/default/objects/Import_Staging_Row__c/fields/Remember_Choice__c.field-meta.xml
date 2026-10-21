@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Remember_Choice__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>When checked on Accept, the file's firm or fund spelling is saved as a new alias so future files match automatically. Only applies when the name was unresolved (not ambiguous), because an ambiguous spelling must keep going to review.</description>
+    <inlineHelpText>Check to teach the system this spelling for future files.</inlineHelpText>
+    <label>Remember Choice</label>
+    <type>Checkbox</type>
+</CustomField>

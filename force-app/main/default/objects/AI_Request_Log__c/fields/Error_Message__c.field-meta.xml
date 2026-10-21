@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Error_Message__c</fullName>
+    <description>Why the call failed or the response was rejected, including each validation problem found.</description>
+    <inlineHelpText>What went wrong, if anything.</inlineHelpText>
+    <label>Error Message</label>
+    <length>5000</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

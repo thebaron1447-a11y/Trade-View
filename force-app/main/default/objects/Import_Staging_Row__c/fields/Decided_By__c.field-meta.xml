@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Decided_By__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The user who set Reviewer Decision. Set by the system for audit.</description>
+    <inlineHelpText>Who made the review decision.</inlineHelpText>
+    <label>Decided By</label>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>Decided Staging Rows</relationshipLabel>
+    <relationshipName>Decided_Staging_Rows</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>
