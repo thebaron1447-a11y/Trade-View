@@ -62,6 +62,7 @@ re-checking.)
 |---|---|
 | Org | Developer Edition, alias `tradeDemo`, user `gregory.baron.f2cac6700e9c@agentforce.com` |
 | Project | `C:\dev\trade-import-demo` (SFDX, metadata API v66.0) |
+| GitHub | https://github.com/thebaron1447-a11y/Trade-View (public), branch `main`, author email `275084731+thebaron1447-a11y@users.noreply.github.com`. Update with `git add -A`, `git commit -m "..."`, `git push` from PowerShell |
 | Shell | PowerShell; Python venv for the push job at `pushjob\.venv` |
 | Salesforce CLI | 2.132 (an update is available; not required) |
 | Claude, Enterprise tier | Models API through the Einstein Trust Layer, model `sfdc_ai__DefaultBedrockAnthropicClaude5Sonnet` |
