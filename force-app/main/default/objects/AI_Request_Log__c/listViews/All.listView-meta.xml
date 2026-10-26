@@ -4,9 +4,13 @@
     <columns>NAME</columns>
     <columns>Purpose__c</columns>
     <columns>Status__c</columns>
+    <columns>Provider__c</columns>
     <columns>Item_Count__c</columns>
     <columns>Duration_Ms__c</columns>
     <columns>Model_Name__c</columns>
+    <columns>Input_Tokens__c</columns>
+    <columns>Output_Tokens__c</columns>
+    <columns>Cached_Input_Tokens__c</columns>
     <columns>CREATED_DATE</columns>
     <filterScope>Everything</filterScope>
     <label>All</label>

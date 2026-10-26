@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Provider__c</fullName>
+    <required>false</required>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Models API</fullName>
+                <default>true</default>
+                <label>Models API</label>
+            </value>
+            <value>
+                <fullName>Anthropic API</fullName>
+                <default>false</default>
+                <label>Anthropic API</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+    <description>How Claude is reached. Models API (default, Enterprise tier): through the Einstein Trust Layer, needs Einstein generative AI. Anthropic API (Standard tier): directly to Anthropic with the firm's own API key, which must be stored in the Anthropic API external credential. Changes are recorded in Setup Audit Trail and on every AI Request Log.</description>
+    <externalId>false</externalId>
+    <fieldManageability>DeveloperControlled</fieldManageability>
+    <inlineHelpText>Models API keeps requests inside the Einstein Trust Layer. Choose Anthropic API only if your compliance team has approved sending data directly to Anthropic.</inlineHelpText>
+    <label>Provider</label>
+    <type>Picklist</type>
+</CustomField>

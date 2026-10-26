@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Anthropic_Model__c</fullName>
+    <length>255</length>
+    <required>false</required>
+    <description>Anthropic model ID, used when Provider is Anthropic API, for example claude-sonnet-5-5. Changing models needs no code change.</description>
+    <externalId>false</externalId>
+    <fieldManageability>DeveloperControlled</fieldManageability>
+    <inlineHelpText>The Anthropic model ID to use with the Anthropic API.</inlineHelpText>
+    <label>Anthropic Model</label>
+    <type>Text</type>
+</CustomField>

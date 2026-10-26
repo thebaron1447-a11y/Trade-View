@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>On_Hold_By__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The reviewer who put the row on hold. Set by the system.</description>
+    <inlineHelpText>Who put this row on hold.</inlineHelpText>
+    <label>On Hold By</label>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>Held Staging Rows</relationshipLabel>
+    <relationshipName>Held_Staging_Rows</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

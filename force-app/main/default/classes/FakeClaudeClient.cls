@@ -6,14 +6,17 @@ public class FakeClaudeClient implements ClaudeClient {
     /** Replies are used in order; the last one repeats. */
     public List<Object> replies = new List<Object>();
 
-    public String complete(String modelName, String prompt) {
+    public ClaudeService.Completion complete(String modelName, String prompt) {
         models.add(modelName);
         prompts.add(prompt);
         Object next = replies.isEmpty() ? null : (replies.size() > 1 ? replies.remove(0) : replies[0]);
         if (next instanceof Exception) {
             throw (Exception) next;
         }
-        return (String) next;
+        ClaudeService.Completion c = new ClaudeService.Completion((String) next);
+        c.inputTokens = prompt == null ? 0 : prompt.length() / 4;
+        c.outputTokens = next == null ? 0 : ((String) next).length() / 4;
+        return c;
     }
 
     /** Turns Claude on with test settings and routes every call to a new fake. */

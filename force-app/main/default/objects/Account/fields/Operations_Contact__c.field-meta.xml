@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Operations_Contact__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The person at this dealer firm who answers rep code and trade questions. Trade Review sends every follow-up email for the firm to this contact, combining its on-hold rows and code reviews in one message.</description>
+    <inlineHelpText>Choose who at this firm answers trade and rep code questions. Follow-up emails from Trade Review go to this person.</inlineHelpText>
+    <label>Operations Contact</label>
+    <referenceTo>Contact</referenceTo>
+    <relationshipLabel>Operations Contact For</relationshipLabel>
+    <relationshipName>Operations_Contact_For</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

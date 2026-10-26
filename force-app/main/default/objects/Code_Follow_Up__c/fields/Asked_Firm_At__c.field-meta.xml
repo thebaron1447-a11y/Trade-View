@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Asked_Firm_At__c</fullName>
+    <description>When this code's question was last sent to the firm's Operations Contact from Trade Review. Drives the 'Asked on' label and the reminder after three days without an answer.</description>
+    <inlineHelpText>When the dealer was last asked about this code.</inlineHelpText>
+    <label>Asked Firm At</label>
+    <required>false</required>
+    <type>DateTime</type>
+</CustomField>

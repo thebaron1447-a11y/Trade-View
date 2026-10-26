@@ -34,12 +34,27 @@ private class ClaudeSuggestionTest {
         );
     }
 
+    /** One answer in Claude's format: the field's value with its own confidence and reason, plus the summary. */
     private static String entry(String item, String field, String value, String confidence, String explanation) {
+        return System.JSON.serialize(answer(item, field, value, confidence, explanation));
+    }
+
+    private static Map<String, Object> answer(String item, String field, String value, String confidence, String explanation) {
         Map<String, Object> e = new Map<String, Object>{ 'item' => item, 'confidence' => confidence, 'explanation' => explanation };
         if (field != null) {
-            e.put(field, value);
+            e.put(
+                'fields',
+                new List<Object>{ new Map<String, Object>{ 'field' => field, 'value' => value, 'confidence' => confidence, 'reason' => explanation } }
+            );
         }
-        return System.JSON.serialize(e);
+        return e;
+    }
+
+    private static Map<String, Object> withExtras(Map<String, Object> e, String headline, String action, String homework) {
+        e.put('headline', headline);
+        e.put('action', action);
+        e.put('homework', homework);
+        return e;
     }
 
     @IsTest
@@ -55,10 +70,24 @@ private class ClaudeSuggestionTest {
         Assert.areEqual(new Set<String>{ 'R1', 'R2', 'R3', 'U1' }, req.items.keySet(), 'three rows and one follow-up');
         fake.replies.add(
             '```json\n{"suggestions": [' +
-                entry('R1', 'firm', keyOf(req, w.kesInc.Id), 'High', 'Ryan Chen works at the Calgary branch of Kestrel Capital Inc. and holds its code 1001.') + ',' +
+                System.JSON.serialize(
+                    withExtras(
+                        answer('R1', 'firm', keyOf(req, w.kesInc.Id), 'High', 'Ryan Chen works at the Calgary branch of Kestrel Capital Inc. and holds its code 1001.'),
+                        'Kestrel Capital (' + keyOf(req, w.kesInc.Id) + ') · Inc. or Ltd.?',
+                        'accept',
+                        null
+                    )
+                ) + ',' +
                 entry('R2', 'firm', keyOf(req, w.kesLtd.Id), 'Medium', 'Megan Chen holds code 1001 at ' + keyOf(req, w.kesLtd.Id) + '.') + ',' +
                 entry('R3', 'fund', null, 'Low', '"ETF Wealth World Fund A" could be the Wealth World ETF (' + keyOf(req, w.wwEtf.Id) + ') or Series A.') + ',' +
-                entry('U1', 'advisor', null, 'Low', 'U1: Hannah Pierce is not in Salesforce yet; ask Barder for her code assignment.') +
+                System.JSON.serialize(
+                    withExtras(
+                        answer('U1', 'advisor', null, 'Low', 'U1: Hannah Pierce is not in Salesforce yet; ask Barder for her code assignment.'),
+                        null,
+                        'hold',
+                        'Please confirm who holds code 3390 at Oakville and from what date.'
+                    )
+                ) +
                 ']}\n```'
         );
 
@@ -83,6 +112,20 @@ private class ClaudeSuggestionTest {
         Assert.areEqual('High', r1.AI_Confidence__c, 'row 1 confidence');
         Assert.isTrue(r1.AI_Suggestion__c.contains('Calgary'), 'row 1 explanation');
         Assert.areEqual('Needs Review', r1.Match_Status__c, 'a suggestion never matches a row by itself');
+        Import_Staging_Row__c r1Extras = [
+            SELECT AI_Headline__c, AI_Recommended_Action__c, AI_Homework__c, AI_Field_Suggestions__c
+            FROM Import_Staging_Row__c
+            WHERE Id = :r1.Id
+        ];
+        Assert.areEqual('Kestrel Capital · Inc. or Ltd.?', r1Extras.AI_Headline__c, 'headline stored without the key');
+        Assert.areEqual('Accept', r1Extras.AI_Recommended_Action__c, 'recommended action');
+        Assert.isNull(r1Extras.AI_Homework__c, 'no homework');
+        List<Object> table = (List<Object>) System.JSON.deserializeUntyped(r1Extras.AI_Field_Suggestions__c);
+        Map<String, Object> firmLine = (Map<String, Object>) table[0];
+        Assert.areEqual('Firm', firmLine.get('field'), 'field label');
+        Assert.areEqual('Kestrel Capital Inc.', firmLine.get('value'), 'chosen firm by name');
+        Assert.areEqual('High', firmLine.get('confidence'), 'field confidence');
+        Assert.isTrue(String.valueOf(firmLine.get('reason')).contains('Calgary'), 'field reason');
         Import_Staging_Row__c r2 = TradeTestWorld.row(batch.Id, 2);
         Assert.areEqual(w.kesLtd.Id, r2.AI_Suggested_Firm__c, 'row 2 firm');
         Assert.areEqual('Megan Chen holds code 1001 at Kestrel Capital Ltd..', r2.AI_Suggestion__c, 'a key Claude used is replaced by its name');
@@ -94,6 +137,9 @@ private class ClaudeSuggestionTest {
         Code_Follow_Up__c fu = [SELECT AI_Status__c, AI_Confidence__c, Suggested_Resolution__c, AI_Suggested_Advisor__c, AI_Request__c FROM Code_Follow_Up__c];
         Assert.areEqual('Suggested', fu.AI_Status__c, 'follow-up suggested');
         Assert.isTrue(fu.Suggested_Resolution__c.startsWith('the 3390 follow-up: Hannah Pierce'), 'item keys become names too: ' + fu.Suggested_Resolution__c);
+        Code_Follow_Up__c fuExtras = [SELECT AI_Homework__c, AI_Field_Suggestions__c FROM Code_Follow_Up__c WHERE Id = :fu.Id];
+        Assert.areEqual('Please confirm who holds code 3390 at Oakville and from what date.', fuExtras.AI_Homework__c, 'what to ask the dealer');
+        Assert.isTrue(fuExtras.AI_Field_Suggestions__c.contains('"value":null'), 'advisor left blank: ' + fuExtras.AI_Field_Suggestions__c);
 
         AI_Request_Log__c log = [SELECT Status__c, Purpose__c, Item_Count__c, Model_Name__c, Prompt__c, Response__c, Error_Message__c, Import_Batch__c FROM AI_Request_Log__c];
         Assert.areEqual('Success', log.Status__c, 'log status');
@@ -253,8 +299,16 @@ private class ClaudeSuggestionTest {
         Assert.isTrue(req.items.get(rosterItem).asks.contains('advisor'), 'asked to choose the advisor');
         Assert.isTrue(req.items.get(rosterItem).allowed.get('advisor').contains(keyOf(req, w.julia.Id)), 'Julia is a candidate');
         fake.replies.add(
-            '{"suggestions": [{"item": "' + rosterItem + '", "advisor": "' + keyOf(req, w.julia.Id) +
-            '", "recommendation": "approve", "confidence": "Medium", "explanation": "Julia Morales is the only Morales with Barder codes."}]}'
+            '{"suggestions": [' +
+            System.JSON.serialize(
+                withExtras(
+                    answer(rosterItem, 'advisor', keyOf(req, w.julia.Id), 'Medium', 'Julia Morales is the only Morales with Barder codes.'),
+                    'J. Morales · new code 5555',
+                    'accept',
+                    null
+                )
+            ) +
+            ']}'
         );
         ClaudeSuggestionJob.run(null);
 
@@ -263,7 +317,7 @@ private class ClaudeSuggestionTest {
         Assert.isTrue(prompt.contains('"effectiveDate":"2026-09-20"'), 'the roster date for code 3390 is shown');
         Import_Staging_Row__c suggested = TradeTestWorld.row(roster.Id, 2);
         Assert.areEqual(w.julia.Id, suggested.AI_Suggested_Advisor__c, 'advisor suggested');
-        Assert.isTrue(suggested.AI_Suggestion__c.startsWith('Recommendation: approve.'), 'recommendation shown: ' + suggested.AI_Suggestion__c);
+        Assert.areEqual('Accept', [SELECT AI_Recommended_Action__c FROM Import_Staging_Row__c WHERE Id = :suggested.Id].AI_Recommended_Action__c, 'Claude recommends approving');
 
         update new Import_Staging_Row__c(Id = suggested.Id, Reviewer_Decision__c = 'Accept');
         Rep_Code_Assignment__c a = [SELECT Advisor__c FROM Rep_Code_Assignment__c WHERE Rep_Code__r.Name = '5555'];

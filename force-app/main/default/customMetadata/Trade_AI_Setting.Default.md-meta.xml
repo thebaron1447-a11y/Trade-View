@@ -3,6 +3,10 @@
     <label>Default</label>
     <protected>false</protected>
     <values>
+        <field>Anthropic_Model__c</field>
+        <value xsi:type="xsd:string">claude-sonnet-5-5</value>
+    </values>
+    <values>
         <field>Enabled__c</field>
         <value xsi:type="xsd:boolean">true</value>
     </values>
@@ -13,6 +17,10 @@
     <values>
         <field>Model_Name__c</field>
         <value xsi:type="xsd:string">sfdc_ai__DefaultBedrockAnthropicClaude5Sonnet</value>
+    </values>
+    <values>
+        <field>Provider__c</field>
+        <value xsi:type="xsd:string">Models API</value>
     </values>
     <values>
         <field>Require_Two_Person_Rule_Approval__c</field>

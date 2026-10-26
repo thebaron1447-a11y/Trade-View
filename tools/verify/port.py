@@ -678,13 +678,27 @@ def parse_object(text):
 
 
 CONF = {"high": "High", "medium": "Medium", "low": "Low"}
-RECS = {"approve", "reject", "unsure"}
+ACTIONS = {"accept", "reject", "hold"}
 KEY_ASKS = ["firm", "fund", "advisor"]
 MAX_EXPLANATION = 2000
+MAX_HEADLINE = 100
+MAX_REASON = 500
+MAX_HOMEWORK = 1000
+
+
+def _text(entry, name, limit, issues):
+    """An optional text answer: None when absent or blank, an issue when not text."""
+    v = entry.get(name)
+    if v is None:
+        return None
+    if not isinstance(v, str):
+        issues.append(f"{name} must be text.")
+        return None
+    return None if is_blank(v) else apex_abbreviate(v.strip(), limit)
 
 
 def validate_suggestions(root, items):
-    """ClaudeSuggestionService.validate. items: {key: {"asks": set, "allowed": {ask: set}}}.
+    """ClaudeSuggestionService.validate (answer format 2). items: {key: {"asks": set, "allowed": {ask: set}}}.
     Returns (usable, {item: suggestion dict}, invalid set, problems list)."""
     by_item, invalid, problems = {}, set(), []
     lst = None if root is None else root.get("suggestions")
@@ -701,25 +715,57 @@ def validate_suggestions(root, items):
         if item in by_item or item in invalid:
             problems.append(f"Item {item} appears more than once; only the first entry is used.")
             continue
-        it, issues, s = items[item], [], dict(item=item, firm=None, fund=None, advisor=None,
-                                               recommendation=None, confidence=None, explanation=None)
-        for what in KEY_ASKS:
-            value = entry.get(what)
-            if value is None or what not in it["asks"]:
+        it, issues = items[item], []
+        s = dict(item=item, firm=None, fund=None, advisor=None, fields=[], action=None, homework=None,
+                 headline=None, confidence=None, explanation=None)
+        fields = entry.get("fields")
+        if fields is not None and not isinstance(fields, list):
+            issues.append("fields must be a list.")
+            fields = []
+        seen = set()
+        for n, f in enumerate(fields or [], start=1):
+            if not isinstance(f, dict):
+                issues.append(f"fields entry {n} is not an object.")
                 continue
-            if not isinstance(value, str):
+            what = f.get("field")
+            if not isinstance(what, str) or what not in KEY_ASKS or what not in it["asks"]:
+                continue  # fields that were not asked for are ignored, never applied
+            if what in seen:
+                issues.append(f"{what} appears more than once in fields.")
+                continue
+            seen.add(what)
+            value = f.get("value")
+            if value is not None and not isinstance(value, str):
                 issues.append(f"{what} must be a key or null.")
-            elif value not in it["allowed"][what]:
+                continue
+            if value is not None and value not in it["allowed"][what]:
                 issues.append(f"{what} \"{value}\" is not one of the candidates sent.")
+                continue
+            conf = f.get("confidence")
+            fc = CONF.get(conf.strip().lower()) if isinstance(conf, str) else None
+            if fc is None:
+                issues.append(f"{what} confidence must be High, Medium or Low.")
+                continue
+            reason = f.get("reason")
+            if not isinstance(reason, str) or is_blank(reason):
+                issues.append(f"{what} reason is required.")
+                continue
+            s[what] = value
+            s["fields"].append(dict(field=what, value=value, confidence=fc, reason=apex_abbreviate(reason.strip(), MAX_REASON)))
+        s["fields"].sort(key=lambda x: KEY_ASKS.index(x["field"]))
+        act = entry.get("action")
+        if act is not None and "action" in it["asks"]:
+            a = act.strip().lower() if isinstance(act, str) else None
+            if a is None or a not in ACTIONS:
+                issues.append("action must be accept, reject or hold.")
             else:
-                s[what] = value
-        rec = entry.get("recommendation")
-        if rec is not None and "recommendation" in it["asks"]:
-            r = rec.strip().lower() if isinstance(rec, str) else None
-            if r is None or r not in RECS:
-                issues.append("recommendation must be approve, reject or unsure.")
-            else:
-                s["recommendation"] = r
+                missing = [w for w in KEY_ASKS if w in it["asks"] and s[w] is None]
+                if a == "accept" and missing:
+                    issues.append(f"action accept needs a {' and a '.join(missing)}.")
+                else:
+                    s["action"] = a
+        s["homework"] = _text(entry, "homework", MAX_HOMEWORK, issues)
+        s["headline"] = _text(entry, "headline", MAX_HEADLINE, issues)
         conf = entry.get("confidence")
         s["confidence"] = CONF.get(conf.strip().lower()) if isinstance(conf, str) else None
         if s["confidence"] is None:

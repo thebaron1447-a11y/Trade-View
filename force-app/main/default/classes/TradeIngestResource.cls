@@ -1,5 +1,6 @@
 /**
- * Inbound endpoint for the data lake push job.
+ * Inbound endpoint for the data lake push job. Validates the request and hands the file to FileIntakeService,
+ * the same intake the review app's upload uses.
  *
  * POST /services/apexrest/trade-import/v1/files
  * Body (JSON): { "sourceFirm": "BARDER", "fileName": "trades.csv", "content": "<base64>", "fileHash": "<sha256 hex, optional>" }
@@ -17,7 +18,6 @@ global with sharing class TradeIngestResource {
     // 1 MB of CSV is roughly 5,000+ trade rows, which matches ImportBatchProcessor.MAX_ROWS.
     @TestVisible
     private static Integer maxFileBytes = 1024 * 1024;
-    private static final Pattern FIRM_CODE = Pattern.compile('^[A-Za-z0-9_-]{1,80}$');
 
     @HttpPost
     global static void ingest() {
@@ -26,44 +26,20 @@ global with sharing class TradeIngestResource {
         Savepoint sp = Database.setSavepoint();
         try {
             Map<String, Object> body = parseBody(RestContext.request.requestBody);
-            String sourceFirm = requiredString(body, 'sourceFirm', 80).toUpperCase();
-            if (!FIRM_CODE.matcher(sourceFirm).matches()) {
-                throw new RequestException('sourceFirm may contain only letters, digits, hyphens and underscores.');
-            }
-            String fileName = requiredString(body, 'fileName', 255);
+            String sourceFirm = requiredString(body, 'sourceFirm', 80);
+            String fileName = requiredString(body, 'fileName', FileIntakeService.MAX_FILE_NAME);
             Blob file = decode(requiredString(body, 'content', null));
-            String hash = EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', file));
             Object clientHash = body.get('fileHash');
-            if (clientHash != null && !hash.equalsIgnoreCase(String.valueOf(clientHash))) {
-                throw new RequestException('fileHash does not match the file contents. The file may have been corrupted in transit.');
-            }
-
-            Import_Batch__c existing = findByHash(hash);
-            if (existing != null) {
-                respond(res, 200, existing, true, 'This file was already received.');
+            FileIntakeService.Receipt r = FileIntakeService.receive(sourceFirm, fileName, file, clientHash == null ? null : String.valueOf(clientHash));
+            if (r.hidden) {
+                error(res, 409, r.message);
                 return;
             }
-            Import_Batch__c batch = new Import_Batch__c(
-                Source_Firm__c = sourceFirm,
-                Source_File_Name__c = fileName,
-                File_Hash__c = hash,
-                Status__c = ImportBatchProcessor.STATUS_RECEIVED
-            );
-            try {
-                insert as user batch;
-            } catch (DmlException e) {
-                // Another request inserted the same file between our check and our insert.
-                if (e.getDmlType(0) == StatusCode.DUPLICATE_VALUE) {
-                    Database.rollback(sp);
-                    duplicateResponse(res, findByHash(hash));
-                    return;
-                }
-                throw e;
-            }
-            insert as user new ContentVersion(Title = fileName, PathOnClient = fileName, VersionData = file, FirstPublishLocationId = batch.Id);
-            System.enqueueJob(new ImportBatchProcessor(batch.Id));
-            respond(res, 201, batch, false, 'File received and queued for processing.');
+            respond(res, r.duplicate ? 200 : 201, r);
         } catch (RequestException e) {
+            Database.rollback(sp);
+            error(res, 400, e.getMessage());
+        } catch (FileIntakeService.IntakeException e) {
             Database.rollback(sp);
             error(res, 400, e.getMessage());
         } catch (Exception e) {
@@ -117,35 +93,11 @@ global with sharing class TradeIngestResource {
         return file;
     }
 
-    private static Import_Batch__c findByHash(String hash) {
-        List<Import_Batch__c> found = [
-            SELECT Id, Status__c
-            FROM Import_Batch__c
-            WHERE File_Hash__c = :hash
-            WITH USER_MODE
-            LIMIT 1
-        ];
-        return found.isEmpty() ? null : found[0];
-    }
-
-    private static void duplicateResponse(RestResponse res, Import_Batch__c existing) {
-        if (existing == null) {
-            error(res, 409, 'This file was already received, but the batch is not visible to this user.');
-        } else {
-            respond(res, 200, existing, true, 'This file was already received.');
-        }
-    }
-
-    private static void respond(RestResponse res, Integer code, Import_Batch__c batch, Boolean duplicate, String message) {
+    private static void respond(RestResponse res, Integer code, FileIntakeService.Receipt r) {
         res.statusCode = code;
         res.responseBody = Blob.valueOf(
             System.JSON.serialize(
-                new Map<String, Object>{
-                    'batchId' => batch.Id,
-                    'status' => batch.Status__c,
-                    'duplicate' => duplicate,
-                    'message' => message
-                }
+                new Map<String, Object>{ 'batchId' => r.batchId, 'status' => r.status, 'duplicate' => r.duplicate, 'message' => r.message }
             )
         );
     }

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>AI_Homework__c</fullName>
+    <description>When Claude recommends Hold, what needs to be found out from the dealer, worded as a question. Pre-fills the Put on hold dialog and the firm follow-up email.</description>
+    <inlineHelpText>What Claude suggests asking the dealer before this row can be decided.</inlineHelpText>
+    <label>AI Homework</label>
+    <length>1000</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

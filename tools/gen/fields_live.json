@@ -1,0 +1,679 @@
+{
+ "Mapping_Profile__c": [
+  {
+   "name": "Feed Type",
+   "api": "Feed_Type__c",
+   "type": "Picklist (values: Trade Activity, Advisor Code Roster), default Trade Activity",
+   "desc": "Kind of file this profile reads. Trade Activity files contain trade rows and AUM rows mixed together. Advisor Code Roster files list dealer codes and the advisors who hold them, and feed code setup rather than trades. Blank is treated as Trade Activity.",
+   "help": "Choose Advisor Code Roster for files that list advisor codes; otherwise Trade Activity."
+  },
+  {
+   "name": "AUM Indicator Values",
+   "api": "AUM_Indicator_Values__c",
+   "type": "Text(255)",
+   "desc": "Comma-separated values that mark a row as AUM rather than a trade, for example AUM, BAL, POSITION. Compared case-insensitively against the column mapped to rowType, or the transactionType column when no rowType column exists. Blank means the file has no AUM rows.",
+   "help": "List the values this firm uses to mark AUM rows, separated by commas."
+  }
+ ],
+ "Import_Staging_Row__c": [
+  {
+   "name": "Row Type",
+   "api": "Row_Type__c",
+   "type": "Picklist (values: Trade, AUM, Code Roster)",
+   "desc": "Kind of row after normalization. Drives which validations apply, which matching rules run and what the row becomes when loaded (Trade, AUM Snapshot or Rep Code Assignment).",
+   "help": "Shows whether this row is a trade, an AUM balance or an advisor code entry."
+  },
+  {
+   "name": "Source Branch Name",
+   "api": "Source_Branch_Name__c",
+   "type": "Text(255)",
+   "desc": "Branch name as reported in the file. Used to place new advisors from code roster files and as a signal when detecting code reassignments.",
+   "help": "The branch name reported in the file, if any."
+  },
+  {
+   "name": "Match Status",
+   "api": "Match_Status__c",
+   "type": "Picklist (values: Pending, Matched, Needs Review, Held, Invalid, Rejected), default Pending",
+   "desc": "Outcome of matching. Pending: not yet matched (or released for re-matching). Matched: firm, code and advisor credit resolved. Needs Review: ambiguous; Claude suggests and a reviewer decides. Held: waiting on a Code Follow-Up. Invalid: the row has validation errors and is never matched. Rejected: a reviewer decided the row must not be loaded.",
+   "help": "Where this row is in matching."
+  },
+  {
+   "name": "Matched Firm",
+   "api": "Matched_Firm__c",
+   "type": "Lookup(Account), optional, clear value if deleted",
+   "desc": "Firm Account resolved from the row's firm name through the Firm Alias table (exact key, or a close fuzzy match accepted automatically). Blank when the firm is unresolved or ambiguous.",
+   "help": "The firm this row was matched to."
+  },
+  {
+   "name": "Matched Rep Code",
+   "api": "Matched_Rep_Code__c",
+   "type": "Lookup(Rep Code), optional, clear value if deleted",
+   "desc": "Rep Code record found for the row's code at the matched firm. Blank for codes not yet set up in Salesforce (those rows are held on a Code Follow-Up).",
+   "help": "The dealer code record this row belongs to."
+  },
+  {
+   "name": "Matched Fund",
+   "api": "Matched_Fund__c",
+   "type": "Lookup(Product2), optional, clear value if deleted",
+   "desc": "Fund resolved from the row's fund name through the Fund Alias table. Required for Trade rows; optional for AUM rows reported as a total per code. Lookups to Product2 must be optional and clear on delete.",
+   "help": "The fund this row was matched to."
+  },
+  {
+   "name": "Credited Advisor",
+   "api": "Credited_Advisor__c",
+   "type": "Lookup(Contact), optional, clear value if deleted",
+   "desc": "Set by matching when the whole row is credited to one advisor: a solo code, or a team code where the row names exactly one active member (confirmed rule: 100% to that person). Blank means the row splits by the team's percentages.",
+   "help": "The advisor who receives full credit for this row, when it is not split across a team."
+  },
+  {
+   "name": "Code Follow-Up",
+   "api": "Code_Follow_Up__c",
+   "type": "Lookup(Code Follow-Up), optional, clear value if deleted",
+   "desc": "The follow-up holding this row because its code is unknown, ended, dormant, suspected reassigned or incompletely split. Held rows are never loaded or orphaned; they are re-matched automatically when the follow-up is resolved.",
+   "help": "The follow-up item this row is waiting on, if any."
+  },
+  {
+   "name": "Match Method",
+   "api": "Match_Method__c",
+   "type": "Picklist (values: Exact, Fuzzy, Claude, Reviewer)",
+   "desc": "How the row was resolved: Exact (alias key and code lookup), Fuzzy (a close name match accepted automatically), Claude (a reviewer accepted Claude's suggested firm or fund) or Reviewer (a reviewer chose the firm or fund, or approved a roster row).",
+   "help": "How this row was matched."
+  },
+  {
+   "name": "Match Flags",
+   "api": "Match_Flags__c",
+   "type": "Text(255)",
+   "desc": "Semicolon-separated machine-readable flags explaining the outcome, for example FUND_UNRESOLVED;DORMANT_CODE_REACTIVATED. Used for filtering, reporting and the review screen.",
+   "help": "Short codes explaining why this row was matched, held or sent to review."
+  },
+  {
+   "name": "Match Notes",
+   "api": "Match_Notes__c",
+   "type": "Long Text Area(5000)",
+   "desc": "Plain-language explanation of the matching outcome, one finding per line, written for reviewers.",
+   "help": "What matching found for this row, in plain language."
+  },
+  {
+   "name": "Match Candidates",
+   "api": "Match_Candidates__c",
+   "type": "Long Text Area(32768)",
+   "desc": "JSON list of candidate firms or funds with similarity scores, kept when a name could not be resolved automatically. Input to review and to Claude in the next drop.",
+   "help": "Possible matches considered for this row. System-maintained."
+  }
+ ],
+ "Import_Batch__c": [
+  {
+   "name": "Matched Row Count",
+   "api": "Matched_Row_Count__c",
+   "type": "Roll-Up Summary (COUNT of Import Staging Row, filter: Match Status equals Matched)",
+   "desc": "Number of staging rows matched deterministically.",
+   "help": "How many rows were matched automatically."
+  },
+  {
+   "name": "Review Row Count",
+   "api": "Review_Row_Count__c",
+   "type": "Roll-Up Summary (COUNT of Import Staging Row, filter: Match Status equals Needs Review)",
+   "desc": "Number of staging rows needing a reviewer decision.",
+   "help": "How many rows need a review decision."
+  },
+  {
+   "name": "Held Row Count",
+   "api": "Held_Row_Count__c",
+   "type": "Roll-Up Summary (COUNT of Import Staging Row, filter: Match Status equals Held)",
+   "desc": "Number of staging rows held on Code Follow-Ups.",
+   "help": "How many rows are on hold waiting for code follow-up."
+  }
+ ],
+ "Code_Follow_Up__c": [
+  {
+   "name": "Rep Code Value",
+   "api": "Rep_Code_Value__c",
+   "type": "Text(40)",
+   "desc": "The code exactly as normalized from the file. Needed because an unknown code has no Rep Code record to look up.",
+   "help": "The dealer code that needs follow-up."
+  },
+  {
+   "name": "Rep Code",
+   "api": "Rep_Code__c",
+   "type": "Lookup(Rep Code), optional, clear value if deleted",
+   "desc": "The existing Rep Code record when the code is known but ended, dormant, suspected reassigned or incompletely split. Blank for codes never set up.",
+   "help": "The code record, if the code already exists in Salesforce."
+  },
+  {
+   "name": "Firm",
+   "api": "Firm__c",
+   "type": "Lookup(Account), optional, clear value if deleted",
+   "desc": "The firm the code belongs to, from the row's resolved firm.",
+   "help": "The firm that issued this code."
+  },
+  {
+   "name": "Reason",
+   "api": "Reason__c",
+   "type": "Picklist (values: Unknown Code, Code Ended, Code Dormant, Reassignment Suspected, Allocation Incomplete), required",
+   "desc": "Why the rows are held. Unknown Code: no Rep Code exists. Code Ended: all assignments ended before the row date. Code Dormant: no confirmed activity within the dormancy threshold and no advisor name to confirm the holder. Reassignment Suspected: the advisor named does not match any current holder. Allocation Incomplete: a team split is needed but active shares do not total 100%.",
+   "help": "Why trades on this code are on hold."
+  },
+  {
+   "name": "Status",
+   "api": "Status__c",
+   "type": "Picklist (values: Open, In Progress, Resolved, Closed - No Action), required, default Open",
+   "desc": "Lifecycle of the follow-up. Moving to Resolved re-matches all held rows; Closed - No Action sends them to manual review instead. A resolved follow-up is reopened if new rows are held for the same reason.",
+   "help": "Set to In Progress while you chase the information, and Resolved once the code is set up."
+  },
+  {
+   "name": "Follow-Up Key",
+   "api": "Follow_Up_Key__c",
+   "type": "Text(255), Unique, External ID",
+   "desc": "Source firm, code and reason joined, for example NORTHGATE|5521|Code Dormant. Unique, so repeat files add rows to the existing follow-up instead of creating duplicates.",
+   "help": "System-generated. Do not edit."
+  },
+  {
+   "name": "Held Row Count",
+   "api": "Held_Row_Count__c",
+   "type": "Number(6,0)",
+   "desc": "Number of staging rows currently held by this follow-up. Maintained by Apex because rows link by lookup, which roll-up summaries cannot count.",
+   "help": "How many rows are waiting on this follow-up."
+  },
+  {
+   "name": "Held Amount",
+   "api": "Held_Amount__c",
+   "type": "Currency(18,2)",
+   "desc": "Total dollar value of held Trade rows (AUM balances excluded), maintained by Apex. Lets the team work the most valuable follow-ups first.",
+   "help": "Total value of trades waiting on this follow-up."
+  },
+  {
+   "name": "Last Seen Date",
+   "api": "Last_Seen_Date__c",
+   "type": "Date",
+   "desc": "Most recent row date seen on this code. Shows whether a dealer is still actively using the code.",
+   "help": "The latest date this code appeared in a file."
+  },
+  {
+   "name": "Suggested Resolution",
+   "api": "Suggested_Resolution__c",
+   "type": "Long Text Area(5000)",
+   "desc": "Claude's explanation of who the code most likely belongs to and what to check, based on the held rows, the firm's advisors and their codes, and any roster rows for the code. A suggestion only: a person must confirm it.",
+   "help": "Claude's best guess at who this code belongs to. Verify before acting on it."
+  },
+  {
+   "name": "Resolution Notes",
+   "api": "Resolution_Notes__c",
+   "type": "Long Text Area(5000)",
+   "desc": "What the person who worked the follow-up found and did, for audit.",
+   "help": "Record what you found and how you resolved it."
+  }
+ ],
+ "Import_Staging_Row__c@3B": [
+  {
+   "name": "AI Status",
+   "api": "AI_Status__c",
+   "type": "Picklist (values: Suggested, No Suggestion, Invalid, Failed)",
+   "desc": "State of Claude's suggestion for this row. Blank: not requested yet. Suggested: a valid suggestion is stored. No Suggestion: Claude returned nothing for the row. Invalid: Claude's answer failed validation and was discarded. Failed: the call itself failed. Clear it to request a new suggestion.",
+   "help": "Whether Claude has suggested an answer for this row."
+  },
+  {
+   "name": "AI Confidence",
+   "api": "AI_Confidence__c",
+   "type": "Picklist (values: High, Medium, Low)",
+   "desc": "Claude's stated confidence in its suggestion. Low means the evidence does not settle the question and a person should decide from scratch.",
+   "help": "How sure Claude is. Treat Low as no suggestion."
+  },
+  {
+   "name": "AI Suggestion",
+   "api": "AI_Suggestion__c",
+   "type": "Long Text Area(5000)",
+   "desc": "Claude's explanation of its suggestion, citing the evidence, written for the reviewer. For roster rows it also states whether to approve.",
+   "help": "Why Claude suggests this. Check the evidence before accepting."
+  },
+  {
+   "name": "AI Suggested Firm",
+   "api": "AI_Suggested_Firm__c",
+   "type": "Lookup(Account), optional, clear value if deleted",
+   "desc": "Firm Claude suggests for a row whose firm name was missing, unresolved or ambiguous. Always one of the candidates sent to Claude; anything else is rejected by validation.",
+   "help": "The firm Claude thinks this row belongs to."
+  },
+  {
+   "name": "AI Suggested Fund",
+   "api": "AI_Suggested_Fund__c",
+   "type": "Lookup(Product2), optional, clear value if deleted",
+   "desc": "Fund Claude suggests for a row whose fund name was unresolved or ambiguous. Lookups to Product2 must be optional and clear on delete.",
+   "help": "The fund Claude thinks this row refers to."
+  },
+  {
+   "name": "AI Suggested Advisor",
+   "api": "AI_Suggested_Advisor__c",
+   "type": "Lookup(Contact), optional, clear value if deleted",
+   "desc": "Advisor Claude suggests for a roster row whose advisor name matched more than one person.",
+   "help": "The advisor Claude thinks this row refers to."
+  },
+  {
+   "name": "AI Request",
+   "api": "AI_Request__c",
+   "type": "Lookup(AI Request Log), optional, clear value if deleted",
+   "desc": "The AI Request Log entry that produced this row's suggestion, so every suggestion can be traced to its exact prompt and response.",
+   "help": "The Claude request behind this suggestion."
+  },
+  {
+   "name": "Reviewer Decision",
+   "api": "Reviewer_Decision__c",
+   "type": "Picklist (values: Accept, Reject)",
+   "desc": "The reviewer's decision on a row in Needs Review. Accept: re-match the row using the Firm and Fund Overrides (filled from Claude's suggestion when left blank); on a roster row, apply it (create the advisor, code and assignment and resolve matching follow-ups). Reject: the row is not loaded. Recorded with who decided and when.",
+   "help": "Accept to apply the suggestion or your overrides, or Reject to exclude the row."
+  },
+  {
+   "name": "Firm Override",
+   "api": "Firm_Override__c",
+   "type": "Lookup(Account), optional, clear value if deleted",
+   "desc": "Firm chosen by a reviewer, or copied from Claude's suggestion when the reviewer accepts it. Matching uses it instead of the firm name in the file.",
+   "help": "Pick the correct firm if the file's firm name is wrong or ambiguous, then set Reviewer Decision to Accept."
+  },
+  {
+   "name": "Fund Override",
+   "api": "Fund_Override__c",
+   "type": "Lookup(Product2), optional, clear value if deleted",
+   "desc": "Fund chosen by a reviewer, or copied from Claude's suggestion when the reviewer accepts it. Matching uses it instead of the fund name in the file.",
+   "help": "Pick the correct fund if the file's fund name is wrong or ambiguous, then set Reviewer Decision to Accept."
+  },
+  {
+   "name": "Remember Choice",
+   "api": "Remember_Choice__c",
+   "type": "Checkbox (default unchecked)",
+   "desc": "When checked on Accept, the file's firm or fund spelling is saved as a new alias so future files match automatically. Only applies when the name was unresolved (not ambiguous), because an ambiguous spelling must keep going to review.",
+   "help": "Check to teach the system this spelling for future files."
+  },
+  {
+   "name": "Decided By",
+   "api": "Decided_By__c",
+   "type": "Lookup(User), optional, clear value if deleted",
+   "desc": "The user who set Reviewer Decision. Set by the system for audit.",
+   "help": "Who made the review decision."
+  },
+  {
+   "name": "Decided At",
+   "api": "Decided_At__c",
+   "type": "Date/Time",
+   "desc": "When Reviewer Decision was set. Set by the system for audit.",
+   "help": "When the review decision was made."
+  }
+ ],
+ "Code_Follow_Up__c@3B": [
+  {
+   "name": "AI Status",
+   "api": "AI_Status__c",
+   "type": "Picklist (values: Suggested, No Suggestion, Invalid, Failed)",
+   "desc": "State of Claude's suggestion for this follow-up. Blank: not requested yet. Suggested, No Suggestion, Invalid or Failed as on staging rows. Clear it to request a new suggestion.",
+   "help": "Whether Claude has suggested who this code belongs to."
+  },
+  {
+   "name": "AI Confidence",
+   "api": "AI_Confidence__c",
+   "type": "Picklist (values: High, Medium, Low)",
+   "desc": "Claude's stated confidence in its suggestion. Low means the evidence does not settle the question.",
+   "help": "How sure Claude is. Treat Low as no suggestion."
+  },
+  {
+   "name": "AI Suggested Advisor",
+   "api": "AI_Suggested_Advisor__c",
+   "type": "Lookup(Contact), optional, clear value if deleted",
+   "desc": "The existing advisor Claude believes now holds the code, when one of the firm's advisors fits the evidence. Blank when the likely holder is not in Salesforce yet.",
+   "help": "The advisor Claude thinks holds this code."
+  },
+  {
+   "name": "AI Request",
+   "api": "AI_Request__c",
+   "type": "Lookup(AI Request Log), optional, clear value if deleted",
+   "desc": "The AI Request Log entry that produced this suggestion.",
+   "help": "The Claude request behind this suggestion."
+  }
+ ],
+ "Import_Batch__c@3B": [
+  {
+   "name": "Header Fingerprint",
+   "api": "Header_Fingerprint__c",
+   "type": "Text(64), External ID (not unique)",
+   "desc": "Fingerprint of the file's header row, saved when no Active mapping matched. When a mapping profile with this fingerprint is set to Active, waiting batches are re-processed automatically.",
+   "help": "Identifies the file layout. System-maintained."
+  }
+ ],
+ "Mapping_Profile__c@3B": [
+  {
+   "name": "AI Rationale",
+   "api": "AI_Rationale__c",
+   "type": "Long Text Area(5000)",
+   "desc": "For profiles proposed by Claude: its explanation of each choice and its confidence, followed by the results of the same checks used when reading a file. Read this before setting the profile to Active.",
+   "help": "Why Claude proposed this mapping, and any problems found. Review before activating."
+  },
+  {
+   "name": "Proposed From Batch",
+   "api": "Proposed_From_Batch__c",
+   "type": "Lookup(Import Batch), optional, clear value if deleted",
+   "desc": "The import batch whose file Claude read to propose this profile.",
+   "help": "The file this mapping was proposed from."
+  }
+ ],
+ "AI_Request_Log__c@3B": [
+  {
+   "name": "Purpose",
+   "api": "Purpose__c",
+   "type": "Picklist (values: Row Suggestions, Mapping Proposal, Firm Follow-up), required",
+   "desc": "What the request was for: suggestions on review rows and follow-ups, a proposed mapping profile for an unknown file layout, or a follow-up email to a firm.",
+   "help": "What Claude was asked to do."
+  },
+  {
+   "name": "Status",
+   "api": "Status__c",
+   "type": "Picklist (values: Success, Invalid Response, Failed), required",
+   "desc": "Success: Claude answered and the answer passed validation. Invalid Response: Claude answered but the answer was not valid JSON or broke the rules (unknown keys, bad values) and nothing was applied. Failed: the call did not complete.",
+   "help": "Whether the request succeeded."
+  },
+  {
+   "name": "Model Name",
+   "api": "Model_Name__c",
+   "type": "Text(255)",
+   "desc": "Model used, from the Trade AI Setting custom metadata: a Models API name such as sfdc_ai__DefaultBedrockAnthropicClaude5Sonnet, or an Anthropic model ID such as claude-sonnet-5-5.",
+   "help": "The Claude model that answered."
+  },
+  {
+   "name": "Prompt",
+   "api": "Prompt__c",
+   "type": "Long Text Area(131072)",
+   "desc": "The exact prompt sent, for audit and prompt tuning.",
+   "help": "What was sent to Claude."
+  },
+  {
+   "name": "Response",
+   "api": "Response__c",
+   "type": "Long Text Area(131072)",
+   "desc": "Claude's raw response text, before validation.",
+   "help": "What Claude answered."
+  },
+  {
+   "name": "Error Message",
+   "api": "Error_Message__c",
+   "type": "Long Text Area(5000)",
+   "desc": "Why the call failed or the response was rejected, including each validation problem found.",
+   "help": "What went wrong, if anything."
+  },
+  {
+   "name": "Item Count",
+   "api": "Item_Count__c",
+   "type": "Number(4,0)",
+   "desc": "Number of rows and follow-ups (or files) included in the request.",
+   "help": "How many items were in the request."
+  },
+  {
+   "name": "Duration (ms)",
+   "api": "Duration_Ms__c",
+   "type": "Number(9,0)",
+   "desc": "Wall-clock time of the call in milliseconds.",
+   "help": "How long Claude took to answer."
+  },
+  {
+   "name": "Import Batch",
+   "api": "Import_Batch__c",
+   "type": "Lookup(Import Batch), optional, clear value if deleted",
+   "desc": "The batch the request was about, when it concerned a single batch (always for mapping proposals).",
+   "help": "The import this request relates to."
+  }
+ ],
+ "Matching_Rule__c@3B": [
+  {
+   "name": "Firm",
+   "api": "Firm__c",
+   "type": "Lookup(Account), optional, clear value if deleted",
+   "desc": "The firm the rule applies to. Blank means the rule applies to every firm.",
+   "help": "Leave blank for a rule that applies to all firms."
+  },
+  {
+   "name": "Rule",
+   "api": "Rule__c",
+   "type": "Long Text Area(1000)",
+   "desc": "The instruction in plain language, as Claude will read it. Keep it to one fact or convention per rule.",
+   "help": "Describe one convention this firm uses, for example: ETF in a fund name always means the Wealth World ETF."
+  },
+  {
+   "name": "Status",
+   "api": "Status__c",
+   "type": "Picklist (values: Proposed, Active, Retired), required, default Proposed",
+   "desc": "Proposed: drafted, not used. Active: sent to Claude with every suggestion request. Retired: kept for history. When two-person approval is on, the person who activates a rule must not be its author.",
+   "help": "Set to Active to start using the rule. Someone other than the author must activate it."
+  },
+  {
+   "name": "Approved By",
+   "api": "Approved_By__c",
+   "type": "Lookup(User), optional, clear value if deleted",
+   "desc": "The user who activated the rule. Set by the system.",
+   "help": "Who activated this rule."
+  },
+  {
+   "name": "Approved At",
+   "api": "Approved_At__c",
+   "type": "Date/Time",
+   "desc": "When the rule was activated. Set by the system.",
+   "help": "When this rule was activated."
+  }
+ ],
+ "Trade_AI_Setting__mdt@3B": [
+  {
+   "name": "Enabled",
+   "api": "Enabled__c",
+   "type": "Checkbox (default unchecked)",
+   "desc": "When unchecked, no Claude requests are made; matching and review work without suggestions.",
+   "help": "Turn Claude suggestions on or off."
+  },
+  {
+   "name": "Model Name",
+   "api": "Model_Name__c",
+   "type": "Text(255)",
+   "desc": "Models API model API name, used when Provider is Models API, for example sfdc_ai__DefaultBedrockAnthropicClaude5Sonnet. Changing models needs no code change.",
+   "help": "The Models API name of the Claude model to use."
+  },
+  {
+   "name": "Max Items Per Request",
+   "api": "Max_Items_Per_Request__c",
+   "type": "Number(3,0)",
+   "desc": "How many rows and follow-ups go into one Claude request. Larger requests are cheaper per item but slower.",
+   "help": "Items per Claude request, for example 10."
+  },
+  {
+   "name": "Require Two-Person Rule Approval",
+   "api": "Require_Two_Person_Rule_Approval__c",
+   "type": "Checkbox (default unchecked)",
+   "desc": "When checked, a Matching Rule must be activated by someone other than its author.",
+   "help": "Require a second person to activate matching rules."
+  }
+ ],
+ "AI_Request_Log__c@4A": [
+  {
+   "name": "Provider",
+   "api": "Provider__c",
+   "type": "Picklist (values: Models API, Anthropic API)",
+   "desc": "Which route the request took. Models API: through the Einstein Trust Layer (Enterprise tier). Anthropic API: directly to Anthropic with the firm's own key (Standard tier). Set from the Trade AI Setting at the time of the call, so auditors can show which route every prompt took.",
+   "help": "Models API means the request went through the Einstein Trust Layer; Anthropic API means it went directly to Anthropic."
+  },
+  {
+   "name": "Model Name",
+   "api": "Model_Name__c",
+   "type": "Text(255)",
+   "desc": "Model used, from the Trade AI Setting custom metadata: a Models API name such as sfdc_ai__DefaultBedrockAnthropicClaude5Sonnet, or an Anthropic model ID such as claude-sonnet-5-5.",
+   "help": "The Claude model that answered."
+  }
+ ],
+ "Trade_AI_Setting__mdt@4A": [
+  {
+   "name": "Provider",
+   "api": "Provider__c",
+   "type": "Picklist (values: Models API, Anthropic API), default Models API",
+   "desc": "How Claude is reached. Models API (default, Enterprise tier): through the Einstein Trust Layer, needs Einstein generative AI. Anthropic API (Standard tier): directly to Anthropic with the firm's own API key, which must be stored in the Anthropic API external credential. Changes are recorded in Setup Audit Trail and on every AI Request Log.",
+   "help": "Models API keeps requests inside the Einstein Trust Layer. Choose Anthropic API only if your compliance team has approved sending data directly to Anthropic."
+  },
+  {
+   "name": "Model Name",
+   "api": "Model_Name__c",
+   "type": "Text(255)",
+   "desc": "Models API model API name, used when Provider is Models API, for example sfdc_ai__DefaultBedrockAnthropicClaude5Sonnet. Changing models needs no code change.",
+   "help": "The Models API name of the Claude model to use."
+  },
+  {
+   "name": "Anthropic Model",
+   "api": "Anthropic_Model__c",
+   "type": "Text(255)",
+   "desc": "Anthropic model ID, used when Provider is Anthropic API, for example claude-sonnet-5-5. Changing models needs no code change.",
+   "help": "The Anthropic model ID to use with the Anthropic API."
+  }
+ ],
+ "Import_Staging_Row__c@4B": [
+  {
+   "name": "Assigned To",
+   "api": "Assigned_To__c",
+   "type": "Lookup(User), optional, clear value if deleted",
+   "desc": "The reviewer who has taken this row in the Trade Review app, so two people never work the same item. Set and cleared from the app (Assign to me / Unassign); only the assignee can unassign. Blank means anyone can pick it up.",
+   "help": "Who is working on this row. Use Assign to me in Trade Review so others know it is taken."
+  }
+ ],
+ "Code_Follow_Up__c@4B": [
+  {
+   "name": "Assigned To",
+   "api": "Assigned_To__c",
+   "type": "Lookup(User), optional, clear value if deleted",
+   "desc": "The person who has taken this follow-up in the Trade Review app, so two people never chase the same dealer. Set and cleared from the app; only the assignee can unassign. Separate from Owner, which controls record access.",
+   "help": "Who is working on this follow-up. Use Assign to me in Trade Review so others know it is taken."
+  }
+ ],
+ "Import_Staging_Row__c@4B2": [
+  {
+   "name": "AI Headline",
+   "api": "AI_Headline__c",
+   "type": "Text(100)",
+   "desc": "Claude's one-line root cause for the row, naming the person, code, fund or firm involved (for example: Priya Nair - rep code mismatch on 2210). Shown as the row's title in Trade Review; until Claude answers, the app builds one from the match flags. Cleared when the row is re-matched.",
+   "help": "Claude's short summary of what is wrong with this row."
+  },
+  {
+   "name": "AI Recommended Action",
+   "api": "AI_Recommended_Action__c",
+   "type": "Picklist (values: Accept, Reject, Hold)",
+   "desc": "The decision Claude recommends: Accept (with the firm and fund it suggests), Reject, or Hold (only the dealer can settle it; see AI Homework). Advisory only; a person always decides.",
+   "help": "What Claude recommends doing with this row. You make the final decision."
+  },
+  {
+   "name": "AI Homework",
+   "api": "AI_Homework__c",
+   "type": "Long Text Area(1000)",
+   "desc": "When Claude recommends Hold, what needs to be found out from the dealer, worded as a question. Pre-fills the Put on hold dialog and the firm follow-up email.",
+   "help": "What Claude suggests asking the dealer before this row can be decided."
+  },
+  {
+   "name": "AI Field Suggestions",
+   "api": "AI_Field_Suggestions__c",
+   "type": "Long Text Area(5000)",
+   "desc": "Claude's per-field answer as JSON: a list of {field, value, confidence, reason}, using record names, never IDs. Written by the system only; the Trade Review app and the AI Suggestion Table component render it as a table.",
+   "help": "Claude's suggestion for each field, shown as a table on the page."
+  },
+  {
+   "name": "On Hold",
+   "api": "On_Hold__c",
+   "type": "Checkbox (default unchecked)",
+   "desc": "Checked when a reviewer has parked the row until the dealer answers. On-hold rows show on the On Hold tab instead of Needs Decision. Cleared when the row is accepted, rejected or released.",
+   "help": "Checked while this row waits for information from the dealer."
+  },
+  {
+   "name": "On Hold Reason",
+   "api": "On_Hold_Reason__c",
+   "type": "Long Text Area(2000)",
+   "desc": "The reviewer's homework: what must be found out before the row can be decided. Required to put a row on hold; used as the question in the firm follow-up email. Kept after release for the record.",
+   "help": "What needs to be found out before this row can be decided."
+  },
+  {
+   "name": "On Hold By",
+   "api": "On_Hold_By__c",
+   "type": "Lookup(User), optional, clear value if deleted",
+   "desc": "The reviewer who put the row on hold. Set by the system.",
+   "help": "Who put this row on hold."
+  },
+  {
+   "name": "On Hold Since",
+   "api": "On_Hold_Since__c",
+   "type": "Date/Time",
+   "desc": "When the row was put on hold. Set by the system.",
+   "help": "When this row was put on hold."
+  },
+  {
+   "name": "Asked Firm At",
+   "api": "Asked_Firm_At__c",
+   "type": "Date/Time",
+   "desc": "When the row's question was last sent to the firm's Operations Contact from Trade Review. Drives the 'Asked on' label and the reminder after three days without an answer.",
+   "help": "When the dealer was last asked about this row."
+  }
+ ],
+ "Code_Follow_Up__c@4B2": [
+  {
+   "name": "AI Homework",
+   "api": "AI_Homework__c",
+   "type": "Long Text Area(1000)",
+   "desc": "Claude's question for the dealer about this code, used in the firm follow-up email. Written by the system only.",
+   "help": "What Claude suggests asking the dealer about this code."
+  },
+  {
+   "name": "AI Field Suggestions",
+   "api": "AI_Field_Suggestions__c",
+   "type": "Long Text Area(5000)",
+   "desc": "Claude's per-field answer as JSON: a list of {field, value, confidence, reason}. Written by the system only; shown as a table in Trade Review and by the AI Suggestion Table component.",
+   "help": "Claude's suggestion for each field, shown as a table on the page."
+  },
+  {
+   "name": "Asked Firm At",
+   "api": "Asked_Firm_At__c",
+   "type": "Date/Time",
+   "desc": "When this code's question was last sent to the firm's Operations Contact from Trade Review. Drives the 'Asked on' label and the reminder after three days without an answer.",
+   "help": "When the dealer was last asked about this code."
+  }
+ ],
+ "Account@4B2": [
+  {
+   "name": "Operations Contact",
+   "api": "Operations_Contact__c",
+   "type": "Lookup(Contact), optional, clear value if deleted",
+   "desc": "The person at this dealer firm who answers rep code and trade questions. Trade Review sends every follow-up email for the firm to this contact, combining its on-hold rows and code reviews in one message.",
+   "help": "Choose who at this firm answers trade and rep code questions. Follow-up emails from Trade Review go to this person."
+  }
+ ],
+ "AI_Request_Log__c@4B2": [
+  {
+   "name": "Input Tokens",
+   "api": "Input_Tokens__c",
+   "type": "Number(9,0)",
+   "desc": "Tokens sent to the model, as reported by the provider, including any read from or written to the prompt cache. Blank if the provider did not report usage.",
+   "help": "How many tokens were sent to Claude."
+  },
+  {
+   "name": "Output Tokens",
+   "api": "Output_Tokens__c",
+   "type": "Number(9,0)",
+   "desc": "Tokens the model generated, as reported by the provider. Blank if the provider did not report usage.",
+   "help": "How many tokens Claude answered with."
+  },
+  {
+   "name": "Cached Input Tokens",
+   "api": "Cached_Input_Tokens__c",
+   "type": "Number(9,0)",
+   "desc": "Of the input tokens, how many were read from the prompt cache (Anthropic API tier; billed at a fraction of the normal rate). Blank or zero on the Models API, which does not report caching.",
+   "help": "How many input tokens were reused from the cache, which costs less."
+  },
+  {
+   "name": "Purpose",
+   "api": "Purpose__c",
+   "type": "Picklist (values: Row Suggestions, Mapping Proposal, Firm Follow-up), required",
+   "desc": "What the request was for: suggestions on review rows and follow-ups, a proposed mapping profile for an unknown file layout, or a follow-up email to a firm.",
+   "help": "What Claude was asked to do."
+  }
+ ],
+ "Import_Staging_Row__c@4B3": [
+  {
+   "name": "Issue Key",
+   "api": "Issue_Key__c",
+   "type": "Text(255), External ID (not unique)",
+   "desc": "What this row's problem has in common with other rows: the dealer, each firm or fund issue and the spelling it is about (plus the rep code when the right answer can differ by code, as for a missing or ambiguous name). Set by matching for rows waiting for review; blank for roster rows, code issues and rows not in review. Trade Review shows rows with the same key as one line with their count and total, and a decision on it applies to all of them. Indexed (External ID, not unique) so the rows sharing a key are found quickly. Keys over 255 characters are stored as a SHA-256 hash.",
+   "help": "Rows with the same issue key share the same problem and are decided together in Trade Review. Set by the system."
+  }
+ ]
+}

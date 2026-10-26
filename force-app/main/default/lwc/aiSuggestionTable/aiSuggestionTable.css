@@ -1,0 +1,11 @@
+.explanation {
+  white-space: pre-wrap;
+}
+
+.label {
+  margin-right: 0.25rem;
+}
+
+.field-table td {
+  vertical-align: top;
+}

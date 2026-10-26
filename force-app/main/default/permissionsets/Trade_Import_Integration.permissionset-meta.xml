@@ -11,6 +11,11 @@
     <description>Least privilege for the push job and its background jobs: ingest files, stage and match rows, raise follow-ups, read reference data, log Claude requests and save Draft mapping proposals.</description>
     <fieldPermissions>
         <editable>true</editable>
+        <field>AI_Request_Log__c.Cached_Input_Tokens__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>AI_Request_Log__c.Duration_Ms__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -26,6 +31,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>AI_Request_Log__c.Input_Tokens__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>AI_Request_Log__c.Item_Count__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -36,7 +46,17 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>AI_Request_Log__c.Output_Tokens__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>AI_Request_Log__c.Prompt__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>AI_Request_Log__c.Provider__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
@@ -45,8 +65,23 @@
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
+        <editable>false</editable>
+        <field>Account.Operations_Contact__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
         <editable>true</editable>
         <field>Code_Follow_Up__c.AI_Confidence__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Code_Follow_Up__c.AI_Field_Suggestions__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Code_Follow_Up__c.AI_Homework__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
@@ -62,6 +97,16 @@
     <fieldPermissions>
         <editable>true</editable>
         <field>Code_Follow_Up__c.AI_Suggested_Advisor__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Code_Follow_Up__c.Asked_Firm_At__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Code_Follow_Up__c.Assigned_To__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
@@ -191,6 +236,26 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>Import_Staging_Row__c.AI_Field_Suggestions__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Import_Staging_Row__c.AI_Headline__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Import_Staging_Row__c.AI_Homework__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Import_Staging_Row__c.AI_Recommended_Action__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>Import_Staging_Row__c.AI_Request__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -226,6 +291,16 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>Import_Staging_Row__c.Asked_Firm_At__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Import_Staging_Row__c.Assigned_To__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>Import_Staging_Row__c.Code_Follow_Up__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -257,6 +332,11 @@
     <fieldPermissions>
         <editable>true</editable>
         <field>Import_Staging_Row__c.Has_Errors__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Import_Staging_Row__c.Issue_Key__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
@@ -297,6 +377,26 @@
     <fieldPermissions>
         <editable>true</editable>
         <field>Import_Staging_Row__c.Matched_Rep_Code__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Import_Staging_Row__c.On_Hold_By__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Import_Staging_Row__c.On_Hold_Reason__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Import_Staging_Row__c.On_Hold_Since__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Import_Staging_Row__c.On_Hold__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>

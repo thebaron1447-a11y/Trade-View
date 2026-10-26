@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>AI_Field_Suggestions__c</fullName>
+    <description>Claude's per-field answer as JSON: a list of {field, value, confidence, reason}, using record names, never IDs. Written by the system only; the Trade Review app and the AI Suggestion Table component render it as a table.</description>
+    <inlineHelpText>Claude's suggestion for each field, shown as a table on the page.</inlineHelpText>
+    <label>AI Field Suggestions</label>
+    <length>5000</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

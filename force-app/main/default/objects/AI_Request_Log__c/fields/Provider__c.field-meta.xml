@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Provider__c</fullName>
+    <description>Which route the request took. Models API: through the Einstein Trust Layer (Enterprise tier). Anthropic API: directly to Anthropic with the firm's own key (Standard tier). Set from the Trade AI Setting at the time of the call, so auditors can show which route every prompt took.</description>
+    <inlineHelpText>Models API means the request went through the Einstein Trust Layer; Anthropic API means it went directly to Anthropic.</inlineHelpText>
+    <label>Provider</label>
+    <required>false</required>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Models API</fullName>
+                <default>false</default>
+                <label>Models API</label>
+            </value>
+            <value>
+                <fullName>Anthropic API</fullName>
+                <default>false</default>
+                <label>Anthropic API</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

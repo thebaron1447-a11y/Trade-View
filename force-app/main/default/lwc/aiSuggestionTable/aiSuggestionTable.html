@@ -1,0 +1,73 @@
+<template>
+  <lightning-card title="Claude's suggestion" icon-name="utility:einstein">
+    <div class="slds-p-horizontal_medium">
+      <template lwc:if={errorText}>
+        <p class="slds-text-color_error load-error" role="alert">{errorText}</p>
+      </template>
+      <template lwc:elseif={supported}>
+        <template lwc:if={hasAnswer}>
+          <template lwc:if={headline}>
+            <p class="slds-text-heading_small slds-m-bottom_x-small headline">
+              {headline}
+            </p>
+          </template>
+          <template lwc:if={actionLabel}>
+            <p class="slds-text-title_bold slds-m-bottom_x-small ai-action">
+              {actionLabel}
+            </p>
+          </template>
+          <template lwc:if={hasLines}>
+            <table
+              class="slds-table slds-table_cell-buffer slds-table_bordered slds-m-bottom_small field-table"
+            >
+              <thead>
+                <tr>
+                  <th scope="col">Field</th>
+                  <th scope="col">Suggestion</th>
+                  <th scope="col">Confidence</th>
+                  <th scope="col">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template for:each={lines} for:item="l">
+                  <tr key={l.key}>
+                    <td>{l.field}</td>
+                    <td>{l.value}</td>
+                    <td>
+                      <span class={l.confidenceClass}>{l.confidence}</span>
+                    </td>
+                    <td class="slds-cell-wrap">{l.reason}</td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </template>
+          <template lwc:if={explanation}>
+            <p class="explanation">{explanation}</p>
+          </template>
+          <template lwc:if={homework}>
+            <p class="slds-m-top_x-small homework">
+              <span class="slds-text-color_weak label">Ask the dealer:</span
+              ><span>{homework}</span>
+            </p>
+          </template>
+          <template lwc:if={confidence}>
+            <p class="slds-m-top_x-small">
+              <span class={confidenceClass}
+                >{confidence} confidence overall</span
+              >
+            </p>
+          </template>
+        </template>
+        <template lwc:else>
+          <p class="slds-text-color_weak state">{stateText}</p>
+        </template>
+      </template>
+      <template lwc:else>
+        <p class="slds-text-color_weak unsupported">
+          Add this component to an Import Staging Row or Code Follow-Up page.
+        </p>
+      </template>
+    </div>
+  </lightning-card>
+</template>

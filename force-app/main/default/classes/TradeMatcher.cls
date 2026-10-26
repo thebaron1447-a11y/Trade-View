@@ -26,6 +26,23 @@ public with sharing class TradeMatcher implements Queueable {
 
     @TestVisible
     private static final Integer DORMANCY_DAYS = 180;
+    /** Flags about the rep code itself. Rows with any of them (and roster rows) are worked in Dealer Code Review. */
+    public static final Set<String> CODE_FLAGS = new Set<String>{
+        'ROSTER_NEW_HOLDER',
+        'ROSTER_NEW_CODE',
+        'ADVISOR_AMBIGUOUS',
+        'UNKNOWN_CODE',
+        'CODE_ENDED',
+        'DATE_BEFORE_CODE_START',
+        'DORMANT_CODE_REACTIVATED',
+        'DORMANT_CODE_NO_NAME',
+        'REASSIGNMENT_SUSPECTED',
+        'TEAM_CHANGE_SUSPECTED',
+        'ALLOCATION_INCOMPLETE',
+        'FOLLOW_UP_CLOSED'
+    };
+    /** Firm and fund issues that rows can share. A missing or ambiguous name also depends on the code. */
+    private static final List<String> SHARED_ISSUES = new List<String>{ 'FIRM_MISSING', 'FIRM_UNRESOLVED', 'FIRM_AMBIGUOUS', 'FUND_UNRESOLVED', 'FUND_AMBIGUOUS' };
     // A fuzzy name match is accepted only if it is very close and clearly better than the next option.
     @TestVisible
     private static final Decimal AUTO_ACCEPT = 0.9;
@@ -81,6 +98,7 @@ public with sharing class TradeMatcher implements Queueable {
                 String sourceFirm = batches.get(row.Import_Batch__c).Source_Firm__c;
                 Outcome o = row.Row_Type__c == TradeRowNormalizer.ROW_ROSTER ? matchRoster(row, ref) : matchActivity(row, ref);
                 apply(row, o);
+                row.Issue_Key__c = issueKey(sourceFirm, row, o);
                 if (o.status == HELD) {
                     CodeFollowUpService.Draft d = CodeFollowUpService.draftFor(sourceFirm, row, o.reason);
                     CodeFollowUpService.Draft existing = drafts.get(d.key);
@@ -386,7 +404,8 @@ public with sharing class TradeMatcher implements Queueable {
             Credited_Advisor__c = row.Credited_Advisor__c,
             Match_Flags__c = row.Match_Flags__c,
             Match_Notes__c = row.Match_Notes__c,
-            Match_Candidates__c = row.Match_Candidates__c
+            Match_Candidates__c = row.Match_Candidates__c,
+            Issue_Key__c = row.Issue_Key__c
         );
         if (row.Match_Status__c == REVIEW) {
             // Back in review (for example a new reason after an override): ask Claude again and let the
@@ -398,11 +417,52 @@ public with sharing class TradeMatcher implements Queueable {
             result.AI_Suggested_Fund__c = null;
             result.AI_Suggested_Advisor__c = null;
             result.AI_Request__c = null;
+            result.AI_Headline__c = null;
+            result.AI_Recommended_Action__c = null;
+            result.AI_Homework__c = null;
+            result.AI_Field_Suggestions__c = null;
             result.Reviewer_Decision__c = null;
             result.Decided_By__c = null;
             result.Decided_At__c = null;
         }
         return result;
+    }
+
+    /**
+     * What rows with the same problem have in common, so one decision can settle all of them: the dealer, each firm
+     * or fund issue and the spelling it is about (and the code, when the right answer can differ by code, as for a
+     * missing or ambiguous name). Blank for rows that are not waiting for review, roster rows and code issues, which
+     * are decided one by one. Long keys are hashed so they always fit and never collide.
+     */
+    @TestVisible
+    private static String issueKey(String dealer, Import_Staging_Row__c row, Outcome o) {
+        if (o.status != REVIEW || row.Row_Type__c == TradeRowNormalizer.ROW_ROSTER) {
+            return null;
+        }
+        Set<String> flags = new Set<String>(o.flags);
+        for (String f : CODE_FLAGS) {
+            if (flags.contains(f)) {
+                return null;
+            }
+        }
+        List<String> parts = new List<String>{ (dealer == null ? '' : dealer.toUpperCase()) };
+        for (String issue : SHARED_ISSUES) {
+            if (!flags.contains(issue)) {
+                continue;
+            }
+            Boolean firm = issue.startsWith('FIRM');
+            String spelling = NameNormalizer.firmKey(firm ? row.Source_Firm_Name__c : row.Source_Fund_Name__c);
+            String part = issue + '=' + (spelling == null ? '' : spelling);
+            if (issue == 'FIRM_MISSING' || issue.endsWith('AMBIGUOUS')) {
+                part += '@' + (row.Source_Rep_Code__c == null ? '' : row.Source_Rep_Code__c.trim().toUpperCase());
+            }
+            parts.add(part);
+        }
+        if (parts.size() == 1) {
+            return null;
+        }
+        String key = String.join(parts, '|');
+        return key.length() <= 255 ? key : 'H:' + EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', Blob.valueOf(key)));
     }
 
     private static void apply(Import_Staging_Row__c row, Outcome o) {

@@ -80,6 +80,8 @@ private class DemoScenarioTest {
         aliases.add(new Fund_Alias__c(Name = 'Canadian Dividend Fund - Series A', Normalized_Key__c = 'canadian dividend fund series a', Fund__c = funds.get('FundCDFA').Id));
         aliases.add(new Fund_Alias__c(Name = 'Cdn Dividend Fund A', Normalized_Key__c = 'cdn dividend fund a', Fund__c = funds.get('FundCDFA').Id));
         aliases.add(new Fund_Alias__c(Name = 'Global Bond Fund - Series F', Normalized_Key__c = 'global bond fund series f', Fund__c = funds.get('FundGBFF').Id));
+        aliases.add(new Fund_Alias__c(Name = 'Wealth World Fund', Normalized_Key__c = 'wealth world fund', Fund__c = funds.get('FundWWFA').Id));
+        aliases.add(new Fund_Alias__c(Name = 'Wealth World Fund', Normalized_Key__c = 'wealth world fund', Fund__c = funds.get('FundWWFF').Id));
         insert aliases;
         List<Mapping_Profile__c> profiles = new List<Mapping_Profile__c>();
         profiles.add(new Mapping_Profile__c(Name = 'Barder - trade export', Source_Firm__c = 'BARDER', Firm__c = firms.get('FirmBarder').Id, Single_Firm_Feed__c = true, Feed_Type__c = 'Trade Activity', AUM_Indicator_Values__c = 'AUM', Header_Fingerprint__c = MappingService.fingerprint(new List<String>{ 'Trade Dt', 'Dealer Rep #', 'Advisor', 'Dealer Name', 'Fund Description', 'Record Type', 'Gross Amt' }), Column_Map__c = JSON.serialize(new Map<String, String>{ 'Trade Dt' => 'tradeDate', 'Dealer Rep #' => 'repCode', 'Advisor' => 'advisorName', 'Dealer Name' => 'firmName', 'Fund Description' => 'fundName', 'Record Type' => 'rowType', 'Gross Amt' => 'amount' }), Date_Format__c = 'MM/DD/YYYY', Decimal_Separator__c = 'Period', Direction_Convention__c = 'Signed Amount', Status__c = 'Active'));
@@ -89,10 +91,10 @@ private class DemoScenarioTest {
         insert profiles;
     }
 
-    private static final String BARDER_CSV = String.fromCharArray(new List<Integer>{ 65279 }) + 'Trade Dt,Dealer Rep #,Advisor,Dealer Name,Fund Description,Record Type,Gross Amt\r\n09/02/2026,0457,Julia Morales,Barder and Co,Wealth World Fund A,TRADE,"$400,000.00"\r\n09/03/2026,0457,J. Morales,Barder and C.,WEALTH WORLD FD SER A,TRADE,"-$150,000.00"\r\n09/08/2026,2210,Marcus Bell,Barder & Company,Cdn Dividend Fund A,TRADE,"$75,000.00"\r\n09/22/2026,2210,Priya Nair,Barder and Co,Wealth World ETF,TRADE,"$220,000.00"\r\n09/24/2026,2210,P. Nair,,Wealth World ETF,TRADE,"$60,000.00"\r\n09/25/2026,0457,Julia Morales,Barder and Co,ETF Wealth World Fund A,TRADE,"$12,500.00"\r\n09/25/2026,0457,Julia Morales,Barder and Co,"Canadian Dividend Fund, Series A",TRADE,"$8,000.00"\r\n09/26/2026,0457,Julia Morales,Barder and Co,Wealth World Fund A,TRADE,\r\n09/27/2026,3390,Hannah Pierce,Barder and Co,Wealth World Fund A,TRADE,"$45,000.00"\r\n09/30/2026,0457,Julia Morales,Barder and Co,,AUM,"$1,850,000.00"\r\n';
-    private static final String NORTHGATE_CSV = 'IA Code,Rep Name,Firm,Branch,Product,Txn Type,Trade Date,Amount\n8800,Aisha Khan,Northgate WP,Toronto,Wealth World Fund - Series F,BUY,13/09/2026,250000\n8800,Daniel Okafor,Northgate WP,Toronto,Global Bond Fund - Series F,SELL,03/09/2026,40000\n5521,Tom Reilly,,Toronto,Canadian Dividend Fund - Series A,BUY,18/09/2026,90000\n3102,Julia Morales,Northgate Wealth Partners Inc.,Toronto,Wealth World Fund - Series A,Buy,15/05/2024,30000\n8800,,Northgate WP,Toronto,Wealth World Fund - Series A,P,20/09/2026,"1,200,000"\n8800,Aisha Khan,Northgate WP,Toronto,Wealth World ETF,SELL,31/09/2026,15000\n5521,Tom Reilly,Northgate WP,Toronto,Wealth World ETF,SWITCH,21/09/2026,5000\n3102,,Northgate WP,Toronto,Wealth World Fund - Series F,BUY,10/09/2026,55000\n5521,,Northgate WP,Toronto,Wealth World ETF,BUY,22/09/2026,18000\n8800,,Northgate WP,Toronto,,POSITION,30/09/2026,9800000\n5521,Tom Reilly,Northgate WP,Toronto,,POSITION,30/09/2026,640000\n';
-    private static final String LUMIERE_CSV = String.fromCharArray(new List<Integer>{ 65279 }) + 'Date de transaction;Code représentant;Nom du conseiller;Courtier;Fonds;Type;Montant\r\n2026-09-10;7700;Élise Gagnon;Lumiere Valeurs Mobilieres;Wealth World Fund - Series A;ACHAT;125' + String.fromCharArray(new List<Integer>{ 8239 }) + '000,00\r\n2026-09-12;7700;Marc-André Roy;Lumiere Valeurs Mobilieres;Global Bond Fund - Series F;RACHAT;48' + String.fromCharArray(new List<Integer>{ 8239 }) + '500,50\r\n2026-09-15;7700;Élise Gagnon et Marc-André Roy;Lumière Valeurs Mobilières Ltée;Wealth World ETF;Achat;10 000,00\r\n2026-09-19;7700;;;Canadian Dividend Fund - Series A;ACHAT;7 250,75\r\n2026-09-30;7700;;;;SOLDE;3' + String.fromCharArray(new List<Integer>{ 8239 }) + '400' + String.fromCharArray(new List<Integer>{ 8239 }) + '000,00\r\n';
-    private static final String KESTREL_CSV = 'Representative,Rep No.,Organisation,Security Name,Settle Date,Side,Value\r\nRyan Chen,1001,Kestrel Capital,Wealth World Fund - Series A,2026-09-29,B,"50,000.00"\r\nMegan Chen,1001,Kestrel Capital,Global Bond Fund - Series F,2026-09-30,S,"20,000.00"\r\n';
+    private static final String BARDER_CSV = String.fromCharArray(new List<Integer>{ 65279 }) + 'Trade Dt,Dealer Rep #,Advisor,Dealer Name,Fund Description,Record Type,Gross Amt\r\n09/02/2026,0457,Julia Morales,Barder and Co,Wealth World Fund A,TRADE,"$400,000.00"\r\n09/03/2026,0457,J. Morales,Barder and C.,WEALTH WORLD FD SER A,TRADE,"-$150,000.00"\r\n09/08/2026,2210,Marcus Bell,Barder & Company,Cdn Dividend Fund A,TRADE,"$75,000.00"\r\n09/22/2026,2210,Priya Nair,Barder and Co,Wealth World ETF,TRADE,"$220,000.00"\r\n09/24/2026,2210,P. Nair,,Wealth World ETF,TRADE,"$60,000.00"\r\n09/25/2026,0457,Julia Morales,Barder and Co,ETF Wealth World Fund A,TRADE,"$12,500.00"\r\n09/25/2026,0457,Julia Morales,Barder and Co,"Canadian Dividend Fund, Series A",TRADE,"$8,000.00"\r\n09/26/2026,0457,Julia Morales,Barder and Co,Wealth World Fund A,TRADE,\r\n09/27/2026,3390,Hannah Pierce,Barder and Co,Wealth World Fund A,TRADE,"$45,000.00"\r\n09/30/2026,0457,Julia Morales,Barder and Co,,AUM,"$1,850,000.00"\r\n03/10/2024,0457,Julia Morales,Barder and Co,Wealth World Fund A,TRADE,"$5,000.00"\r\n09/29/2026,0457,Julia Morales,Barder and Co,Wealth World Fund,TRADE,"$9,500.00"\r\n';
+    private static final String NORTHGATE_CSV = 'IA Code,Rep Name,Firm,Branch,Product,Txn Type,Trade Date,Amount\n8800,Aisha Khan,Northgate WP,Toronto,Wealth World Fund - Series F,BUY,13/09/2026,250000\n8800,Daniel Okafor,Northgate WP,Toronto,Global Bond Fund - Series F,SELL,03/09/2026,40000\n5521,Tom Reilly,,Toronto,Canadian Dividend Fund - Series A,BUY,18/09/2026,90000\n3102,Julia Morales,Northgate Wealth Partners Inc.,Toronto,Wealth World Fund - Series A,Buy,15/05/2024,30000\n8800,,Northgate WP,Toronto,Wealth World Fund - Series A,P,20/09/2026,"1,200,000"\n8800,Aisha Khan,Northgate WP,Toronto,Wealth World ETF,SELL,31/09/2026,15000\n5521,Tom Reilly,Northgate WP,Toronto,Wealth World ETF,SWITCH,21/09/2026,5000\n3102,,Northgate WP,Toronto,Wealth World Fund - Series F,BUY,10/09/2026,55000\n5521,,Northgate WP,Toronto,Wealth World ETF,BUY,22/09/2026,18000\n8800,,Northgate WP,Toronto,,POSITION,30/09/2026,9800000\n5521,Tom Reilly,Northgate WP,Toronto,,POSITION,30/09/2026,640000\n8800,Aisha Khan,Northgate Securities Ltd,Toronto,Wealth World ETF,BUY,24/09/2026,32000\n';
+    private static final String LUMIERE_CSV = String.fromCharArray(new List<Integer>{ 65279 }) + 'Date de transaction;Code représentant;Nom du conseiller;Courtier;Fonds;Type;Montant\r\n2026-09-10;7700;Élise Gagnon;Lumiere Valeurs Mobilieres;Wealth World Fund - Series A;ACHAT;125' + String.fromCharArray(new List<Integer>{ 8239 }) + '000,00\r\n2026-09-12;7700;Marc-André Roy;Lumiere Valeurs Mobilieres;Global Bond Fund - Series F;RACHAT;48' + String.fromCharArray(new List<Integer>{ 8239 }) + '500,50\r\n2026-09-15;7700;Élise Gagnon et Marc-André Roy;Lumière Valeurs Mobilières Ltée;Wealth World ETF;Achat;10 000,00\r\n2026-09-19;7700;;;Canadian Dividend Fund - Series A;ACHAT;7 250,75\r\n2026-09-30;7700;;;;SOLDE;3' + String.fromCharArray(new List<Integer>{ 8239 }) + '400' + String.fromCharArray(new List<Integer>{ 8239 }) + '000,00\r\n2026-09-26;7700;Sophie Tremblay;Lumiere Valeurs Mobilieres;Wealth World ETF;ACHAT;22 000,00\r\n';
+    private static final String KESTREL_CSV = 'Representative,Rep No.,Organisation,Security Name,Settle Date,Side,Value\r\nRyan Chen,1001,Kestrel Capital,Wealth World Fund - Series A,2026-09-29,B,"50,000.00"\r\nMegan Chen,1001,Kestrel Capital,Global Bond Fund - Series F,2026-09-30,S,"20,000.00"\r\nRyan Chen,1001,,Wealth World ETF,2026-10-01,B,"5,000.00"\r\n';
     private static final String ROSTER_CSV = 'Rep Code,Advisor Name,Branch,Effective Date\r\n457,Julia Morales,Barder & Company - Oakville,06/15/2024\r\n2210,Priya Nair,Barder & Company - Hamilton,09/15/2026\r\n3390,Hannah Pierce,Barder & Company - Oakville,09/20/2026\r\n';
 
     /** Ingests and matches files synchronously, exactly as the queued jobs would. */
@@ -154,7 +156,9 @@ private class DemoScenarioTest {
             new List<String>{ '7', 'Matched', null, 'Julia Morales', 'Canadian Dividend Fund - Series A', null },
             new List<String>{ '8', 'Invalid', null, null, null, null },
             new List<String>{ '9', 'Held', 'Unknown Code', null, 'Wealth World Fund - Series A', 'UNKNOWN_CODE' },
-            new List<String>{ '10', 'Matched', null, 'Julia Morales', null, null }
+            new List<String>{ '10', 'Matched', null, 'Julia Morales', null, null },
+            new List<String>{ '11', 'Needs Review', null, null, 'Wealth World Fund - Series A', 'DATE_BEFORE_CODE_START' },
+            new List<String>{ '12', 'Needs Review', null, 'Julia Morales', null, 'FUND_AMBIGUOUS' }
         });
         assertRows('NORTHGATE', ids.get('NORTHGATE'), new List<List<String>>{
             new List<String>{ '1', 'Matched', null, 'Aisha Khan', 'Wealth World Fund - Series F', 'SINGLE_ADVISOR_CREDIT' },
@@ -167,19 +171,22 @@ private class DemoScenarioTest {
             new List<String>{ '8', 'Held', 'Code Ended', null, 'Wealth World Fund - Series F', 'CODE_ENDED' },
             new List<String>{ '9', 'Held', 'Code Dormant', null, 'Wealth World ETF', 'DORMANT_CODE_NO_NAME' },
             new List<String>{ '10', 'Held', 'Allocation Incomplete', null, null, 'ALLOCATION_INCOMPLETE' },
-            new List<String>{ '11', 'Matched', null, 'Tom Reilly', null, 'DORMANT_CODE_REACTIVATED' }
+            new List<String>{ '11', 'Matched', null, 'Tom Reilly', null, 'DORMANT_CODE_REACTIVATED' },
+            new List<String>{ '12', 'Needs Review', null, null, null, 'FIRM_UNRESOLVED' }
         });
         assertRows('LUMIERE', ids.get('LUMIERE'), new List<List<String>>{
             new List<String>{ '1', 'Matched', null, 'Élise Gagnon', 'Wealth World Fund - Series A', 'SINGLE_ADVISOR_CREDIT' },
             new List<String>{ '2', 'Matched', null, 'Marc-André Roy', 'Global Bond Fund - Series F', 'SINGLE_ADVISOR_CREDIT' },
             new List<String>{ '3', 'Matched', null, null, 'Wealth World ETF', 'TEAM_SPLIT' },
             new List<String>{ '4', 'Matched', null, null, 'Canadian Dividend Fund - Series A', 'TEAM_SPLIT' },
-            new List<String>{ '5', 'Matched', null, null, null, 'TEAM_SPLIT' }
+            new List<String>{ '5', 'Matched', null, null, null, 'TEAM_SPLIT' },
+            new List<String>{ '6', 'Held', 'Reassignment Suspected', null, 'Wealth World ETF', 'TEAM_CHANGE_SUSPECTED' }
         });
 
         List<List<String>> followUps = new List<List<String>>{
             new List<String>{ 'BARDER|2210|Reassignment Suspected', '2', '280000.00' },
             new List<String>{ 'BARDER|3390|Unknown Code', '1', '45000.00' },
+            new List<String>{ 'LUMIERE|7700|Reassignment Suspected', '1', '22000.00' },
             new List<String>{ 'NORTHGATE|3102|Code Ended', '1', '55000.00' },
             new List<String>{ 'NORTHGATE|5521|Code Dormant', '1', '18000.00' },
             new List<String>{ 'NORTHGATE|8800|Allocation Incomplete', '2', '1200000.00' }
@@ -225,7 +232,9 @@ private class DemoScenarioTest {
             new List<String>{ '7', 'Matched', null, 'Julia Morales', 'Canadian Dividend Fund - Series A', null },
             new List<String>{ '8', 'Invalid', null, null, null, null },
             new List<String>{ '9', 'Held', 'Unknown Code', null, 'Wealth World Fund - Series A', 'UNKNOWN_CODE' },
-            new List<String>{ '10', 'Matched', null, 'Julia Morales', null, null }
+            new List<String>{ '10', 'Matched', null, 'Julia Morales', null, null },
+            new List<String>{ '11', 'Needs Review', null, null, 'Wealth World Fund - Series A', 'DATE_BEFORE_CODE_START' },
+            new List<String>{ '12', 'Needs Review', null, 'Julia Morales', null, 'FUND_AMBIGUOUS' }
         });
         f = [SELECT Status__c, Held_Row_Count__c, Held_Amount__c FROM Code_Follow_Up__c WHERE Id = :f.Id];
         Assert.areEqual('Resolved', f.Status__c, 'stays resolved');

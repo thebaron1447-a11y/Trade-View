@@ -23,6 +23,8 @@ public with sharing class ReviewDecisionService {
             }
             row.Decided_By__c = me;
             row.Decided_At__c = System.now();
+            // A decision ends any hold; who held it, when and why stay on the row for the record.
+            row.On_Hold__c = false;
             if (row.Reviewer_Decision__c == REJECT) {
                 row.Match_Status__c = REJECTED;
                 continue;

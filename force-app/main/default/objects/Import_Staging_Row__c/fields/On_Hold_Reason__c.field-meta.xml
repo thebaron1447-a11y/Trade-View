@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>On_Hold_Reason__c</fullName>
+    <description>The reviewer's homework: what must be found out before the row can be decided. Required to put a row on hold; used as the question in the firm follow-up email. Kept after release for the record.</description>
+    <inlineHelpText>What needs to be found out before this row can be decided.</inlineHelpText>
+    <label>On Hold Reason</label>
+    <length>2000</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

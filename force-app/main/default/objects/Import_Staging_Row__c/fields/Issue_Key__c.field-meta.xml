@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Issue_Key__c</fullName>
+    <description>What this row's problem has in common with other rows: the dealer, each firm or fund issue and the spelling it is about (plus the rep code when the right answer can differ by code, as for a missing or ambiguous name). Set by matching for rows waiting for review; blank for roster rows, code issues and rows not in review. Trade Review shows rows with the same key as one line with their count and total, and a decision on it applies to all of them. Indexed (External ID, not unique) so the rows sharing a key are found quickly. Keys over 255 characters are stored as a SHA-256 hash.</description>
+    <externalId>true</externalId>
+    <inlineHelpText>Rows with the same issue key share the same problem and are decided together in Trade Review. Set by the system.</inlineHelpText>
+    <label>Issue Key</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

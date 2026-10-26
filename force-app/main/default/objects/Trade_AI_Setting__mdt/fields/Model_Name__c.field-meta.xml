@@ -3,7 +3,7 @@
     <fullName>Model_Name__c</fullName>
     <length>255</length>
     <required>false</required>
-    <description>Models API model API name, for example sfdc_ai__DefaultBedrockAnthropicClaude5Sonnet. Changing models needs no code change.</description>
+    <description>Models API model API name, used when Provider is Models API, for example sfdc_ai__DefaultBedrockAnthropicClaude5Sonnet. Changing models needs no code change.</description>
     <externalId>false</externalId>
     <fieldManageability>DeveloperControlled</fieldManageability>
     <inlineHelpText>The Models API name of the Claude model to use.</inlineHelpText>

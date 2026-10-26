@@ -48,3 +48,6 @@ $RECYCLE.BIN/
 **/venv/
 
 *.zip
+
+# Assistant file-check helper
+.dev_md5.txt

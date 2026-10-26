@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>On_Hold_Since__c</fullName>
+    <description>When the row was put on hold. Set by the system.</description>
+    <inlineHelpText>When this row was put on hold.</inlineHelpText>
+    <label>On Hold Since</label>
+    <required>false</required>
+    <type>DateTime</type>
+</CustomField>

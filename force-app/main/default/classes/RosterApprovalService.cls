@@ -135,6 +135,108 @@ public with sharing class RosterApprovalService {
         resolveFollowUps(firmIds, codes, byFirmAndCode);
     }
 
+    /**
+     * What approving each roster row would do, in plain words, without changing anything. Uses the same rules as
+     * apply(): a row that cannot be approved gets one line starting "Cannot approve:" with the reason apply() gives.
+     * Rows need: Id, Firm_Override__c, Matched_Firm__c, Source_Rep_Code__c, Source_Advisor_Name__c,
+     * Source_Branch_Name__c, Trade_Date__c, Credited_Advisor__c and Credited_Advisor__r.Name.
+     */
+    public static Map<Id, List<String>> preview(List<Import_Staging_Row__c> rows) {
+        Map<Id, List<String>> result = new Map<Id, List<String>>();
+        Set<Id> firmIds = new Set<Id>();
+        Set<String> codes = new Set<String>();
+        for (Import_Staging_Row__c row : rows) {
+            Id firmId = row.Firm_Override__c != null ? row.Firm_Override__c : row.Matched_Firm__c;
+            if (firmId != null && String.isNotBlank(row.Source_Rep_Code__c)) {
+                firmIds.add(firmId);
+                codes.add(row.Source_Rep_Code__c);
+            }
+        }
+        Map<String, Rep_Code__c> existing = new Map<String, Rep_Code__c>();
+        Map<String, Code_Follow_Up__c> followUps = new Map<String, Code_Follow_Up__c>();
+        Map<Id, String> accountNames = new Map<Id, String>();
+        Map<String, Id> branchByName = new Map<String, Id>();
+        if (!firmIds.isEmpty()) {
+            for (Rep_Code__c rc : [
+                SELECT Id, Name, Firm__c,
+                    (SELECT Id, Advisor__c, Advisor__r.Name, Effective_Start_Date__c FROM Assignments__r WHERE Effective_End_Date__c = NULL)
+                FROM Rep_Code__c
+                WHERE Firm__c IN :firmIds AND Name IN :codes
+                WITH USER_MODE
+            ]) {
+                existing.put(rc.Firm__c + '|' + rc.Name.toUpperCase(), rc);
+            }
+            for (Code_Follow_Up__c fu : [
+                SELECT Firm__c, Rep_Code_Value__c, Held_Row_Count__c
+                FROM Code_Follow_Up__c
+                WHERE Firm__c IN :firmIds AND Rep_Code_Value__c IN :codes AND Status__c IN ('Open', 'In Progress') AND Reason__c IN :RESOLVABLE
+                WITH USER_MODE
+            ]) {
+                followUps.put(fu.Firm__c + '|' + fu.Rep_Code_Value__c.toUpperCase(), fu);
+            }
+            for (Account a : [SELECT Id, Name FROM Account WHERE Id IN :firmIds OR ParentId IN :firmIds WITH USER_MODE]) {
+                accountNames.put(a.Id, a.Name);
+            }
+            branchByName = branches(firmIds);
+        }
+        for (Import_Staging_Row__c row : rows) {
+            result.put(row.Id, previewOne(row, existing, followUps, accountNames, branchByName));
+        }
+        return result;
+    }
+
+    private static List<String> previewOne(
+        Import_Staging_Row__c row,
+        Map<String, Rep_Code__c> existing,
+        Map<String, Code_Follow_Up__c> followUps,
+        Map<Id, String> accountNames,
+        Map<String, Id> branchByName
+    ) {
+        Id firmId = row.Firm_Override__c != null ? row.Firm_Override__c : row.Matched_Firm__c;
+        if (firmId == null) {
+            return new List<String>{ 'Cannot approve: the firm for this roster row is not known. Choose the firm first.' };
+        }
+        if (row.Trade_Date__c == null || String.isBlank(row.Source_Rep_Code__c)) {
+            return new List<String>{ 'Cannot approve: a roster row needs a code and an effective date.' };
+        }
+        String code = row.Source_Rep_Code__c;
+        String key = firmId + '|' + code.toUpperCase();
+        List<String> lines = new List<String>();
+        String advisorName = row.Credited_Advisor__r?.Name;
+        if (row.Credited_Advisor__c == null) {
+            Contact c = newContact(row, firmId, branchByName);
+            advisorName = ((c.FirstName == null ? '' : c.FirstName + ' ') + c.LastName).trim();
+            lines.add('Create advisor ' + advisorName + ' at ' + accountNames.get(c.AccountId));
+        }
+        Rep_Code__c rc = existing.get(key);
+        if (rc == null) {
+            lines.add('Create code ' + code + ' at ' + accountNames.get(firmId));
+        } else {
+            List<Rep_Code_Assignment__c> open = rc.Assignments__r;
+            for (Rep_Code_Assignment__c a : open) {
+                if (row.Credited_Advisor__c != null && a.Advisor__c == row.Credited_Advisor__c) {
+                    return new List<String>{ 'Cannot approve: this advisor already holds code ' + code + '. Reject the row instead.' };
+                }
+            }
+            if (open.size() > 1) {
+                return new List<String>{ 'Cannot approve: code ' + code + ' is shared by a team. Update the team split by hand, then reject this row.' };
+            }
+            if (open.size() == 1) {
+                if (open[0].Effective_Start_Date__c >= row.Trade_Date__c) {
+                    return new List<String>{ 'Cannot approve: the roster date is not after the current holder\'s start date. Check the dates with the dealer.' };
+                }
+                lines.add('End ' + open[0].Advisor__r?.Name + '\'s assignment on ' + String.valueOf(row.Trade_Date__c.addDays(-1)));
+            }
+        }
+        lines.add('Assign code ' + code + ' 100% to ' + advisorName + ' from ' + String.valueOf(row.Trade_Date__c));
+        Code_Follow_Up__c fu = followUps.get(key);
+        if (fu != null) {
+            Integer held = fu.Held_Row_Count__c == null ? 0 : fu.Held_Row_Count__c.intValue();
+            lines.add('Close the code review for ' + code + ' and re-match its ' + held + (held == 1 ? ' held trade' : ' held trades'));
+        }
+        return lines;
+    }
+
     private static void resolveFollowUps(Set<Id> firmIds, Set<String> codes, Map<String, Plan> byFirmAndCode) {
         List<Code_Follow_Up__c> resolutions = new List<Code_Follow_Up__c>();
         for (Code_Follow_Up__c fu : [

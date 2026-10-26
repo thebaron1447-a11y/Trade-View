@@ -124,4 +124,40 @@ private class TradeMatcherTest {
         Assert.areEqual('Pending Review', after.Status__c, 'batch ready for review');
         Assert.areEqual(1, after.Matched_Row_Count__c.intValue(), 'row matched');
     }
+
+    private static String keyOf(String dealer, String rowType, String status, String flags, String firm, String fund, String code) {
+        TradeMatcher.Outcome o = new TradeMatcher.Outcome();
+        o.status = status;
+        o.flags.addAll(flags.split(';'));
+        Import_Staging_Row__c r = new Import_Staging_Row__c(Row_Type__c = rowType, Source_Firm_Name__c = firm, Source_Fund_Name__c = fund, Source_Rep_Code__c = code);
+        return TradeMatcher.issueKey(dealer, r, o);
+    }
+
+    @IsTest
+    static void rowsWithTheSameProblemShareAnIssueKey() {
+        String a = keyOf('BARDER', 'Trade', 'Needs Review', 'FUND_UNRESOLVED', 'Barder & Company', 'ETF Wealth World Fund A', '457');
+        Assert.isNotNull(a, 'a review row with a fund spelling problem has a key');
+        Assert.areEqual(a, keyOf('BARDER', 'Trade', 'Needs Review', 'FUND_UNRESOLVED', 'Barder & Co', '  etf wealth world fund a ', '2210'), 'same spelling, any code or firm spelling: same issue');
+        Assert.areNotEqual(a, keyOf('NORTHGATE', 'Trade', 'Needs Review', 'FUND_UNRESOLVED', 'Barder & Company', 'ETF Wealth World Fund A', '457'), 'another dealer is another issue');
+        Assert.areNotEqual(
+            keyOf('KESTREL', 'Trade', 'Needs Review', 'FIRM_AMBIGUOUS', 'Kestrel Capital', 'Wealth World ETF', '1001'),
+            keyOf('KESTREL', 'Trade', 'Needs Review', 'FIRM_AMBIGUOUS', 'Kestrel Capital', 'Wealth World ETF', '2002'),
+            'an ambiguous firm can be a different firm for each code'
+        );
+        Assert.areNotEqual(
+            a,
+            keyOf('BARDER', 'Trade', 'Needs Review', 'FUND_UNRESOLVED;FIRM_UNRESOLVED', 'Bardr', 'ETF Wealth World Fund A', '457'),
+            'a second issue makes a different group'
+        );
+        Assert.areEqual(
+            keyOf('BARDER', 'Trade', 'Needs Review', 'FUND_UNRESOLVED;FUND_FUZZY', 'Barder & Company', 'ETF Wealth World Fund A', '457'),
+            a,
+            'informational flags do not split a group'
+        );
+        Assert.isNull(keyOf('BARDER', 'Trade', 'Needs Review', 'FUND_UNRESOLVED;DATE_BEFORE_CODE_START', 'Barder', 'X', '457'), 'code issues are decided one by one');
+        Assert.isNull(keyOf('BARDER', 'Code Roster', 'Needs Review', 'ROSTER_NEW_CODE', 'Barder', null, '3390'), 'roster rows are decided one by one');
+        Assert.isNull(keyOf('BARDER', 'Trade', 'Matched', 'FUND_FUZZY', 'Barder', 'X', '457'), 'only rows waiting for review');
+        String longKey = keyOf('BARDER', 'Trade', 'Needs Review', 'FUND_UNRESOLVED', 'Barder', 'Fund '.repeat(80), '457');
+        Assert.isTrue(longKey.startsWith('H:') && longKey.length() == 66, 'a long key is hashed: ' + longKey);
+    }
 }

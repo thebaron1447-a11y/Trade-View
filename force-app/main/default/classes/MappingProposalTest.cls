@@ -83,8 +83,8 @@ private class MappingProposalTest {
         }
         fake.replies.clear();
         fake.replies.add(
-            '{"suggestions": [{"item": "R1", "firm": "' + inc + '", "confidence": "High", "explanation": "Ryan Chen is at the Calgary branch of Kestrel Capital Inc."},' +
-            ' {"item": "R2", "firm": "' + ltd + '", "confidence": "High", "explanation": "Megan Chen is at the Vancouver branch of Kestrel Capital Ltd."}]}'
+            '{"suggestions": [{"item": "R1", "fields": [{"field": "firm", "value": "' + inc + '", "confidence": "High", "reason": "Ryan Chen is at Calgary."}], "action": "accept", "confidence": "High", "explanation": "Ryan Chen is at the Calgary branch of Kestrel Capital Inc."},' +
+            ' {"item": "R2", "fields": [{"field": "firm", "value": "' + ltd + '", "confidence": "High", "reason": "Megan Chen is at Vancouver."}], "action": "accept", "confidence": "High", "explanation": "Megan Chen is at the Vancouver branch of Kestrel Capital Ltd."}]}'
         );
         ClaudeSuggestionJob.run(new Set<Id>{ batch.Id });
         update new List<Import_Staging_Row__c>{

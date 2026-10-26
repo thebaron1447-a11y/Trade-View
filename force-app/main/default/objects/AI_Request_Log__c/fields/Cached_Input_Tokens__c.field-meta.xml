@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Cached_Input_Tokens__c</fullName>
+    <description>Of the input tokens, how many were read from the prompt cache (Anthropic API tier; billed at a fraction of the normal rate). Blank or zero on the Models API, which does not report caching.</description>
+    <inlineHelpText>How many input tokens were reused from the cache, which costs less.</inlineHelpText>
+    <label>Cached Input Tokens</label>
+    <precision>9</precision>
+    <required>false</required>
+    <scale>0</scale>
+    <type>Number</type>
+    <unique>false</unique>
+</CustomField>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>AI_Headline__c</fullName>
+    <description>Claude's one-line root cause for the row, naming the person, code, fund or firm involved (for example: Priya Nair - rep code mismatch on 2210). Shown as the row's title in Trade Review; until Claude answers, the app builds one from the match flags. Cleared when the row is re-matched.</description>
+    <inlineHelpText>Claude's short summary of what is wrong with this row.</inlineHelpText>
+    <label>AI Headline</label>
+    <length>100</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

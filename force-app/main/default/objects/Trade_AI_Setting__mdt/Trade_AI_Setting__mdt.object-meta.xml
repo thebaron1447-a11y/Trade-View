@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
-    <description>Settings for Claude suggestions through the Models API. One record, Default, is read by AiSettings.</description>
+    <description>Settings for Claude suggestions: on or off, provider (Models API or Anthropic API), models and limits. One record, Default, is read by AiSettings.</description>
     <label>Trade AI Setting</label>
     <pluralLabel>Trade AI Settings</pluralLabel>
     <visibility>Public</visibility>

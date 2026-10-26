@@ -86,6 +86,8 @@ public with sharing class CodeFollowUpService {
                 u.AI_Confidence__c = null;
                 u.AI_Suggested_Advisor__c = null;
                 u.AI_Request__c = null;
+                u.AI_Homework__c = null;
+                u.AI_Field_Suggestions__c = null;
                 u.Suggested_Resolution__c = null;
             }
             updates.add(u);

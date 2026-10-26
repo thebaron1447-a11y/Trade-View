@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Input_Tokens__c</fullName>
+    <description>Tokens sent to the model, as reported by the provider, including any read from or written to the prompt cache. Blank if the provider did not report usage.</description>
+    <inlineHelpText>How many tokens were sent to Claude.</inlineHelpText>
+    <label>Input Tokens</label>
+    <precision>9</precision>
+    <required>false</required>
+    <scale>0</scale>
+    <type>Number</type>
+    <unique>false</unique>
+</CustomField>

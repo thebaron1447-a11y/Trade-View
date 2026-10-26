@@ -1,0 +1,76 @@
+<template>
+  <template lwc:if={hasItems}>
+    <table
+      class="slds-table slds-table_cell-buffer slds-table_bordered queue-table"
+    >
+      <thead>
+        <tr>
+          <th scope="col">{firstLabel}</th>
+          <th scope="col">{typeLabel}</th>
+          <th scope="col">{lastLabel}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template for:each={rows} for:item="item">
+          <template lwc:if={item.groupLabel}>
+            <tr key={item.groupKey} class="group-row">
+              <th
+                colspan="3"
+                scope="colgroup"
+                class="slds-text-title_caps group-label"
+              >
+                {item.groupLabel}
+              </th>
+            </tr>
+          </template>
+          <tr key={item.key} class={item.rowClass}>
+            <td class="item-cell">
+              <button
+                class="queue-button"
+                data-key={item.key}
+                onclick={handleSelect}
+              >
+                <span class="slds-text-title_bold slds-show item-title"
+                  >{item.title}</span
+                >
+                <template lwc:if={item.subtitle}>
+                  <span
+                    class="slds-text-body_small slds-text-color_weak slds-show item-subtitle"
+                    >{item.subtitle}</span
+                  >
+                </template>
+                <template lwc:if={item.note}>
+                  <span class="slds-text-body_small slds-show item-note"
+                    >{item.note}</span
+                  >
+                </template>
+              </button>
+            </td>
+            <td class="issue-type">
+              <span class="slds-show type-text">{item.issueType}</span>
+              <template lwc:if={item.issueDetail}>
+                <span
+                  class="slds-text-body_small slds-text-color_weak slds-show issue-detail"
+                  >{item.issueDetail}</span
+                >
+              </template>
+              <template lwc:if={item.hasBadges}>
+                <span class="slds-show badges">
+                  <template for:each={item.badges} for:item="b">
+                    <span key={b.key} class={b.cls}>{b.label}</span>
+                  </template>
+                </span>
+              </template>
+            </td>
+            <td class="last-cell">{item.lastText}</td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </template>
+  <template lwc:else>
+    <p class="slds-text-color_weak slds-p-around_small empty-text">
+      {emptyText}
+    </p>
+  </template>
+</template>

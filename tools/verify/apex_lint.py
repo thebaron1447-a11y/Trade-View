@@ -120,5 +120,31 @@ for f in files:
             if base.endswith("_") or "__" in base:
                 problems.append(f"{f.split('/')[-1]}:{lineno} identifier `{ident}` is not valid Apex (trailing or double underscore)")
 
+# Reserved words cannot name a variable or parameter (the org rejects `Map<String, Object> system = ...` with
+# "Identifier name is reserved"). Checked on declarations only, outside strings and SOQL keywords (which are upper case).
+RESERVED = set("""abstract activate and any array as asc autonomous begin bigdecimal blob break bulk by byte case cast catch
+char class collect commit const continue convertcurrency decimal default delete desc do else end enum exception exit export
+extends false final finally float for from future global goto group having hint if implements import in inner insert
+instanceof interface into int join like limit list long loop map merge new not null nulls number object of on or outer
+override package parallel pragma private protected public retrieve return returning rollback savepoint search select set
+short sort stat static super switch synchronized system testmethod then this throw today tolabel tomorrow transaction trigger
+true try undelete update upsert using virtual webservice when where while yesterday""".split())
+DECL = re.compile(r"(?:^|[\s(,])[A-Z]\w*(?:<[^;=()]*?>)?(?:\[\])?\s+([a-z]\w*)\s*(?:=|;|,|\)|:)")
+for f in files:
+    for lineno, line in enumerate(open(f, encoding="utf-8-sig"), 1):
+        code = re.sub(r"'(?:\\.|[^'])*'", "''", line.split("//")[0])
+        if code.strip().startswith(("*", "/*")):
+            continue
+        for m in DECL.finditer(code):
+            if m.group(1) in RESERVED:
+                problems.append(f"{f.split('/')[-1]}:{lineno} `{m.group(1)}` is a reserved word in Apex and cannot name a variable")
+# SOQL rejects ORDER BY in a query that locks rows (FOR UPDATE); the local parser accepts it.
+for f in files:
+    text = open(f, encoding="utf-8-sig").read()
+    for m in re.finditer(r"\[\s*SELECT\b.*?\]", text, re.S | re.I):
+        q = m.group(0)
+        if re.search(r"\bFOR\s+UPDATE\b", q, re.I) and re.search(r"\bORDER\s+BY\b", q, re.I):
+            line = text[: m.start()].count("\n") + 1
+            problems.append(f"{f.split('/')[-1]}:{line} SOQL with FOR UPDATE cannot use ORDER BY")
 print("\n".join(problems) if problems else f"apex lint: no problems in {len(files)} files")
 sys.exit(1 if problems else 0)

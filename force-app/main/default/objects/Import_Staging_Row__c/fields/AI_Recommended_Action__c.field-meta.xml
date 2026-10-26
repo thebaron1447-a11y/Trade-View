@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>AI_Recommended_Action__c</fullName>
+    <description>The decision Claude recommends: Accept (with the firm and fund it suggests), Reject, or Hold (only the dealer can settle it; see AI Homework). Advisory only; a person always decides.</description>
+    <inlineHelpText>What Claude recommends doing with this row. You make the final decision.</inlineHelpText>
+    <label>AI Recommended Action</label>
+    <required>false</required>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Accept</fullName>
+                <default>false</default>
+                <label>Accept</label>
+            </value>
+            <value>
+                <fullName>Reject</fullName>
+                <default>false</default>
+                <label>Reject</label>
+            </value>
+            <value>
+                <fullName>Hold</fullName>
+                <default>false</default>
+                <label>Hold</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

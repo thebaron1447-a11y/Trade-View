@@ -7,11 +7,19 @@ import port
 
 # The items a suggestion request sent: what each may answer and from which keys.
 ITEMS = {
-    "R1": dict(asks={"firm"}, allowed={"firm": {"F1", "F2"}}),
-    "R2": dict(asks={"fund"}, allowed={"fund": {"P1", "P2", "P3"}}),
-    "R3": dict(asks={"advisor", "recommendation"}, allowed={"advisor": {"A1", "A2"}}),
+    "R1": dict(asks={"firm", "action"}, allowed={"firm": {"F1", "F2"}}),
+    "R2": dict(asks={"fund", "action"}, allowed={"fund": {"P1", "P2", "P3"}}),
+    "R3": dict(asks={"advisor", "action"}, allowed={"advisor": {"A1", "A2"}}),
     "U1": dict(asks={"advisor"}, allowed={"advisor": {"A3"}}),
 }
+
+def fa(field, value, conf="High", reason="Evidence."):
+    d = {"field": field, "value": value}
+    if conf is not ...:
+        d["confidence"] = conf
+    if reason is not ...:
+        d["reason"] = reason
+    return d
 
 def e(item, conf="High", expl="Evidence.", **kw):
     d = {"item": item}
@@ -28,23 +36,39 @@ def resp(entries, fence=False):
 
 LONG = "x" * 2500
 SUGGESTION_VECTORS = [
-    ("all valid in a code fence", resp([e("R1", firm="F2"), e("R2", fund="P1", conf="Medium"),
-                                         e("R3", advisor="A1", recommendation="Approve"), e("U1", advisor=None, conf="low", expl="Not in Salesforce yet.")], fence=True)),
-    ("invented firm key", resp([e("R1", firm="F9"), e("R2", fund="P3")])),
-    ("unknown and duplicate items", resp([e("R9", firm="F1"), e("R1", firm="F1"), e("R1", firm="F2")])),
-    ("bad confidence and lower case", resp([e("R1", firm="F1", conf="Sure"), e("R2", fund="P2", conf=" medium ")])),
-    ("missing or blank explanation", resp([e("R1", firm="F1", expl=...), e("R2", fund="P2", expl="   ")])),
-    ("unasked fields ignored", resp([e("R2", fund="P2", firm="F1", advisor="A9")])),
-    ("bad recommendation", resp([e("R3", recommendation="maybe")])),
-    ("recommendation not asked is ignored", resp([e("R1", firm="F1", recommendation="whatever")])),
+    ("all valid in a code fence", resp([
+        e("R1", headline="Kestrel Capital · Inc. or Ltd.?", fields=[fa("firm", "F2", reason="Ryan Chen works at the Calgary branch.")], action="Accept"),
+        e("R2", conf="Medium", fields=[fa("fund", "P1", conf=" medium ", reason="Fund A matches the Series A alias.")], action="hold",
+          homework="Ask Barder which series was bought on 25 Sep."),
+        e("R3", fields=[fa("advisor", "A1")], action="ACCEPT"),
+        e("U1", conf="low", expl="Not in Salesforce yet.", fields=[fa("advisor", None, conf="Low", reason="No advisor fits.")],
+          homework="Ask Barder who holds code 3390.")], fence=True)),
+    ("invented firm key", resp([e("R1", fields=[fa("firm", "F9")]), e("R2", fields=[fa("fund", "P3")])])),
+    ("unknown and duplicate items", resp([e("R9", fields=[fa("firm", "F1")]), e("R1", fields=[fa("firm", "F1")]), e("R1", fields=[fa("firm", "F2")])])),
+    ("bad overall confidence and lower case", resp([e("R1", conf="Sure", fields=[fa("firm", "F1")]), e("R2", conf=" medium ", fields=[fa("fund", "P2")])])),
+    ("missing or blank explanation", resp([e("R1", expl=..., fields=[fa("firm", "F1")]), e("R2", expl="   ", fields=[fa("fund", "P2")])])),
+    ("unasked fields ignored", resp([e("R2", fields=[fa("firm", "F1"), fa("advisor", "A9"), fa("fund", "P2"), fa("colour", "red")])])),
+    ("bad action", resp([e("R3", fields=[fa("advisor", "A2")], action="maybe")])),
+    ("action not asked is ignored", resp([e("U1", fields=[fa("advisor", "A3")], action="whatever")])),
+    ("accept without the answer it needs", resp([e("R1", fields=[fa("firm", None, reason="Either firm fits.")], action="accept"),
+                                                 e("R2", action="accept")])),
+    ("hold without an answer is fine", resp([e("R1", fields=[fa("firm", None, conf="Low", reason="Either firm fits.")], action="hold",
+                                              homework="Ask Kestrel which entity Ryan Chen trades under.")])),
+    ("field confidence or reason missing", resp([e("R1", fields=[fa("firm", "F1", conf=...)]), e("R2", fields=[fa("fund", "P1", reason="  ")]),
+                                                 e("R3", fields=[fa("advisor", "A1", conf="Sure")])])),
+    ("same field twice", resp([e("R1", fields=[fa("firm", "F1"), fa("firm", "F2")])])),
+    ("fields not a list", resp([e("R1", fields={"field": "firm"}), e("R2", fields=["P1"])])),
+    ("field value given as a number", resp([e("R1", fields=[fa("firm", 3)])])),
+    ("no fields means no suggested answer", resp([e("R1"), e("U1", fields=[])])),
+    ("headline and homework must be text", resp([e("R1", fields=[fa("firm", "F1")], headline=5), e("R2", fields=[fa("fund", "P1")], homework=["x"])])),
+    ("blank headline and homework become null", resp([e("R1", fields=[fa("firm", "F1")], headline="  ", homework="")])),
+    ("long text is shortened", resp([e("U1", expl=LONG, fields=[fa("advisor", "A3", reason=LONG)], headline=LONG, homework=LONG)])),
     ("no suggestions key", '{"answer": []}'),
     ("suggestions is not a list", '{"suggestions": {"item": "R1"}}'),
-    ("entry is not an object", resp(["R1", e("R2", fund="P1")])),
+    ("entry is not an object", resp(["R1", e("R2", fields=[fa("fund", "P1")])])),
     ("numeric and null item", resp([{"item": 5, "confidence": "High", "explanation": "x"}, {"item": None}])),
-    ("firm given as a number", resp([e("R1", firm=3)])),
-    ("long explanation is shortened", resp([e("U1", advisor="A3", expl=LONG)])),
-    ("confidence not text", resp([e("R1", firm="F1", conf=True)])),
-    ("prose around the JSON", "Here is my answer:\n" + resp([e("R1", firm="F1")]) + "\nLet me know if you need more."),
+    ("confidence not text", resp([e("R1", conf=True, fields=[fa("firm", "F1")])])),
+    ("prose around the JSON", "Here is my answer:\n" + resp([e("R1", fields=[fa("firm", "F1")])]) + "\nLet me know if you need more."),
 ]
 PARSE_VECTORS = [
     ("no JSON", "I cannot help with that.", "The response contains no JSON object."),
@@ -88,17 +112,31 @@ for name, text in SUGGESTION_VECTORS:
     results.append((name, text, usable, by_item, invalid, sorted(problems)))
 r = {n: (u, b, i, p) for n, _, u, b, i, p in results}
 # Hand-verified expectations (independent of the port's logic) for the cases that matter most.
-check("valid usable", r["all valid in a code fence"][0], True)
-check("valid items", sorted(r["all valid in a code fence"][1]), ["R1", "R2", "R3", "U1"])
-check("valid recommendation", r["all valid in a code fence"][1]["R3"]["recommendation"], "approve")
-check("valid low", r["all valid in a code fence"][1]["U1"]["confidence"], "Low")
+v0 = r["all valid in a code fence"]
+check("valid usable", v0[0], True)
+check("valid items", sorted(v0[1]), ["R1", "R2", "R3", "U1"])
+check("valid firm from fields", v0[1]["R1"]["firm"], "F2")
+check("valid action lower-cased", (v0[1]["R1"]["action"], v0[1]["R3"]["action"]), ("accept", "accept"))
+check("valid hold with homework", (v0[1]["R2"]["action"], v0[1]["R2"]["homework"]), ("hold", "Ask Barder which series was bought on 25 Sep."))
+check("valid field confidence", v0[1]["R2"]["fields"][0]["confidence"], "Medium")
+check("valid null field kept", v0[1]["U1"]["fields"], [dict(field="advisor", value=None, confidence="Low", reason="No advisor fits.")])
+check("valid headline", v0[1]["R1"]["headline"], "Kestrel Capital · Inc. or Ltd.?")
+check("valid low", v0[1]["U1"]["confidence"], "Low")
 check("invented key invalid", r["invented firm key"][2], {"R1"})
 check("invented key other kept", list(r["invented firm key"][1]), ["R2"])
 check("duplicate keeps first", r["unknown and duplicate items"][1]["R1"]["firm"], "F1")
-check("unasked ignored", (r["unasked fields ignored"][1]["R2"]["firm"], r["unasked fields ignored"][1]["R2"]["advisor"]), (None, None))
+check("unasked ignored", [f["field"] for f in r["unasked fields ignored"][1]["R2"]["fields"]], ["fund"])
+check("accept needs answers", r["accept without the answer it needs"][3],
+      ["Item R1: action accept needs a firm.", "Item R2: action accept needs a fund."])
+check("hold without answer", r["hold without an answer is fine"][1]["R1"]["action"], "hold")
+check("field problems", r["field confidence or reason missing"][3],
+      ["Item R1: firm confidence must be High, Medium or Low.", "Item R2: fund reason is required.", "Item R3: advisor confidence must be High, Medium or Low."])
+check("no fields", (r["no fields means no suggested answer"][1]["R1"]["firm"], r["no fields means no suggested answer"][1]["R1"]["fields"]), (None, []))
+check("blank to null", (r["blank headline and homework become null"][1]["R1"]["headline"], r["blank headline and homework become null"][1]["R1"]["homework"]), (None, None))
+check("long shortened", (len(r["long text is shortened"][1]["U1"]["explanation"]), len(r["long text is shortened"][1]["U1"]["headline"]),
+                         len(r["long text is shortened"][1]["U1"]["homework"]), len(r["long text is shortened"][1]["U1"]["fields"][0]["reason"])), (2000, 100, 1000, 500))
 check("no list unusable", r["no suggestions key"][0], False)
 check("numeric item text", r["numeric and null item"][3], ["Entry 1 refers to an unknown item: 5.", "Entry 2 refers to an unknown item: null."])
-check("long explanation", len(r["long explanation is shortened"][1]["U1"]["explanation"]), 2000)
 check("prose ok", sorted(r["prose around the JSON"][1]), ["R1"])
 
 parse_results = []

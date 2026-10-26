@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>On_Hold__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>Checked when a reviewer has parked the row until the dealer answers. On-hold rows show on the On Hold tab instead of Needs Decision. Cleared when the row is accepted, rejected or released.</description>
+    <inlineHelpText>Checked while this row waits for information from the dealer.</inlineHelpText>
+    <label>On Hold</label>
+    <type>Checkbox</type>
+</CustomField>

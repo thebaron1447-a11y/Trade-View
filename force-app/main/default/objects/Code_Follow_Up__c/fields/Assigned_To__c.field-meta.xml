@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Assigned_To__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The person who has taken this follow-up in the Trade Review app, so two people never chase the same dealer. Set and cleared from the app; only the assignee can unassign. Separate from Owner, which controls record access.</description>
+    <inlineHelpText>Who is working on this follow-up. Use Assign to me in Trade Review so others know it is taken.</inlineHelpText>
+    <label>Assigned To</label>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>Assigned Follow-Ups</relationshipLabel>
+    <relationshipName>Assigned_Follow_Ups</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>
