@@ -23,7 +23,12 @@ private class TradeMatcherTest {
         };
         Rep_Code__c code = new Rep_Code__c(Name = '100', Firm__c = alder.Id);
         insert code;
-        insert new Rep_Code_Assignment__c(Rep_Code__c = code.Id, Advisor__c = zoe.Id, Allocation_Percent__c = 100, Effective_Start_Date__c = Date.newInstance(2026, 1, 1));
+        insert new Rep_Code_Assignment__c(
+            Rep_Code__c = code.Id,
+            Advisor__c = zoe.Id,
+            Allocation_Percent__c = 100,
+            Effective_Start_Date__c = Date.newInstance(2026, 1, 1)
+        );
     }
 
     private static Import_Staging_Row__c row(String firm, String advisor, String fund, Date d, String rowType) {
@@ -36,6 +41,14 @@ private class TradeMatcherTest {
             Row_Type__c = rowType,
             Amount__c = 1000
         );
+    }
+
+    private static Import_Staging_Row__c batchRow(Id batchId, Integer n, Import_Staging_Row__c r) {
+        r.Import_Batch__c = batchId;
+        r.Row_Number__c = n;
+        r.Match_Status__c = 'Pending';
+        r.Transaction_Type__c = 'Purchase';
+        return r;
     }
 
     private static TradeMatcher.Outcome match(Import_Staging_Row__c r) {
@@ -129,7 +142,12 @@ private class TradeMatcherTest {
         TradeMatcher.Outcome o = new TradeMatcher.Outcome();
         o.status = status;
         o.flags.addAll(flags.split(';'));
-        Import_Staging_Row__c r = new Import_Staging_Row__c(Row_Type__c = rowType, Source_Firm_Name__c = firm, Source_Fund_Name__c = fund, Source_Rep_Code__c = code);
+        Import_Staging_Row__c r = new Import_Staging_Row__c(
+            Row_Type__c = rowType,
+            Source_Firm_Name__c = firm,
+            Source_Fund_Name__c = fund,
+            Source_Rep_Code__c = code
+        );
         return TradeMatcher.issueKey(dealer, r, o);
     }
 
@@ -137,8 +155,16 @@ private class TradeMatcherTest {
     static void rowsWithTheSameProblemShareAnIssueKey() {
         String a = keyOf('BARDER', 'Trade', 'Needs Review', 'FUND_UNRESOLVED', 'Barder & Company', 'ETF Wealth World Fund A', '457');
         Assert.isNotNull(a, 'a review row with a fund spelling problem has a key');
-        Assert.areEqual(a, keyOf('BARDER', 'Trade', 'Needs Review', 'FUND_UNRESOLVED', 'Barder & Co', '  etf wealth world fund a ', '2210'), 'same spelling, any code or firm spelling: same issue');
-        Assert.areNotEqual(a, keyOf('NORTHGATE', 'Trade', 'Needs Review', 'FUND_UNRESOLVED', 'Barder & Company', 'ETF Wealth World Fund A', '457'), 'another dealer is another issue');
+        Assert.areEqual(
+            a,
+            keyOf('BARDER', 'Trade', 'Needs Review', 'FUND_UNRESOLVED', 'Barder & Co', '  etf wealth world fund a ', '2210'),
+            'same spelling, any code or firm spelling: same issue'
+        );
+        Assert.areNotEqual(
+            a,
+            keyOf('NORTHGATE', 'Trade', 'Needs Review', 'FUND_UNRESOLVED', 'Barder & Company', 'ETF Wealth World Fund A', '457'),
+            'another dealer is another issue'
+        );
         Assert.areNotEqual(
             keyOf('KESTREL', 'Trade', 'Needs Review', 'FIRM_AMBIGUOUS', 'Kestrel Capital', 'Wealth World ETF', '1001'),
             keyOf('KESTREL', 'Trade', 'Needs Review', 'FIRM_AMBIGUOUS', 'Kestrel Capital', 'Wealth World ETF', '2002'),
@@ -154,10 +180,49 @@ private class TradeMatcherTest {
             a,
             'informational flags do not split a group'
         );
-        Assert.isNull(keyOf('BARDER', 'Trade', 'Needs Review', 'FUND_UNRESOLVED;DATE_BEFORE_CODE_START', 'Barder', 'X', '457'), 'code issues are decided one by one');
+        Assert.isNull(
+            keyOf('BARDER', 'Trade', 'Needs Review', 'FUND_UNRESOLVED;DATE_BEFORE_CODE_START', 'Barder', 'X', '457'),
+            'code issues are decided one by one'
+        );
         Assert.isNull(keyOf('BARDER', 'Code Roster', 'Needs Review', 'ROSTER_NEW_CODE', 'Barder', null, '3390'), 'roster rows are decided one by one');
         Assert.isNull(keyOf('BARDER', 'Trade', 'Matched', 'FUND_FUZZY', 'Barder', 'X', '457'), 'only rows waiting for review');
         String longKey = keyOf('BARDER', 'Trade', 'Needs Review', 'FUND_UNRESOLVED', 'Barder', 'Fund '.repeat(80), '457');
         Assert.isTrue(longKey.startsWith('H:') && longKey.length() == 66, 'a long key is hashed: ' + longKey);
+    }
+
+    @IsTest
+    static void aMatchedTradeConfirmsItsCodeIsInUse() {
+        Rep_Code_Assignment__c zoe = [SELECT Id, Last_Confirmed_Trade_Date__c FROM Rep_Code_Assignment__c WHERE Rep_Code__r.Name = '100'];
+        Assert.isNull(zoe.Last_Confirmed_Trade_Date__c, 'nothing confirmed yet');
+        Import_Batch__c batch = new Import_Batch__c(Source_Firm__c = 'ALDER', File_Hash__c = 'confirm-1', Status__c = 'Staged');
+        insert batch;
+        insert new List<Import_Staging_Row__c>{
+            batchRow(batch.Id, 1, row('Alder Securities Inc.', 'Zoe Park', 'Global Bond Fund - Series F', Date.newInstance(2026, 9, 10), 'Trade')),
+            batchRow(batch.Id, 2, row('Alder Securities Inc.', 'Zoe Park', 'Global Bond Fund - Series F', Date.newInstance(2026, 9, 20), 'Trade')),
+            batchRow(batch.Id, 3, row('Alder Securities Inc.', 'Zoe Park', 'Unknown Fund', Date.newInstance(2026, 9, 30), 'Trade'))
+        };
+
+        TradeMatcher.run(new Set<Id>{ batch.Id });
+
+        Assert.areEqual(
+            Date.newInstance(2026, 9, 20),
+            [SELECT Last_Confirmed_Trade_Date__c FROM Rep_Code_Assignment__c WHERE Id = :zoe.Id].Last_Confirmed_Trade_Date__c,
+            'the latest matched trade, not the row still in review'
+        );
+    }
+
+    @IsTest
+    static void flagsAreNeverCutInHalf() {
+        List<String> flags = new List<String>();
+        for (Integer i = 0; i < 30; i++) {
+            flags.add('FLAG_NUMBER_' + String.valueOf(i).leftPad(2, '0'));
+        }
+        String joined = TradeMatcher.joinFlags(flags);
+        Assert.isTrue(joined.length() <= 255, 'fits the field: ' + joined.length());
+        for (String f : joined.split(';')) {
+            Assert.isTrue(flags.contains(f), 'whole flag: ' + f);
+        }
+        Assert.areEqual('FLAG_NUMBER_00', joined.split(';')[0], 'kept in order');
+        Assert.isNull(TradeMatcher.joinFlags(new List<String>()), 'no flags, no value');
     }
 }

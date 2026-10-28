@@ -3,21 +3,6 @@
   border: 1px solid transparent;
 }
 
-.queue-item_selected {
-  background: var(--slds-g-color-brand-base-95, #eef4ff);
-  border-color: var(--slds-g-color-brand-base-60, #0176d3);
-}
-
-.queue-button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
-
 .suggestion,
 .rationale {
   white-space: pre-wrap;
@@ -27,26 +12,8 @@
   white-space: nowrap;
 }
 
-.code-table td {
-  vertical-align: top;
-}
-
-.code-row_selected td {
-  background: var(--slds-g-color-brand-base-95, #eef4ff);
-}
-
-.issue-type {
-  white-space: normal;
-}
-
 .choice-label {
   margin-right: 0.25rem;
-}
-
-.firm-chip {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 0.25rem;
 }
 
 .field-table td {

@@ -52,6 +52,7 @@ WANT_4B2 = {
 
 
 WANT_4B3 = {"Import_Staging_Row__c": ["Issue_Key__c"]}
+WANT_4B4 = {"Import_Staging_Row__c": ["Advisor_Override__c"]}
 
 
 def g(r, t):
@@ -91,7 +92,7 @@ def type_text(r):
 
 
 out = {}
-for obj, names in list(WANT.items()) + [(o + "@3B", n) for o, n in WANT_3B.items()] + [(o + "@4A", n) for o, n in WANT_4A.items()] + [(o + "@4B", n) for o, n in WANT_4B.items()] + [(o + "@4B2", n) for o, n in WANT_4B2.items()] + [(o + "@4B3", n) for o, n in WANT_4B3.items()]:
+for obj, names in list(WANT.items()) + [(o + "@3B", n) for o, n in WANT_3B.items()] + [(o + "@4A", n) for o, n in WANT_4A.items()] + [(o + "@4B", n) for o, n in WANT_4B.items()] + [(o + "@4B2", n) for o, n in WANT_4B2.items()] + [(o + "@4B3", n) for o, n in WANT_4B3.items()] + [(o + "@4B4", n) for o, n in WANT_4B4.items()]:
     out[obj] = []
     for n in names:
         obj_dir = obj.split("@")[0]

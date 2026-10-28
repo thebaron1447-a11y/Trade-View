@@ -4,6 +4,7 @@
  * each is recorded in Validation_Errors__c so no row is silently dropped.
  */
 public inherited sharing class TradeRowNormalizer {
+    private static final Decimal MAX_AMOUNT = Decimal.valueOf('10000000000000000');
     public static final String PURCHASE = 'Purchase';
     public static final String REDEMPTION = 'Redemption';
     public static final String ROW_TRADE = 'Trade';
@@ -22,10 +23,23 @@ public inherited sharing class TradeRowNormalizer {
 
     @TestVisible
     private static final Map<String, String> TYPE_SYNONYMS = new Map<String, String>{
-        'BUY' => PURCHASE, 'B' => PURCHASE, 'P' => PURCHASE, 'PURCHASE' => PURCHASE, 'PURCH' => PURCHASE,
-        'PUR' => PURCHASE, 'SUBSCRIPTION' => PURCHASE, 'SUB' => PURCHASE, 'ACHAT' => PURCHASE,
-        'SELL' => REDEMPTION, 'S' => REDEMPTION, 'R' => REDEMPTION, 'REDEMPTION' => REDEMPTION,
-        'RED' => REDEMPTION, 'REDEEM' => REDEMPTION, 'REDEMP' => REDEMPTION, 'VENTE' => REDEMPTION,
+        'BUY' => PURCHASE,
+        'B' => PURCHASE,
+        'P' => PURCHASE,
+        'PURCHASE' => PURCHASE,
+        'PURCH' => PURCHASE,
+        'PUR' => PURCHASE,
+        'SUBSCRIPTION' => PURCHASE,
+        'SUB' => PURCHASE,
+        'ACHAT' => PURCHASE,
+        'SELL' => REDEMPTION,
+        'S' => REDEMPTION,
+        'R' => REDEMPTION,
+        'REDEMPTION' => REDEMPTION,
+        'RED' => REDEMPTION,
+        'REDEEM' => REDEMPTION,
+        'REDEMP' => REDEMPTION,
+        'VENTE' => REDEMPTION,
         'RACHAT' => REDEMPTION
     };
 
@@ -76,13 +90,7 @@ public inherited sharing class TradeRowNormalizer {
         return cfg.aumIndicators.contains(indicatorKey(marker)) ? ROW_AUM : ROW_TRADE;
     }
 
-    public static Import_Staging_Row__c normalize(
-        List<String> headers,
-        List<String> values,
-        List<String> canonicalByColumn,
-        Config cfg,
-        Integer rowNumber
-    ) {
+    public static Import_Staging_Row__c normalize(List<String> headers, List<String> values, List<String> canonicalByColumn, Config cfg, Integer rowNumber) {
         List<String> errors = new List<String>();
         Import_Staging_Row__c row = new Import_Staging_Row__c(Row_Number__c = rowNumber);
         row.Raw_Data__c = rawJson(headers, values).abbreviate(32768);
@@ -215,17 +223,16 @@ public inherited sharing class TradeRowNormalizer {
             return null;
         }
         Decimal amount = Decimal.valueOf(s).setScale(2, System.RoundingMode.HALF_UP);
+        // Amount__c is Number(18,2): 16 digits before the point. A bigger value would fail the whole file's insert.
+        if (amount.abs() >= MAX_AMOUNT) {
+            errors.add('Amount "' + value + '" is too large.');
+            return null;
+        }
         return negative ? -amount : amount;
     }
 
     @TestVisible
-    private static void applyAmountAndDirection(
-        Import_Staging_Row__c row,
-        String rawAmount,
-        String rawType,
-        Config cfg,
-        List<String> errors
-    ) {
+    private static void applyAmountAndDirection(Import_Staging_Row__c row, String rawAmount, String rawType, Config cfg, List<String> errors) {
         if (String.isBlank(rawAmount)) {
             errors.add('Amount is missing.');
             return;

@@ -50,8 +50,16 @@ private class ImportBatchProcessorTest {
 
     private static List<Import_Staging_Row__c> rowsFor(Id batchId) {
         return [
-            SELECT Row_Number__c, Source_Rep_Code__c, Source_Firm_Name__c, Source_Fund_Name__c, Trade_Date__c,
-                Transaction_Type__c, Amount__c, Has_Errors__c, Validation_Errors__c
+            SELECT
+                Row_Number__c,
+                Source_Rep_Code__c,
+                Source_Firm_Name__c,
+                Source_Fund_Name__c,
+                Trade_Date__c,
+                Transaction_Type__c,
+                Amount__c,
+                Has_Errors__c,
+                Validation_Errors__c
             FROM Import_Staging_Row__c
             WHERE Import_Batch__c = :batchId
             ORDER BY Row_Number__c
@@ -69,11 +77,13 @@ private class ImportBatchProcessorTest {
         Mapping_Profile__c profile = barderProfile(firm.Id);
         Import_Batch__c batch = runAsIntegration(
             integration,
-            csv(new List<String>{
-                '09/13/2026,0457,Julia Morales,Barder and Co,Wealth World Fund A,"$400,000.00"',
-                '09/14/2026,2210,Marcus Bell,,Wealth World ETF,"-$150,000.00"',
-                '13/09/2026,2210,Marcus Bell,Barder and C.,Wealth World ETF,"$5,000.00"'
-            })
+            csv(
+                new List<String>{
+                    '09/13/2026,0457,Julia Morales,Barder and Co,Wealth World Fund A,"$400,000.00"',
+                    '09/14/2026,2210,Marcus Bell,,Wealth World ETF,"-$150,000.00"',
+                    '13/09/2026,2210,Marcus Bell,Barder and C.,Wealth World ETF,"$5,000.00"'
+                }
+            )
         );
         Assert.areEqual(ImportBatchProcessor.STATUS_STAGED, batch.Status__c, 'error message: ' + batch.Error_Message__c);
         Assert.areEqual(3, batch.Row_Count__c.intValue(), 'row count');
@@ -104,7 +114,12 @@ private class ImportBatchProcessorTest {
     @IsTest
     static void incompleteProfileStopsAtMappingReviewWithReasons() {
         Mapping_Profile__c p = TestDataFactory.profile(
-            'BARDER', HEADERS, new Map<String, String>{ 'Trade Dt' => 'tradeDate' }, 'MM/DD/YYYY', 'Period', TestDataFactory.SIGNED
+            'BARDER',
+            HEADERS,
+            new Map<String, String>{ 'Trade Dt' => 'tradeDate' },
+            'MM/DD/YYYY',
+            'Period',
+            TestDataFactory.SIGNED
         );
         insert p;
         Import_Batch__c batch = runAsIntegration(csv(new List<String>{ '09/13/2026,457,Julia,Barder,Fund,100' }));
@@ -156,6 +171,46 @@ private class ImportBatchProcessorTest {
         Test.stopTest();
         Assert.isTrue(rowsFor(batch.Id).isEmpty(), 'a re-queued job must not stage the file twice');
         Assert.areEqual(ImportBatchProcessor.STATUS_STAGED, [SELECT Status__c FROM Import_Batch__c WHERE Id = :batch.Id].Status__c, 'unchanged');
+    }
+
+    @IsTest
+    static void aBatchAlreadyBeingProcessedIsLeftAlone() {
+        barderProfile(TestDataFactory.firm('Barder & Company').Id);
+        Import_Batch__c batch = TestDataFactory.receivedBatch('BARDER', csv(new List<String>{ '09/13/2026,457,Julia,Barder,Fund,100' }));
+        batch.Status__c = ImportBatchProcessor.STATUS_PROCESSING;
+        update batch;
+        Test.startTest();
+        System.enqueueJob(new ImportBatchProcessor(batch.Id));
+        Test.stopTest();
+        Assert.isTrue(rowsFor(batch.Id).isEmpty(), 'a second job for the same batch stages nothing');
+        Assert.areEqual(ImportBatchProcessor.STATUS_PROCESSING, [SELECT Status__c FROM Import_Batch__c WHERE Id = :batch.Id].Status__c, 'unchanged');
+    }
+
+    @IsTest
+    static void anotherDealerDoesNotInheritASingleFirmProfile() {
+        barderProfile(TestDataFactory.firm('Barder & Company').Id);
+        Import_Batch__c batch = TestDataFactory.receivedBatch('NORTHGATE', csv(new List<String>{ '09/13/2026,8800,Aisha Khan,,Fund,100' }));
+        Test.startTest();
+        System.enqueueJob(new ImportBatchProcessor(batch.Id));
+        Test.stopTest();
+        Import_Batch__c done = [SELECT Status__c, Mapping_Profile__c FROM Import_Batch__c WHERE Id = :batch.Id];
+        Assert.areEqual(ImportBatchProcessor.STATUS_MAPPING_REVIEW, done.Status__c, 'same headers, another dealer: a new layout for that dealer');
+        Assert.isNull(done.Mapping_Profile__c, 'Barder\'s profile (and its firm) is not used');
+        Assert.isTrue(rowsFor(batch.Id).isEmpty(), 'nothing staged under the wrong firm');
+    }
+
+    @IsTest
+    static void anAmountTooLargeForTheFieldIsARowErrorNotAFailedFile() {
+        barderProfile(TestDataFactory.firm('Barder & Company').Id);
+        Import_Batch__c done = runAsIntegration(
+            csv(new List<String>{ '09/13/2026,457,Julia,Barder,Fund,100', '09/13/2026,457,Julia,Barder,Fund,12345678901234567' })
+        );
+        Assert.areEqual(ImportBatchProcessor.STATUS_STAGED, done.Status__c, 'the file is staged: ' + done.Error_Message__c);
+        List<Import_Staging_Row__c> rows = rowsFor(done.Id);
+        Assert.areEqual(2, rows.size(), 'both rows staged');
+        Assert.isFalse(rows[0].Has_Errors__c, 'the normal row is fine');
+        Assert.isTrue(rows[1].Has_Errors__c, 'the oversized amount is a row error');
+        Assert.isTrue(rows[1].Validation_Errors__c.contains('too large'), 'and says why: ' + rows[1].Validation_Errors__c);
     }
 
     @IsTest

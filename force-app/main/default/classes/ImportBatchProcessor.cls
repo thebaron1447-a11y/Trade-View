@@ -13,6 +13,7 @@ public with sharing class ImportBatchProcessor implements Queueable {
     }
 
     public static final String STATUS_RECEIVED = 'Received';
+    public static final String STATUS_PROCESSING = 'Processing';
     public static final String STATUS_MAPPING_REVIEW = 'Mapping Review';
     public static final String STATUS_STAGED = 'Staged';
     public static final String STATUS_FAILED = 'Failed';
@@ -28,18 +29,22 @@ public with sharing class ImportBatchProcessor implements Queueable {
     }
 
     public void execute(QueueableContext context) {
+        // The batch is locked and moved to Processing before anything else, so a second job for the same batch
+        // (a mapping activated twice, a manual re-queue) waits for this one and then finds it no longer Received.
         List<Import_Batch__c> batches = [
             SELECT Id, Status__c, Source_Firm__c
             FROM Import_Batch__c
             WHERE Id = :batchId
             WITH USER_MODE
             LIMIT 1
+            FOR UPDATE
         ];
-        // Only Received batches are processed, so a re-queued job can never stage a file twice.
         if (batches.isEmpty() || batches[0].Status__c != STATUS_RECEIVED) {
             return;
         }
         Import_Batch__c batch = batches[0];
+        update as user new Import_Batch__c(Id = batch.Id, Status__c = STATUS_PROCESSING);
+        batch.Status__c = STATUS_PROCESSING;
         Savepoint sp = Database.setSavepoint();
         try {
             process(batch);

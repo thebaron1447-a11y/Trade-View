@@ -8,13 +8,21 @@ private class CsvParserTest {
         assertRows('quoted comma', CsvParser.parse('"x, y",z\n', ','), new List<List<String>>{ new List<String>{ 'x, y', 'z' } });
         assertRows('escaped quote', CsvParser.parse('"he said ""hi""",2', ','), new List<List<String>>{ new List<String>{ 'he said "hi"', '2' } });
         assertRows('newline in quotes', CsvParser.parse('"line1\nline2",3', ','), new List<List<String>>{ new List<String>{ 'line1\nline2', '3' } });
-        assertRows('bom', CsvParser.parse(String.fromCharArray(new List<Integer>{ 65279 }) + 'a,b', ','), new List<List<String>>{ new List<String>{ 'a', 'b' } });
-        assertRows('blank lines skipped', CsvParser.parse('a,b\n\n1,2\n,\n', ','), new List<List<String>>{ new List<String>{ 'a', 'b' }, new List<String>{ '1', '2' } });
+        assertRows(
+            'bom',
+            CsvParser.parse(String.fromCharArray(new List<Integer>{ 65279 }) + 'a,b', ','),
+            new List<List<String>>{ new List<String>{ 'a', 'b' } }
+        );
+        assertRows(
+            'blank lines skipped',
+            CsvParser.parse('a,b\n\n1,2\n,\n', ','),
+            new List<List<String>>{ new List<String>{ 'a', 'b' }, new List<String>{ '1', '2' } }
+        );
         assertRows('trailing delimiter', CsvParser.parse('a,b,\n', ','), new List<List<String>>{ new List<String>{ 'a', 'b', '' } });
         assertRows('semicolon', CsvParser.parse('a;b\n1,5;2', ';'), new List<List<String>>{ new List<String>{ 'a', 'b' }, new List<String>{ '1,5', '2' } });
         assertRows('tab', CsvParser.parse('a\tb\n1\t2', '\t'), new List<List<String>>{ new List<String>{ 'a', 'b' }, new List<String>{ '1', '2' } });
         assertRows('space delimiter', CsvParser.parse('a b\n1 2', ' '), new List<List<String>>{ new List<String>{ 'a', 'b' }, new List<String>{ '1', '2' } });
-        assertRows('empty', CsvParser.parse('', ','), new List<List<String>>{  });
+        assertRows('empty', CsvParser.parse('', ','), new List<List<String>>{});
     }
 
     @IsTest

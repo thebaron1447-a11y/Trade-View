@@ -140,6 +140,10 @@
             </layoutItems>
             <layoutItems>
                 <behavior>Edit</behavior>
+                <field>Advisor_Override__c</field>
+            </layoutItems>
+            <layoutItems>
+                <behavior>Edit</behavior>
                 <field>Remember_Choice__c</field>
             </layoutItems>
             <layoutItems>

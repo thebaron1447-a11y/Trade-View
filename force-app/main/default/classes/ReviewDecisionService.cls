@@ -43,7 +43,9 @@ public with sharing class ReviewDecisionService {
                     row.Credited_Advisor__c = row.AI_Suggested_Advisor__c;
                 }
                 if (row.Credited_Advisor__c == null && flags.contains('ADVISOR_AMBIGUOUS')) {
-                    row.Credited_Advisor__c.addError('More than one advisor could be "' + row.Source_Advisor_Name__c + '". Choose the Credited Advisor before approving.');
+                    row.Credited_Advisor__c.addError(
+                        'More than one advisor could be "' + row.Source_Advisor_Name__c + '". Choose the Credited Advisor before approving.'
+                    );
                     continue;
                 }
                 // Applied in the after-update step; any failure there rolls this back.
@@ -53,6 +55,17 @@ public with sharing class ReviewDecisionService {
                 row.Match_Status__c = TradeMatcher.MATCHED;
                 row.Match_Method__c = 'Reviewer';
                 continue;
+            }
+            if (flags.contains('ADVISOR_AMBIGUOUS')) {
+                if (row.Advisor_Override__c == null) {
+                    row.Advisor_Override__c = row.AI_Suggested_Advisor__c;
+                }
+                if (row.Advisor_Override__c == null) {
+                    row.Advisor_Override__c.addError(
+                        'More than one team member could be "' + row.Source_Advisor_Name__c + '". Choose the Advisor Override before accepting.'
+                    );
+                    continue;
+                }
             }
             Boolean needsFund = !flagsIn(flags, ClaudeSuggestionService.FUND_FLAGS).isEmpty();
             if (needsFund && row.Fund_Override__c == null) {
@@ -123,11 +136,17 @@ public with sharing class ReviewDecisionService {
             Set<String> flags = ClaudeSuggestionService.flagSet(row.Match_Flags__c);
             String firmKey = NameNormalizer.firmKey(row.Source_Firm_Name__c);
             if (flags.contains('FIRM_UNRESOLVED') && firmKey != null && row.Firm_Override__c != null) {
-                firmAliases.put(firmKey, new Firm_Alias__c(Name = row.Source_Firm_Name__c.left(80), Normalized_Key__c = firmKey, Firm__c = row.Firm_Override__c));
+                firmAliases.put(
+                    firmKey,
+                    new Firm_Alias__c(Name = row.Source_Firm_Name__c.left(80), Normalized_Key__c = firmKey, Firm__c = row.Firm_Override__c)
+                );
             }
             String fundKey = NameNormalizer.firmKey(row.Source_Fund_Name__c);
             if (flags.contains('FUND_UNRESOLVED') && fundKey != null && row.Fund_Override__c != null) {
-                fundAliases.put(fundKey, new Fund_Alias__c(Name = row.Source_Fund_Name__c.left(80), Normalized_Key__c = fundKey, Fund__c = row.Fund_Override__c));
+                fundAliases.put(
+                    fundKey,
+                    new Fund_Alias__c(Name = row.Source_Fund_Name__c.left(80), Normalized_Key__c = fundKey, Fund__c = row.Fund_Override__c)
+                );
             }
         }
         if (!firmAliases.isEmpty()) {

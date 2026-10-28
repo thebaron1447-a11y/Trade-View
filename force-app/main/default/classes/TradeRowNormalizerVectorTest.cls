@@ -53,7 +53,10 @@ private class TradeRowNormalizerVectorTest {
             new List<String>{ '-3 000,5', 'Comma', '-3000.50' },
             new List<String>{ 'abc', 'Period', null },
             new List<String>{ '1,2,3.4.5', 'Period', null },
-            new List<String>{ '$', 'Period', null }
+            new List<String>{ '$', 'Period', null },
+            new List<String>{ '12,345,678,901,234,567.00', 'Period', null },
+            new List<String>{ '10,000,000,000,000,000.00', 'Period', null },
+            new List<String>{ '9,999,999,999,999,999.99', 'Period', '9999999999999999.99' }
         };
         for (List<String> c : cases) {
             List<String> errors = new List<String>();
@@ -102,7 +105,15 @@ private class TradeRowNormalizerVectorTest {
 
     @IsTest
     static void fingerprintsMatchPython() {
-        Assert.areEqual('94c008e98d8013da010d83d5822a31969bfa7e3d315b0a9240394a2c9ccaf7df', MappingService.fingerprint(new List<String>{ 'Trade Dt', 'Dealer Rep #', 'Gross Amt' }), 'fingerprint matches Python sha256');
-        Assert.areEqual('b6f990782ebb52d28b0f7abeaac1f5e92a2fd4bebab8e5e9d0724d4a7973bca6', MappingService.fingerprint(new List<String>{ '  Date de transaction ', 'Code représentant', 'MONTANT' }), 'fingerprint matches Python sha256');
+        Assert.areEqual(
+            '94c008e98d8013da010d83d5822a31969bfa7e3d315b0a9240394a2c9ccaf7df',
+            MappingService.fingerprint(new List<String>{ 'Trade Dt', 'Dealer Rep #', 'Gross Amt' }),
+            'fingerprint matches Python sha256'
+        );
+        Assert.areEqual(
+            'b6f990782ebb52d28b0f7abeaac1f5e92a2fd4bebab8e5e9d0724d4a7973bca6',
+            MappingService.fingerprint(new List<String>{ '  Date de transaction ', 'Code représentant', 'MONTANT' }),
+            'fingerprint matches Python sha256'
+        );
     }
 }

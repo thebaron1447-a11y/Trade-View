@@ -47,14 +47,21 @@ private class MappingProposalTest {
         Assert.isNotNull(draft, 'a draft was proposed');
         Assert.isTrue(fake.prompts[0].contains('Representative'), 'headers sent');
         Assert.isTrue(fake.prompts[0].contains('Megan Chen'), 'sample rows sent');
-        draft = [SELECT Status__c, Source_Firm__c, Header_Fingerprint__c, AI_Rationale__c, Proposed_From_Batch__c, Date_Format__c, Feed_Type__c FROM Mapping_Profile__c WHERE Id = :draft.Id];
+        draft = [
+            SELECT Status__c, Source_Firm__c, Header_Fingerprint__c, AI_Rationale__c, Proposed_From_Batch__c, Date_Format__c, Feed_Type__c
+            FROM Mapping_Profile__c
+            WHERE Id = :draft.Id
+        ];
         Assert.areEqual('Draft', draft.Status__c, 'never activated by Claude');
         Assert.areEqual('KESTREL', draft.Source_Firm__c, 'source firm');
         Assert.areEqual(batch.Header_Fingerprint__c, draft.Header_Fingerprint__c, 'same layout');
         Assert.areEqual(batch.Id, draft.Proposed_From_Batch__c, 'traceable to the file');
         Assert.isTrue(draft.AI_Rationale__c.contains('Checks passed'), 'rationale: ' + draft.AI_Rationale__c);
         Assert.isTrue(draft.AI_Rationale__c.contains('Side holds B'), 'Claude explanation kept');
-        Assert.isTrue([SELECT Error_Message__c FROM Import_Batch__c WHERE Id = :batch.Id].Error_Message__c.contains('Claude proposed a mapping'), 'batch says what to do next');
+        Assert.isTrue(
+            [SELECT Error_Message__c FROM Import_Batch__c WHERE Id = :batch.Id].Error_Message__c.contains('Claude proposed a mapping'),
+            'batch says what to do next'
+        );
         Assert.areEqual('Success', [SELECT Status__c FROM AI_Request_Log__c].Status__c, 'logged');
 
         // One proposal per layout.
@@ -83,8 +90,12 @@ private class MappingProposalTest {
         }
         fake.replies.clear();
         fake.replies.add(
-            '{"suggestions": [{"item": "R1", "fields": [{"field": "firm", "value": "' + inc + '", "confidence": "High", "reason": "Ryan Chen is at Calgary."}], "action": "accept", "confidence": "High", "explanation": "Ryan Chen is at the Calgary branch of Kestrel Capital Inc."},' +
-            ' {"item": "R2", "fields": [{"field": "firm", "value": "' + ltd + '", "confidence": "High", "reason": "Megan Chen is at Vancouver."}], "action": "accept", "confidence": "High", "explanation": "Megan Chen is at the Vancouver branch of Kestrel Capital Ltd."}]}'
+            '{"suggestions": [{"item": "R1", "fields": [{"field": "firm", "value": "' +
+                inc +
+                '", "confidence": "High", "reason": "Ryan Chen is at Calgary."}], "action": "accept", "confidence": "High", "explanation": "Ryan Chen is at the Calgary branch of Kestrel Capital Inc."},' +
+                ' {"item": "R2", "fields": [{"field": "firm", "value": "' +
+                ltd +
+                '", "confidence": "High", "reason": "Megan Chen is at Vancouver."}], "action": "accept", "confidence": "High", "explanation": "Megan Chen is at the Vancouver branch of Kestrel Capital Ltd."}]}'
         );
         ClaudeSuggestionJob.run(new Set<Id>{ batch.Id });
         update new List<Import_Staging_Row__c>{

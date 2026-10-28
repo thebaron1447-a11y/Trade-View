@@ -96,9 +96,7 @@ global with sharing class TradeIngestResource {
     private static void respond(RestResponse res, Integer code, FileIntakeService.Receipt r) {
         res.statusCode = code;
         res.responseBody = Blob.valueOf(
-            System.JSON.serialize(
-                new Map<String, Object>{ 'batchId' => r.batchId, 'status' => r.status, 'duplicate' => r.duplicate, 'message' => r.message }
-            )
+            System.JSON.serialize(new Map<String, Object>{ 'batchId' => r.batchId, 'status' => r.status, 'duplicate' => r.duplicate, 'message' => r.message })
         );
     }
 

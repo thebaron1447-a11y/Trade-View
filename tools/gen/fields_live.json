@@ -675,5 +675,14 @@
    "desc": "What this row's problem has in common with other rows: the dealer, each firm or fund issue and the spelling it is about (plus the rep code when the right answer can differ by code, as for a missing or ambiguous name). Set by matching for rows waiting for review; blank for roster rows, code issues and rows not in review. Trade Review shows rows with the same key as one line with their count and total, and a decision on it applies to all of them. Indexed (External ID, not unique) so the rows sharing a key are found quickly. Keys over 255 characters are stored as a SHA-256 hash.",
    "help": "Rows with the same issue key share the same problem and are decided together in Trade Review. Set by the system."
   }
+ ],
+ "Import_Staging_Row__c@4B4": [
+  {
+   "name": "Advisor Override",
+   "api": "Advisor_Override__c",
+   "type": "Lookup(Contact), optional, clear value if deleted",
+   "desc": "The team member a reviewer chose to credit when the row's advisor name fits more than one member of a team code (flag ADVISOR_AMBIGUOUS), for example \"Chen\" on a team with Ryan and Megan Chen. Matching credits this advisor 100% if they hold the code on the trade date, and flags the row ADVISOR_FROM_REVIEWER. If left blank on accept, Claude's suggested advisor is used.",
+   "help": "Choose which team member to credit when the advisor name on the row fits more than one of them."
+  }
  ]
 }

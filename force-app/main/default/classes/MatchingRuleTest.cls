@@ -7,7 +7,11 @@ private class MatchingRuleTest {
     }
 
     private static Matching_Rule__c proposed() {
-        Matching_Rule__c r = new Matching_Rule__c(Name = 'ETF spelling', Rule__c = 'A leading ETF in a fund name means the Wealth World ETF.', Status__c = 'Proposed');
+        Matching_Rule__c r = new Matching_Rule__c(
+            Name = 'ETF spelling',
+            Rule__c = 'A leading ETF in a fund name means the Wealth World ETF.',
+            Status__c = 'Proposed'
+        );
         insert r;
         return r;
     }
@@ -23,7 +27,10 @@ private class MatchingRuleTest {
         twoPerson(true);
         Matching_Rule__c r = proposed();
         Assert.isTrue(errorOf(new Matching_Rule__c(Id = r.Id, Status__c = 'Active')).contains('Someone other than'), 'update refused');
-        Assert.isTrue(errorOf(new Matching_Rule__c(Name = 'x', Rule__c = 'y', Status__c = 'Active')).contains('Someone other than'), 'insert as Active refused');
+        Assert.isTrue(
+            errorOf(new Matching_Rule__c(Name = 'x', Rule__c = 'y', Status__c = 'Active')).contains('Someone other than'),
+            'insert as Active refused'
+        );
     }
 
     @IsTest
@@ -59,6 +66,9 @@ private class MatchingRuleTest {
         r = [SELECT Approved_By__c, Approved_At__c FROM Matching_Rule__c WHERE Id = :r.Id];
         Assert.isNull(r.Approved_By__c, 'approval cleared');
         Assert.isNull(r.Approved_At__c, 'approval time cleared');
-        Assert.isTrue(errorOf(new Matching_Rule__c(Name = 'x', Rule__c = 'y', Approved_By__c = UserInfo.getUserId())).contains('set by the system'), 'cannot be set on insert');
+        Assert.isTrue(
+            errorOf(new Matching_Rule__c(Name = 'x', Rule__c = 'y', Approved_By__c = UserInfo.getUserId())).contains('set by the system'),
+            'cannot be set on insert'
+        );
     }
 }

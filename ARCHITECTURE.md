@@ -1,74 +1,9 @@
-# Trade Import Reconciliation: project context
+# Trade View: architecture
 
-Paste or attach this file at the start of a new chat. It describes the project as of **2026-10-25**: what exists,
-how it is built and checked, every decision made so far, and what comes next. The full history is in
-`docs/Trade_Import_Build_Log.docx`, and each phase has a run guide (`PHASE1.md` to `PHASE4B2.md`).
+How Trade View is built: the pipeline, the data model, the matching rules, how Claude is used safely, the review app,
+the demo data and how the code is checked. For an overview and setup steps see [README.md](README.md).
 
----
-
-## 1. Who and why
-
-- **Owner:** Greg Baronian, Salesforce consultant (Platform App Builder certified, not Platform Developer).
-  Background: 2.5 years on Financial Services Cloud in private wealth, previously a business systems analyst at a
-  wealth manager.
-- **Purpose:** a portfolio piece for Salesforce Solution Engineer and Anthropic Applied AI / Demo Engineer roles. It
-  shows a realistic wealth-management back-office problem solved Salesforce-natively with Claude. It's meant to be
-  shown to leadership at other companies, and Phase 5 adds a demo video.
-- **All demo data is synthetic.** Every firm, advisor and fund is fictional.
-
-## 2. Working agreements (follow these in every chat)
-
-**Approach**
-- Salesforce best practices, official documentation first.
-- Challenge every answer before presenting it. Double-check all code before it goes to the org; it must pass the
-  local checks in section 9.
-
-**Format for field and variable definitions**
-- Every custom field is presented as a block:
-  `Name / API / Type / Description / Help` (Title Case label, API name within 40 characters, help text within 510).
-- Every Flow variable is presented as a block:
-  `API / Type / Default / Availability / Description`.
-
-**Build log**
-- Keep `docs/Trade_Import_Build_Log.docx` up to date with a section per phase: what it does, how it works,
-  delivered components, field definitions generated from the metadata, verification, and known limitations.
-
-**Secrets**
-- Never commit `pushjob/keys/server.key`; `pushjob/keys/` is git-ignored.
-- The Anthropic API key lives only on the External Credential principal in Setup. It never goes into code, files
-  or chat.
-
-**Deploy and git**
-- Greg deploys and commits from PowerShell himself.
-- The assistant's shell on his computer cannot delete files. Running git there would leave `.lock` files, so the
-  assistant never runs git.
-
-**Delivery**
-- The assistant writes files directly into `C:\dev\trade-import-demo`, then confirms them with md5 checks.
-- It gives Greg the dry-run command and the field definitions.
-- Greg runs the dry run and pastes the output. The assistant fixes any failure from the real error message and
-  never guesses.
-
-**Getting test failures out of a run**
-```powershell
-(sf project deploy report --target-org tradeDemo --use-most-recent --json | ConvertFrom-Json).result.details.runTestResult.failures | Format-List name, methodName, message, stackTrace
-```
-(`deploy report` has no `--verbose` flag. `--use-most-recent` reports the last deploy, so start a new dry run before
-re-checking.)
-
-## 3. Environment
-
-| Item | Value |
-|---|---|
-| Org | Developer Edition, alias `tradeDemo`, user `gregory.baron.f2cac6700e9c@agentforce.com` |
-| Project | `C:\dev\trade-import-demo` (SFDX, metadata API v66.0) |
-| GitHub | https://github.com/thebaron1447-a11y/Trade-View (public), branch `main`, author email `275084731+thebaron1447-a11y@users.noreply.github.com`. Update with `git add -A`, `git commit -m "..."`, `git push` from PowerShell |
-| Shell | PowerShell; Python venv for the push job at `pushjob\.venv` |
-| Salesforce CLI | 2.132 (an update is available; not required) |
-| Claude, Enterprise tier | Models API through the Einstein Trust Layer, model `sfdc_ai__DefaultBedrockAnthropicClaude5Sonnet` |
-| Claude, Standard tier | Anthropic Messages API, `callout:Anthropic_API/v1/messages`, model `claude-sonnet-5-5`, anthropic-version `2023-06-01` |
-
-## 4. The solution in one paragraph
+## 1. How it works
 
 Dealers (other investment firms) send CSV files of trades, AUM and advisor rep-code rosters. Files arrive through:
 - a **push job** (Python, REST endpoint `/services/apexrest/trade-import/v1/files`);
@@ -91,35 +26,7 @@ A person decides everything in the **Trade Review** app (an LWC on its own tab).
 
 Enterprises will almost never use the direct route, because of compliance mandates.
 
-## 5. Phase history and status
-
-| Phase | What | Status |
-|---|---|---|
-| 1 | Data model, seed data (firms, branches, advisors, funds, codes, aliases) | Deployed |
-| 2 | Ingestion: REST endpoint, push job, CSV parser, mapping profiles, staging, validation | Deployed |
-| 3A | Deterministic matching, Code Follow-Ups, AUM rows, roster feed | Deployed and verified 2026-10-14 |
-| 3B (+3B.1, 3B.2) | Claude suggestions, review decisions, roster approval, mapping proposals, matching rules | Deployed, 110/110 tests, verified 2026-10-21 |
-| 4a | Standard tier: Anthropic API provider, Named and External Credential | Dry run 118 tests 2026-10-21, deployed |
-| 4b | Trade Review app, FileIntakeService, Reviewer permission set | Dry run 132 tests 2026-10-22, deployed |
-| 4b.1a | Tab names, issue types, full demo reset, every problem planted in the samples | Built 2026-10-23 |
-| 4b.2 | Root-cause headlines, Put on hold and On Hold tab, per-field Claude table, roster "Approving will" preview, firm follow-up email, token logging, prompt caching, label spacing fix | Dry run 145/145 2026-10-23 |
-| 4b.2a | One shared table layout; code issues in Dealer Code Review; Email Firms tab | Dry run 146/146 2026-10-25 |
-| 4b.3 | Rows sharing an issue (same spelling, same dealer, any file) shown as one line with count, total and files; one decision, hold or assignment applies to all (200 per click); one firm question per issue | Built 2026-10-25. **Dry run next (expect 151 tests)**; then full demo reset (keys are set when rows are matched) |
-| 4c | Cloud storage pull: S3, Azure Blob, Google Cloud Storage | Next |
-| 4d | Setup Assistant: a guided first-time configuration wizard covering manual upload, cloud pull and push agent | Planned |
-| 4e | Confirm holder for dormant codes; guard against two suggestion jobs at once; load approved rows into Trade, Trade Allocation and AUM records; notifications | Planned |
-| 5 | Demo video; JWT and External Client App setup for the push job | Planned |
-
-**Still to do after the current deploy (4b.2 setup, from `PHASE4B2.md`):**
-- Add Operations Contact to the Account page layout (standard object layouts aren't in the package).
-- On Barder & Company and Northgate, set Operations Contact to a contact whose **email is Greg's own address**.
-- In App Builder, put **AI Suggestion Table** on the Import Staging Row and Code Follow-Up record pages, and
-  activate them as org default.
-- Run `.\scripts\reset-demo-full.ps1` and walk through the app. The **Send Email window** is the one part not yet
-  confirmed in the org. If its To, Subject or Body fields are blank, the likely cause is those fields being
-  read-only on the Send Email global action layout.
-
-## 6. Data model
+## 2. Data model
 
 Custom objects: Import_Batch__c (IB), Import_Staging_Row__c (SR), Mapping_Profile__c (MP), Code_Follow_Up__c (CF),
 Rep_Code__c, Rep_Code_Assignment__c, Firm_Alias__c, Fund_Alias__c, AI_Request_Log__c (AL), Matching_Rule__c (MR),
@@ -205,7 +112,7 @@ Claude calls also need the org's generative AI permission (Enterprise tier) or t
 `x-api-key = {!$Credential.Anthropic_API.ApiKey}`, with principal `Anthropic`. Named Credential `Anthropic_API`
 points to https://api.anthropic.com. No Apex depends on either at compile time.
 
-## 7. Matching rules (TradeMatcher)
+## 3. Matching rules
 
 - **Firm:**
   - an exact alias key resolves the firm;
@@ -230,7 +137,7 @@ points to https://api.anthropic.com. No Apex depends on either at compile time.
   assignment on the day before, assigns the code 100% from the roster date, and closes the follow-up, re-matching
   its held trades. `preview()` lists those steps before the reviewer clicks. Roster rows are authoritative for Claude.
 
-## 8. Claude integration
+## 4. Claude integration
 
 **Code layout**
 - `ClaudeService.call(purpose, prompt, batchId, itemCount)` returns a Result with an unsaved log. Callers insert the
@@ -272,7 +179,7 @@ profile, and Activate mapping in the app processes the waiting file.
 **Model accuracy so far:** codes 3102, 5521 and 8800 come out correct; Hannah Pierce was fixed by the
 roster-is-authoritative rule.
 
-## 9. Trade Review app (LWC `tradeReview`, tab `Trade_Review`)
+## 5. Trade Review app
 
 **Tabs, in order (4b.2a)**
 
@@ -328,7 +235,7 @@ decideRow, holdRow and releaseHold return how many rows changed (a whole issue g
 **Queue shape:** rows, holdRows, followUps, firmFollowUps (with questions), mappings, recentFiles, options,
 claudeEnabled, provider, inFlight, userId, rowsTruncated. Limits: 200 rows, 100 follow-ups, 10 recent files.
 
-## 10. Demo data and scripts
+## 6. Demo data and scripts
 
 **Seed records**
 - Firms: Barder & Company (Oakville and Hamilton branches); Northgate Wealth Partners Inc. (Toronto); Lumière
@@ -372,11 +279,11 @@ pushjob\.venv\Scripts\python.exe pushjob\push_job.py --lake datalake --once --au
 `--watch` and `--interval` poll continuously. `--auth jwt` needs `SF_CLIENT_ID`, `SF_USERNAME` and
 `SF_PRIVATE_KEY_FILE`; see `pushjob/JWT_SETUP.md` (External Client App, Spring '26).
 
-## 11. Build and verification pipeline
+## 7. Build and verification
 
-The source of truth for metadata is the generator, not hand-edited XML. The generators and checks are copied into
-`tools/` (section 13). They were written for the assistant's workspace, so their paths start with `/home/claude/`;
-change the root variables before running them elsewhere.
+The source of truth for metadata is the generator, not hand-edited XML. The generators and checks are in `tools/`.
+They currently use absolute paths (`ROOT`, `OUT`, `BUILD`, `APEX` near the top of each script); point them at your
+copy of the repository before running them.
 
 **Metadata and test generators**
 - `tools/gen/gen_metadata.py` writes every object, field, layout, list view, tab, permission set, the custom
@@ -402,17 +309,17 @@ change the root variables before running them elsewhere.
 4. `xref.py` checks that every field and relationship used in Apex exists in the metadata.
 5. `lwc_xref.py` checks every LWC Apex import exists as @AuraEnabled, every call passes exactly the parameter names
    (shorthand properties included), and every `@salesforce/schema` import exists.
-6. Jest (sfdx-lwc-jest) with ESLint and Prettier (double quotes, no trailing commas): 50 tests (42 tradeReview, 3 reviewQueueTable, 5 aiSuggestionTable).
+6. Jest (sfdx-lwc-jest) with ESLint and Prettier (double quotes, no trailing commas): 42 tests (34 tradeReview, 3 reviewQueueTable, 5 aiSuggestionTable).
 7. Python ports and vectors: `check_vectors.py`, `check_claude_vectors.py`.
 8. Negative controls: break something on purpose and confirm the check fails.
 
-**Dry-run command** (22 test classes; expected test count in section 5):
+**Dry-run command** (22 test classes, 159 tests):
 ```powershell
-sf project deploy start --source-dir C:\dev\trade-import-demo\force-app --target-org tradeDemo --dry-run --verbose --test-level RunSpecifiedTests --tests AiSettingsTest --tests AnthropicApiClientTest --tests ClaudeServiceTest --tests ClaudeSuggestionTest --tests ClaudeValidationVectorTest --tests CsvParserTest --tests DemoScenarioTest --tests FileIntakeServiceTest --tests ImportBatchProcessorTest --tests MappingProposalTest --tests MappingServiceTest --tests MatchingRuleTest --tests NameMatcherTest --tests NameNormalizerTest --tests ProductDeleteGuardTest --tests ReviewControllerTest --tests ReviewDecisionTest --tests RosterApprovalTest --tests TradeIngestResourceTest --tests TradeMatcherTest --tests TradeRowNormalizerTest --tests TradeRowNormalizerVectorTest
+sf project deploy start --source-dir force-app --target-org tradeDemo --dry-run --verbose --test-level RunSpecifiedTests --tests AiSettingsTest --tests AnthropicApiClientTest --tests ClaudeServiceTest --tests ClaudeSuggestionTest --tests ClaudeValidationVectorTest --tests CsvParserTest --tests DemoScenarioTest --tests FileIntakeServiceTest --tests ImportBatchProcessorTest --tests MappingProposalTest --tests MappingServiceTest --tests MatchingRuleTest --tests NameMatcherTest --tests NameNormalizerTest --tests ProductDeleteGuardTest --tests ReviewControllerTest --tests ReviewDecisionTest --tests RosterApprovalTest --tests TradeIngestResourceTest --tests TradeMatcherTest --tests TradeRowNormalizerTest --tests TradeRowNormalizerVectorTest
 ```
 To deploy for real, run the same command without `--dry-run --verbose`.
 
-## 12. Platform lessons learned (don't repeat these)
+## 8. Platform lessons learned
 
 **Apex**
 - `system` (and other reserved words) can't name a variable. The local parser allows it; the org doesn't.
@@ -434,45 +341,3 @@ To deploy for real, run the same command without `--dry-run --verbose`.
 - SOQL can't combine ORDER BY with FOR UPDATE (the local parser allows it); `apex_lint.py` now flags it.
 - `group` is reserved too (caught by the lint rule).
 - Re-matching only picks up Pending rows, so remembering a spelling doesn't clear other open rows. Group decisions (4b.3) cover that.
-
-## 13. File map (`C:\dev\trade-import-demo`)
-
-- **`force-app/main/default/`**
-  - `classes/` (54 Apex files), `triggers/`, `lwc/`, `objects/`, `layouts/`, `permissionsets/`, `tabs/`,
-    `customMetadata/`, `externalCredentials/`, `namedCredentials/`.
-- **`data/`**: seed JSON and `seed-plan.json`.
-- **`datalake/`**: `samples/` (source files) and `inbox/` (what the push job reads).
-- **`pushjob/`**: the push job, its tests and JWT setup.
-- **`scripts/`**: the reset scripts and Apex scripts.
-- **`tools/verify/`**: the checks and Python ports.
-- **`tools/gen/`**: the metadata, seed and build-log generators.
-- **`docs/Trade_Import_Build_Log.docx`**: the build log, generated by `tools/gen/build_doc.js` with field
-  definitions from `tools/gen/dump_fields.py`.
-- **Run guides**: `PHASE1.md` to `PHASE4B2.md`.
-
-**Apex classes**
-- Services: AiSettings, AnthropicApiClient, ClaudeClient, ClaudeService, ClaudeSuggestionJob,
-  ClaudeSuggestionService, CodeFollowUpService, CsvParser, FileIntakeService, ImportBatchProcessor,
-  MappingActivationService, MappingProposalJob, MappingProposalService, MappingService, MatchingRuleService,
-  NameMatcher, NameNormalizer, ProductDeleteGuard, ReviewController, ReviewDecisionService, RosterApprovalService,
-  TradeIngestResource, TradeMatcher, TradeRowNormalizer.
-- Test support: FakeClaudeClient, TestDataFactory, TradeTestWorld.
-- Tests: one `*Test` class per service, plus DemoScenarioTest and the vector tests.
-
-## 14. Open decisions and ideas
-
-- **Mixed rows (decided 2026-10-25):** a row with both a code issue and another issue goes to Dealer Code Review only,
-  with its other issues listed in the detail. Reason: insiders do most of this work, so keep it as simple as possible.
-- **Shared issues (decided 2026-10-25):** one line per issue; one decision reaches every open row with that issue
-  from the same dealer, in any file.
-- **Cost idea:** Claude is still asked about every row in a group; asking once per issue would cut cost.
-- **4c, cloud pull:** S3, Azure Blob and Google Cloud Storage, through FileIntakeService. Credentials go in Named
-  Credentials.
-- **4d, Setup Assistant:** a guided wizard covering all three intake paths. Reviewers may be a single champion or a
-  team, so assignment stays optional.
-- **4e:**
-  - Confirm holder for dormant codes.
-  - Duplicate-job guard.
-  - Loading approved rows into Trade, Trade Allocation and AUM records.
-  - Notifications instead of polling.
-  - Possibly parsing email replies.

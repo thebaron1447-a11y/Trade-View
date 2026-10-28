@@ -72,14 +72,23 @@ private class ClaudeSuggestionTest {
             '```json\n{"suggestions": [' +
                 System.JSON.serialize(
                     withExtras(
-                        answer('R1', 'firm', keyOf(req, w.kesInc.Id), 'High', 'Ryan Chen works at the Calgary branch of Kestrel Capital Inc. and holds its code 1001.'),
+                        answer(
+                            'R1',
+                            'firm',
+                            keyOf(req, w.kesInc.Id),
+                            'High',
+                            'Ryan Chen works at the Calgary branch of Kestrel Capital Inc. and holds its code 1001.'
+                        ),
                         'Kestrel Capital (' + keyOf(req, w.kesInc.Id) + ') · Inc. or Ltd.?',
                         'accept',
                         null
                     )
-                ) + ',' +
-                entry('R2', 'firm', keyOf(req, w.kesLtd.Id), 'Medium', 'Megan Chen holds code 1001 at ' + keyOf(req, w.kesLtd.Id) + '.') + ',' +
-                entry('R3', 'fund', null, 'Low', '"ETF Wealth World Fund A" could be the Wealth World ETF (' + keyOf(req, w.wwEtf.Id) + ') or Series A.') + ',' +
+                ) +
+                ',' +
+                entry('R2', 'firm', keyOf(req, w.kesLtd.Id), 'Medium', 'Megan Chen holds code 1001 at ' + keyOf(req, w.kesLtd.Id) + '.') +
+                ',' +
+                entry('R3', 'fund', null, 'Low', '"ETF Wealth World Fund A" could be the Wealth World ETF (' + keyOf(req, w.wwEtf.Id) + ') or Series A.') +
+                ',' +
                 System.JSON.serialize(
                     withExtras(
                         answer('U1', 'advisor', null, 'Low', 'U1: Hannah Pierce is not in Salesforce yet; ask Barder for her code assignment.'),
@@ -141,7 +150,10 @@ private class ClaudeSuggestionTest {
         Assert.areEqual('Please confirm who holds code 3390 at Oakville and from what date.', fuExtras.AI_Homework__c, 'what to ask the dealer');
         Assert.isTrue(fuExtras.AI_Field_Suggestions__c.contains('"value":null'), 'advisor left blank: ' + fuExtras.AI_Field_Suggestions__c);
 
-        AI_Request_Log__c log = [SELECT Status__c, Purpose__c, Item_Count__c, Model_Name__c, Prompt__c, Response__c, Error_Message__c, Import_Batch__c FROM AI_Request_Log__c];
+        AI_Request_Log__c log = [
+            SELECT Status__c, Purpose__c, Item_Count__c, Model_Name__c, Prompt__c, Response__c, Error_Message__c, Import_Batch__c
+            FROM AI_Request_Log__c
+        ];
         Assert.areEqual('Success', log.Status__c, 'log status');
         Assert.areEqual('Row Suggestions', log.Purpose__c, 'log purpose');
         Assert.areEqual(4, log.Item_Count__c.intValue(), 'log item count');
@@ -182,9 +194,7 @@ private class ClaudeSuggestionTest {
         TradeTestWorld.build();
         Import_Batch__c batch = matchedBatch();
         FakeClaudeClient.install(
-            new List<Object>{
-                '{"suggestions": [' + entry('R1', 'firm', 'F99', 'High', 'Made up.') + ',' + entry('R3', 'fund', null, 'Low', 'Unclear.') + ']}'
-            }
+            new List<Object>{ '{"suggestions": [' + entry('R1', 'firm', 'F99', 'High', 'Made up.') + ',' + entry('R3', 'fund', null, 'Low', 'Unclear.') + ']}' }
         );
         ClaudeSuggestionJob.run(new Set<Id>{ batch.Id });
         Assert.areEqual('Invalid', TradeTestWorld.row(batch.Id, 1).AI_Status__c, 'invented key discarded');
@@ -259,7 +269,12 @@ private class ClaudeSuggestionTest {
         settings.requireTwoPersonRuleApproval = false;
         AiSettings.current = settings;
         insert new List<Matching_Rule__c>{
-            new Matching_Rule__c(Name = 'Kestrel branches', Firm__c = w.kesInc.Id, Rule__c = 'Calgary advisors belong to Kestrel Capital Inc.', Status__c = 'Active'),
+            new Matching_Rule__c(
+                Name = 'Kestrel branches',
+                Firm__c = w.kesInc.Id,
+                Rule__c = 'Calgary advisors belong to Kestrel Capital Inc.',
+                Status__c = 'Active'
+            ),
             new Matching_Rule__c(Name = 'Draft rule', Rule__c = 'Not used yet.', Status__c = 'Proposed')
         };
         FakeClaudeClient fake = FakeClaudeClient.install(new List<Object>{ '{"suggestions": []}' });
@@ -300,15 +315,15 @@ private class ClaudeSuggestionTest {
         Assert.isTrue(req.items.get(rosterItem).allowed.get('advisor').contains(keyOf(req, w.julia.Id)), 'Julia is a candidate');
         fake.replies.add(
             '{"suggestions": [' +
-            System.JSON.serialize(
-                withExtras(
-                    answer(rosterItem, 'advisor', keyOf(req, w.julia.Id), 'Medium', 'Julia Morales is the only Morales with Barder codes.'),
-                    'J. Morales · new code 5555',
-                    'accept',
-                    null
-                )
-            ) +
-            ']}'
+                System.JSON.serialize(
+                    withExtras(
+                        answer(rosterItem, 'advisor', keyOf(req, w.julia.Id), 'Medium', 'Julia Morales is the only Morales with Barder codes.'),
+                        'J. Morales · new code 5555',
+                        'accept',
+                        null
+                    )
+                ) +
+                ']}'
         );
         ClaudeSuggestionJob.run(null);
 
@@ -317,7 +332,11 @@ private class ClaudeSuggestionTest {
         Assert.isTrue(prompt.contains('"effectiveDate":"2026-09-20"'), 'the roster date for code 3390 is shown');
         Import_Staging_Row__c suggested = TradeTestWorld.row(roster.Id, 2);
         Assert.areEqual(w.julia.Id, suggested.AI_Suggested_Advisor__c, 'advisor suggested');
-        Assert.areEqual('Accept', [SELECT AI_Recommended_Action__c FROM Import_Staging_Row__c WHERE Id = :suggested.Id].AI_Recommended_Action__c, 'Claude recommends approving');
+        Assert.areEqual(
+            'Accept',
+            [SELECT AI_Recommended_Action__c FROM Import_Staging_Row__c WHERE Id = :suggested.Id].AI_Recommended_Action__c,
+            'Claude recommends approving'
+        );
 
         update new Import_Staging_Row__c(Id = suggested.Id, Reviewer_Decision__c = 'Accept');
         Rep_Code_Assignment__c a = [SELECT Advisor__c FROM Rep_Code_Assignment__c WHERE Rep_Code__r.Name = '5555'];

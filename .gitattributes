@@ -1,1 +1,3 @@
 * text=auto eol=lf
+# Sample dealer files keep their own line endings (some deliberately use CRLF).
+*.csv -text

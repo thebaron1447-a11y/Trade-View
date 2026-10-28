@@ -101,9 +101,9 @@ Firms and branches are Accounts, advisors are Contacts, and funds are Products.
 
 ## Quality
 
-- **151 Apex tests** in 22 test classes. One test runs every reviewer action as a Standard User holding only the
+- **159 Apex tests** in 22 test classes. One test runs every reviewer action as a Standard User holding only the
   Reviewer permission set, to prove the permissions are complete.
-- **50 LWC Jest tests** across the three components.
+- **42 LWC Jest tests** across the three components.
 - **Python ports with shared test vectors** for CSV parsing, normalisation, name matching and Claude-answer validation.
 - **Checks before every deploy:**
   - Apex parse;
@@ -128,7 +128,8 @@ Firms and branches are Accounts, advisors are Contacts, and funds are Products.
 | `scripts/` | Demo reset scripts and Apex scripts |
 | `tools/gen/` | Generators for the metadata, seed data and build log |
 | `tools/verify/` | Lint, cross-reference checks, Python ports and test-vector generators |
-| `PHASE*.md` | Step-by-step run guide for each build phase |
+| `ARCHITECTURE.md` | How it is built: pipeline, data model, matching rules, Claude integration, review app, checks |
+| `PHASE*.md` | Step-by-step run guide for each build phase (1, 2, 3A, 3B, 4A, 4B, 4B.2) |
 
 ## Try it
 
@@ -143,9 +144,15 @@ sf data import tree --plan data/seed-plan.json --target-org tradeDemo
 sf apex run --file scripts/apex/seed-mapping-profiles.apex --target-org tradeDemo
 ```
 
-Then set up the push job's environment as in `PHASE2.md` and run the full demo:
+Then set up the push job (once) and run the full demo:
 
 ```powershell
+cd pushjob
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m unittest test_push_job.py
+cd ..
 .\scripts\reset-demo-full.ps1
 ```
 

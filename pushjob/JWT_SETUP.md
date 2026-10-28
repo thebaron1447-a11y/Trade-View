@@ -36,7 +36,7 @@ Allow up to 10 minutes for a new app to become active.
 
 ```powershell
 $env:SF_CLIENT_ID = "<consumer key>"
-$env:SF_USERNAME = "gregory.baron.f2cac6700e9c@agentforce.com"
+$env:SF_USERNAME = "<your Salesforce username>"
 $env:SF_PRIVATE_KEY_FILE = "keys\server.key"
 python push_job.py --lake ..\datalake --once --auth jwt
 ```

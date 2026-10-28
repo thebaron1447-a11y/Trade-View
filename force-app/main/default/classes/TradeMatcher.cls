@@ -42,7 +42,13 @@ public with sharing class TradeMatcher implements Queueable {
         'FOLLOW_UP_CLOSED'
     };
     /** Firm and fund issues that rows can share. A missing or ambiguous name also depends on the code. */
-    private static final List<String> SHARED_ISSUES = new List<String>{ 'FIRM_MISSING', 'FIRM_UNRESOLVED', 'FIRM_AMBIGUOUS', 'FUND_UNRESOLVED', 'FUND_AMBIGUOUS' };
+    private static final List<String> SHARED_ISSUES = new List<String>{
+        'FIRM_MISSING',
+        'FIRM_UNRESOLVED',
+        'FIRM_AMBIGUOUS',
+        'FUND_UNRESOLVED',
+        'FUND_AMBIGUOUS'
+    };
     // A fuzzy name match is accepted only if it is very close and clearly better than the next option.
     @TestVisible
     private static final Decimal AUTO_ACCEPT = 0.9;
@@ -75,12 +81,24 @@ public with sharing class TradeMatcher implements Queueable {
             return;
         }
         List<Import_Staging_Row__c> rows = [
-            SELECT Id, Import_Batch__c, Row_Type__c, Source_Rep_Code__c, Source_Advisor_Name__c, Source_Firm_Name__c,
-                Source_Fund_Name__c, Trade_Date__c, Amount__c, Code_Follow_Up__c, Firm_Override__c, Fund_Override__c,
-                AI_Suggested_Firm__c, AI_Suggested_Fund__c
+            SELECT
+                Id,
+                Import_Batch__c,
+                Row_Type__c,
+                Source_Rep_Code__c,
+                Source_Advisor_Name__c,
+                Source_Firm_Name__c,
+                Source_Fund_Name__c,
+                Trade_Date__c,
+                Amount__c,
+                Code_Follow_Up__c,
+                Firm_Override__c,
+                Fund_Override__c,
+                AI_Suggested_Firm__c,
+                AI_Suggested_Fund__c,
+                Advisor_Override__c
             FROM Import_Staging_Row__c
-            WHERE Import_Batch__c IN :batches.keySet() AND Has_Errors__c = FALSE
-                AND (Match_Status__c = 'Pending' OR Match_Status__c = NULL)
+            WHERE Import_Batch__c IN :batches.keySet() AND Has_Errors__c = FALSE AND (Match_Status__c = 'Pending' OR Match_Status__c = NULL)
             WITH USER_MODE
             ORDER BY Import_Batch__c, Row_Number__c
             LIMIT 10000
@@ -91,6 +109,7 @@ public with sharing class TradeMatcher implements Queueable {
             Reference ref = new Reference(rows);
             Map<String, CodeFollowUpService.Draft> drafts = new Map<String, CodeFollowUpService.Draft>();
             Map<Id, String> heldKeyByRow = new Map<Id, String>();
+            Map<Id, Date> confirmedOn = new Map<Id, Date>();
             for (Import_Staging_Row__c row : rows) {
                 if (row.Code_Follow_Up__c != null) {
                     touchedFollowUps.add(row.Code_Follow_Up__c);
@@ -98,6 +117,14 @@ public with sharing class TradeMatcher implements Queueable {
                 String sourceFirm = batches.get(row.Import_Batch__c).Source_Firm__c;
                 Outcome o = row.Row_Type__c == TradeRowNormalizer.ROW_ROSTER ? matchRoster(row, ref) : matchActivity(row, ref);
                 apply(row, o);
+                if (o.status == MATCHED && row.Row_Type__c == TradeRowNormalizer.ROW_TRADE && row.Trade_Date__c != null) {
+                    for (Id a : o.confirmed) {
+                        Date latest = confirmedOn.get(a);
+                        if (latest == null || row.Trade_Date__c > latest) {
+                            confirmedOn.put(a, row.Trade_Date__c);
+                        }
+                    }
+                }
                 row.Issue_Key__c = issueKey(sourceFirm, row, o);
                 if (o.status == HELD) {
                     CodeFollowUpService.Draft d = CodeFollowUpService.draftFor(sourceFirm, row, o.reason);
@@ -117,6 +144,7 @@ public with sharing class TradeMatcher implements Queueable {
                 results.add(result);
             }
             update as user results;
+            recordConfirmedActivity(confirmedOn);
             touchedFollowUps.addAll(followUpIds.values());
         }
         CodeFollowUpService.recount(touchedFollowUps);
@@ -129,6 +157,31 @@ public with sharing class TradeMatcher implements Queueable {
         }
         update as user statusUpdates;
         queueSuggestions(batches.keySet());
+    }
+
+    /**
+     * Moves each credited assignment's Last Confirmed Trade Date forward to its latest matched trade, so a code in
+     * use never drifts into "dormant". This one field is written in system mode: it is bookkeeping owned by matching,
+     * and the integration user (who runs matching) has no edit access to assignments, which hold commission splits.
+     */
+    @TestVisible
+    private static void recordConfirmedActivity(Map<Id, Date> confirmedOn) {
+        if (confirmedOn.isEmpty()) {
+            return;
+        }
+        List<Rep_Code_Assignment__c> changes = new List<Rep_Code_Assignment__c>();
+        for (Rep_Code_Assignment__c a : [
+            SELECT Id, Last_Confirmed_Trade_Date__c
+            FROM Rep_Code_Assignment__c
+            WHERE Id IN :confirmedOn.keySet()
+            WITH USER_MODE
+        ]) {
+            Date latest = confirmedOn.get(a.Id);
+            if (a.Last_Confirmed_Trade_Date__c == null || latest > a.Last_Confirmed_Trade_Date__c) {
+                changes.add(new Rep_Code_Assignment__c(Id = a.Id, Last_Confirmed_Trade_Date__c = latest));
+            }
+        }
+        Database.update(changes, AccessLevel.SYSTEM_MODE);
     }
 
     /** Claude looks at whatever matching could not settle. Tests call ClaudeSuggestionJob directly. */
@@ -152,6 +205,8 @@ public with sharing class TradeMatcher implements Queueable {
         public List<String> flags = new List<String>();
         public List<String> notes = new List<String>();
         public List<Map<String, Object>> candidates = new List<Map<String, Object>>();
+        /** Assignments this row confirms as active on its date (credited holders), for the dormancy check. */
+        public Set<Id> confirmed = new Set<Id>();
 
         public void hold(String holdReason, String code, String note) {
             this.status = HELD;
@@ -212,6 +267,18 @@ public with sharing class TradeMatcher implements Queueable {
             }
         }
         Boolean team = active.size() > 1;
+        // A reviewer who chose the team member to credit settles it, as long as that person holds the code on the date.
+        if (row.Advisor_Override__c != null) {
+            for (Rep_Code_Assignment__c a : active) {
+                if (a.Advisor__c == row.Advisor_Override__c) {
+                    o.creditedAdvisorId = a.Advisor__c;
+                    o.confirmed.add(a.Id);
+                    o.flag('ADVISOR_FROM_REVIEWER', '100% credited to ' + fullName(a) + ', chosen by a reviewer.');
+                    resolveFund(row, ref, o);
+                    return o;
+                }
+            }
+        }
         Boolean dormant = isDormant(active, row.Trade_Date__c);
 
         if (named && compatible.isEmpty()) {
@@ -221,22 +288,49 @@ public with sharing class TradeMatcher implements Queueable {
                 '"' + name + '" does not match ' + (team ? 'any current member of team code ' : 'the current holder of code ') + code.Name + '.'
             );
         } else if (!named && dormant) {
-            o.hold(REASON_DORMANT, 'DORMANT_CODE_NO_NAME', 'Code ' + code.Name + ' has had no confirmed activity for over ' + DORMANCY_DAYS + ' days and the row names no advisor.');
+            o.hold(
+                REASON_DORMANT,
+                'DORMANT_CODE_NO_NAME',
+                'Code ' + code.Name + ' has had no confirmed activity for over ' + DORMANCY_DAYS + ' days and the row names no advisor.'
+            );
         } else {
             if (dormant) {
                 o.flag('DORMANT_CODE_REACTIVATED', 'Code ' + code.Name + ' was dormant, but the advisor name confirms the current holder.');
             }
-            if (compatible.size() == 1) {
+            if (team && compatible.size() > 1 && compatible.size() < active.size()) {
+                // The name fits some members but not all (a shared surname, an initial): splitting across the whole
+                // team would credit people the name rules out, so a person chooses.
+                List<String> names = new List<String>();
+                List<Map<String, Object>> people = new List<Map<String, Object>>();
+                for (Rep_Code_Assignment__c a : compatible) {
+                    names.add(fullName(a));
+                    people.add(new Map<String, Object>{ 'id' => a.Advisor__c, 'name' => fullName(a), 'score' => 1 });
+                }
+                o.review(
+                    'ADVISOR_AMBIGUOUS',
+                    '"' + name + '" fits more than one member of team code ' + code.Name + ': ' + String.join(names, ', ') + '. Choose who to credit.'
+                );
+                addCandidates(o, 'advisor', people);
+            } else if (compatible.size() == 1) {
                 o.creditedAdvisorId = compatible[0].Advisor__c;
+                o.confirmed.add(compatible[0].Id);
                 if (team) {
                     o.flag('SINGLE_ADVISOR_CREDIT', 'Row names one team member: 100% credited to ' + fullName(compatible[0]) + '.');
                 }
             } else if (!team) {
                 o.creditedAdvisorId = active[0].Advisor__c;
+                o.confirmed.add(active[0].Id);
             } else if (totalPercent(active) != 100) {
-                o.hold(REASON_ALLOCATION, 'ALLOCATION_INCOMPLETE', 'Team code ' + code.Name + ' has active shares totalling ' + totalPercent(active).stripTrailingZeros().toPlainString() + '%, not 100%.');
+                o.hold(
+                    REASON_ALLOCATION,
+                    'ALLOCATION_INCOMPLETE',
+                    'Team code ' + code.Name + ' has active shares totalling ' + totalPercent(active).stripTrailingZeros().toPlainString() + '%, not 100%.'
+                );
             } else {
                 o.flag('TEAM_SPLIT', 'Split across team code ' + code.Name + ' by its percentages.');
+                for (Rep_Code_Assignment__c a : active) {
+                    o.confirmed.add(a.Id);
+                }
             }
         }
         resolveFund(row, ref, o);
@@ -275,7 +369,10 @@ public with sharing class TradeMatcher implements Queueable {
                 return o;
             }
         }
-        o.review('ROSTER_NEW_HOLDER', 'Code ' + code.Name + ' is listed for "' + row.Source_Advisor_Name__c + '", who is not a current holder: approving ends the old assignment.');
+        o.review(
+            'ROSTER_NEW_HOLDER',
+            'Code ' + code.Name + ' is listed for "' + row.Source_Advisor_Name__c + '", who is not a current holder: approving ends the old assignment.'
+        );
         return o;
     }
 
@@ -299,7 +396,12 @@ public with sharing class TradeMatcher implements Queueable {
         }
         Resolution r = ref.resolve(key, ref.firmIdsByKey, ref.firmAliasKeys, ref.firmNames);
         if (r.id == null) {
-            o.review(r.ambiguous ? 'FIRM_AMBIGUOUS' : 'FIRM_UNRESOLVED', r.ambiguous ? 'Firm name "' + row.Source_Firm_Name__c + '" matches more than one firm.' : 'Firm name "' + row.Source_Firm_Name__c + '" does not match any known firm.');
+            o.review(
+                r.ambiguous ? 'FIRM_AMBIGUOUS' : 'FIRM_UNRESOLVED',
+                r.ambiguous
+                    ? 'Firm name "' + row.Source_Firm_Name__c + '" matches more than one firm.'
+                    : 'Firm name "' + row.Source_Firm_Name__c + '" does not match any known firm.'
+            );
             addCandidates(o, 'firm', r.candidates);
             return false;
         }
@@ -465,6 +567,24 @@ public with sharing class TradeMatcher implements Queueable {
         return key.length() <= 255 ? key : 'H:' + EncodingUtil.convertToHex(Crypto.generateDigest('SHA-256', Blob.valueOf(key)));
     }
 
+    /**
+     * The flags as stored in Match_Flags__c (255 characters). Whole flags are kept in order and any that do not fit
+     * are dropped, so a flag is never cut in half (a half flag would silently change how the row is routed).
+     */
+    public static String joinFlags(List<String> flags) {
+        List<String> kept = new List<String>();
+        Integer length = 0;
+        for (String f : flags) {
+            Integer added = (kept.isEmpty() ? 0 : 1) + f.length();
+            if (length + added > 255) {
+                continue;
+            }
+            kept.add(f);
+            length += added;
+        }
+        return kept.isEmpty() ? null : String.join(kept, ';');
+    }
+
     private static void apply(Import_Staging_Row__c row, Outcome o) {
         row.Match_Status__c = o.status;
         row.Match_Method__c = o.status == MATCHED ? o.method : null;
@@ -472,7 +592,7 @@ public with sharing class TradeMatcher implements Queueable {
         row.Matched_Rep_Code__c = o.repCodeId;
         row.Matched_Fund__c = o.fundId;
         row.Credited_Advisor__c = o.creditedAdvisorId;
-        row.Match_Flags__c = o.flags.isEmpty() ? null : String.join(o.flags, ';').abbreviate(255);
+        row.Match_Flags__c = joinFlags(o.flags);
         row.Match_Notes__c = o.notes.isEmpty() ? null : String.join(o.notes, '\n').abbreviate(5000);
         row.Match_Candidates__c = o.candidates.isEmpty() ? null : System.JSON.serialize(o.candidates).abbreviate(32768);
     }
@@ -542,10 +662,22 @@ public with sharing class TradeMatcher implements Queueable {
                 anyRoster = anyRoster || row.Row_Type__c == TradeRowNormalizer.ROW_ROSTER;
             }
             for (Rep_Code__c rc : [
-                SELECT Id, Name, Firm__c,
-                    (SELECT Id, Advisor__c, Advisor__r.FirstName, Advisor__r.LastName, Allocation_Percent__c,
-                        Effective_Start_Date__c, Effective_End_Date__c, Last_Confirmed_Trade_Date__c
-                     FROM Assignments__r)
+                SELECT
+                    Id,
+                    Name,
+                    Firm__c,
+                    (
+                        SELECT
+                            Id,
+                            Advisor__c,
+                            Advisor__r.FirstName,
+                            Advisor__r.LastName,
+                            Allocation_Percent__c,
+                            Effective_Start_Date__c,
+                            Effective_End_Date__c,
+                            Last_Confirmed_Trade_Date__c
+                        FROM Assignments__r
+                    )
                 FROM Rep_Code__c
                 WHERE Firm__c IN :firmIds AND Name IN :codes
                 WITH USER_MODE

@@ -63,8 +63,7 @@ public with sharing class RosterApprovalService {
         // Existing codes with their current (open) assignments.
         Map<String, Rep_Code__c> existing = new Map<String, Rep_Code__c>();
         for (Rep_Code__c rc : [
-            SELECT Id, Name, Firm__c,
-                (SELECT Id, Advisor__c, Effective_Start_Date__c FROM Assignments__r WHERE Effective_End_Date__c = NULL)
+            SELECT Id, Name, Firm__c, (SELECT Id, Advisor__c, Effective_Start_Date__c FROM Assignments__r WHERE Effective_End_Date__c = NULL)
             FROM Rep_Code__c
             WHERE Firm__c IN :firmIds AND Name IN :codes
             WITH USER_MODE
@@ -127,7 +126,12 @@ public with sharing class RosterApprovalService {
             Id advisor = p.newAdvisor != null ? p.newAdvisor.Id : p.advisorId;
             Id codeId = p.newCode != null ? p.newCode.Id : p.existingCode.Id;
             starts.add(
-                new Rep_Code_Assignment__c(Rep_Code__c = codeId, Advisor__c = advisor, Allocation_Percent__c = 100, Effective_Start_Date__c = p.row.Trade_Date__c)
+                new Rep_Code_Assignment__c(
+                    Rep_Code__c = codeId,
+                    Advisor__c = advisor,
+                    Allocation_Percent__c = 100,
+                    Effective_Start_Date__c = p.row.Trade_Date__c
+                )
             );
             byFirmAndCode.put(p.firmId + '|' + p.code.toUpperCase(), p);
         }
@@ -158,7 +162,10 @@ public with sharing class RosterApprovalService {
         Map<String, Id> branchByName = new Map<String, Id>();
         if (!firmIds.isEmpty()) {
             for (Rep_Code__c rc : [
-                SELECT Id, Name, Firm__c,
+                SELECT
+                    Id,
+                    Name,
+                    Firm__c,
                     (SELECT Id, Advisor__c, Advisor__r.Name, Effective_Start_Date__c FROM Assignments__r WHERE Effective_End_Date__c = NULL)
                 FROM Rep_Code__c
                 WHERE Firm__c IN :firmIds AND Name IN :codes
@@ -223,7 +230,9 @@ public with sharing class RosterApprovalService {
             }
             if (open.size() == 1) {
                 if (open[0].Effective_Start_Date__c >= row.Trade_Date__c) {
-                    return new List<String>{ 'Cannot approve: the roster date is not after the current holder\'s start date. Check the dates with the dealer.' };
+                    return new List<String>{
+                        'Cannot approve: the roster date is not after the current holder\'s start date. Check the dates with the dealer.'
+                    };
                 }
                 lines.add('End ' + open[0].Advisor__r?.Name + '\'s assignment on ' + String.valueOf(row.Trade_Date__c.addDays(-1)));
             }
@@ -254,10 +263,16 @@ public with sharing class RosterApprovalService {
                     Id = fu.Id,
                     Status__c = CodeFollowUpService.STATUS_RESOLVED,
                     Rep_Code__c = p.newCode != null ? p.newCode.Id : p.existingCode.Id,
-                    Resolution_Notes__c = (
-                        'Resolved by approving roster row ' + p.row.Name + ': ' + p.row.Source_Advisor_Name__c + ' holds code ' + p.code +
-                        ' from ' + p.row.Trade_Date__c.format() + '.'
-                    ).abbreviate(5000)
+                    Resolution_Notes__c = ('Resolved by approving roster row ' +
+                        p.row.Name +
+                        ': ' +
+                        p.row.Source_Advisor_Name__c +
+                        ' holds code ' +
+                        p.code +
+                        ' from ' +
+                        p.row.Trade_Date__c.format() +
+                        '.')
+                        .abbreviate(5000)
                 )
             );
         }

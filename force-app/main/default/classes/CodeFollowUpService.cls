@@ -35,10 +35,14 @@ public with sharing class CodeFollowUpService {
         return ((sourceFirm == null ? '' : sourceFirm.toUpperCase()) + '|' + codeValue + '|' + reason).left(255);
     }
 
-    /** Call after the row's Matched_Firm__c and Matched_Rep_Code__c are set. */
+    /**
+     * Call after the row's Matched_Firm__c and Matched_Rep_Code__c are set. One follow-up per matched firm, code and
+     * reason: a dealer file can cover several firms (Kestrel Inc. and Ltd.), and each firm's code is its own question.
+     * The dealer code is used only when the firm is unknown.
+     */
     public static Draft draftFor(String sourceFirm, Import_Staging_Row__c row, String reason) {
         Draft d = new Draft();
-        d.key = keyFor(sourceFirm, row.Source_Rep_Code__c, reason);
+        d.key = keyFor(row.Matched_Firm__c != null ? String.valueOf(row.Matched_Firm__c) : sourceFirm, row.Source_Rep_Code__c, reason);
         d.codeValue = row.Source_Rep_Code__c;
         d.repCodeId = row.Matched_Rep_Code__c;
         d.firmId = row.Matched_Firm__c;
@@ -185,7 +189,13 @@ public with sharing class CodeFollowUpService {
                 batchIds.add(row.Import_Batch__c);
             } else {
                 change.Match_Status__c = TradeMatcher.REVIEW;
-                change.Match_Flags__c = ((String.isBlank(row.Match_Flags__c) ? '' : row.Match_Flags__c + ';') + 'FOLLOW_UP_CLOSED').abbreviate(255);
+                // Appended last and always kept: earlier whole flags are dropped if the list would be too long.
+                List<String> flags = String.isBlank(row.Match_Flags__c) ? new List<String>() : row.Match_Flags__c.split(';');
+                while (!flags.isEmpty() && String.join(flags, ';').length() + ';FOLLOW_UP_CLOSED'.length() > 255) {
+                    flags.remove(flags.size() - 1);
+                }
+                flags.add('FOLLOW_UP_CLOSED');
+                change.Match_Flags__c = String.join(flags, ';');
             }
             changes.add(change);
         }

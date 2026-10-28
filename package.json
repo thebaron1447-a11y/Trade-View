@@ -1,8 +1,8 @@
 {
-  "name": "salesforce-app",
+  "name": "trade-view",
   "private": true,
   "version": "1.0.0",
-  "description": "Salesforce App",
+  "description": "Dealer trade file reconciliation on Salesforce with Claude",
   "scripts": {
     "lint": "eslint **/{aura,lwc}/**/*.js",
     "test": "npm run test:unit",

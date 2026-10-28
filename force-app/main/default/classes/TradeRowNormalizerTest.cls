@@ -1,12 +1,8 @@
 @IsTest
 private class TradeRowNormalizerTest {
     private static final List<String> HEADERS = new List<String>{ 'Date', 'Rep', 'Advisor', 'Firm', 'Fund', 'Side', 'Amount' };
-    private static final List<String> COLUMNS = new List<String>{
-        'tradeDate', 'repCode', 'advisorName', 'firmName', 'fundName', 'transactionType', 'amount'
-    };
-    private static final List<String> SIGNED_COLUMNS = new List<String>{
-        'tradeDate', 'repCode', 'advisorName', 'firmName', 'fundName', 'IGNORE', 'amount'
-    };
+    private static final List<String> COLUMNS = new List<String>{ 'tradeDate', 'repCode', 'advisorName', 'firmName', 'fundName', 'transactionType', 'amount' };
+    private static final List<String> SIGNED_COLUMNS = new List<String>{ 'tradeDate', 'repCode', 'advisorName', 'firmName', 'fundName', 'IGNORE', 'amount' };
 
     private static TradeRowNormalizer.Config config(String convention) {
         TradeRowNormalizer.Config cfg = new TradeRowNormalizer.Config();
@@ -133,7 +129,13 @@ private class TradeRowNormalizerTest {
 
     private static final List<String> MIXED_HEADERS = new List<String>{ 'Date', 'Rep', 'Advisor', 'Branch', 'Fund', 'Side', 'Amount' };
     private static final List<String> MIXED_COLUMNS = new List<String>{
-        'tradeDate', 'repCode', 'advisorName', 'branchName', 'fundName', 'transactionType', 'amount'
+        'tradeDate',
+        'repCode',
+        'advisorName',
+        'branchName',
+        'fundName',
+        'transactionType',
+        'amount'
     };
 
     private static TradeRowNormalizer.Config aumConfig() {

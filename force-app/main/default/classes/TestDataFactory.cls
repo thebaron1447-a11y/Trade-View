@@ -71,7 +71,12 @@ public class TestDataFactory {
             Status__c = ImportBatchProcessor.STATUS_RECEIVED
         );
         insert batch;
-        insert new ContentVersion(Title = batch.Source_File_Name__c, PathOnClient = batch.Source_File_Name__c, VersionData = file, FirstPublishLocationId = batch.Id);
+        insert new ContentVersion(
+            Title = batch.Source_File_Name__c,
+            PathOnClient = batch.Source_File_Name__c,
+            VersionData = file,
+            FirstPublishLocationId = batch.Id
+        );
         return batch;
     }
 

@@ -372,7 +372,6 @@ public with sharing class ReviewController {
         public Datetime receivedAt;
     }
 
-    /** A firm with questions waiting for its answer (rows on hold and code reviews), for the follow-up email. */
     /** One question waiting for a firm's answer: a row on hold or an open code review. */
     public class FirmQuestion {
         @AuraEnabled
@@ -386,6 +385,7 @@ public with sharing class ReviewController {
         public Datetime askedAt;
     }
 
+    /** A firm with questions waiting for its answer (rows on hold and code reviews), for the follow-up email. */
     public class FirmFollowUp {
         @AuraEnabled
         public List<FirmQuestion> questions = new List<FirmQuestion>();
@@ -570,7 +570,55 @@ public with sharing class ReviewController {
             }
         }
         return [
-            SELECT Id, Name, Import_Batch__c, Import_Batch__r.Source_Firm__c, Import_Batch__r.Source_File_Name__c, Row_Number__c, Row_Type__c, Source_Firm_Name__c, Source_Rep_Code__c, Source_Advisor_Name__c, Source_Branch_Name__c, Source_Fund_Name__c, Trade_Date__c, Transaction_Type__c, Amount__c, Match_Flags__c, Match_Notes__c, Matched_Firm__c, Matched_Firm__r.Name, AI_Status__c, AI_Confidence__c, AI_Suggestion__c, AI_Suggested_Firm__c, AI_Suggested_Firm__r.Name, AI_Suggested_Fund__c, AI_Suggested_Fund__r.Name, AI_Suggested_Advisor__c, AI_Suggested_Advisor__r.Name, AI_Request__c, AI_Request__r.Name, Assigned_To__c, Assigned_To__r.Name, AI_Headline__c, AI_Recommended_Action__c, AI_Homework__c, AI_Field_Suggestions__c, On_Hold__c, On_Hold_Reason__c, On_Hold_By__r.Name, On_Hold_Since__c, Asked_Firm_At__c, Firm_Override__c, Credited_Advisor__c, Credited_Advisor__r.Name, Import_Batch__r.Mapping_Profile__r.Firm__c, Import_Batch__r.Mapping_Profile__r.Firm__r.Name, Issue_Key__c
+            SELECT
+                Id,
+                Name,
+                Import_Batch__c,
+                Import_Batch__r.Source_Firm__c,
+                Import_Batch__r.Source_File_Name__c,
+                Row_Number__c,
+                Row_Type__c,
+                Source_Firm_Name__c,
+                Source_Rep_Code__c,
+                Source_Advisor_Name__c,
+                Source_Branch_Name__c,
+                Source_Fund_Name__c,
+                Trade_Date__c,
+                Transaction_Type__c,
+                Amount__c,
+                Match_Flags__c,
+                Match_Notes__c,
+                Matched_Firm__c,
+                Matched_Firm__r.Name,
+                AI_Status__c,
+                AI_Confidence__c,
+                AI_Suggestion__c,
+                AI_Suggested_Firm__c,
+                AI_Suggested_Firm__r.Name,
+                AI_Suggested_Fund__c,
+                AI_Suggested_Fund__r.Name,
+                AI_Suggested_Advisor__c,
+                AI_Suggested_Advisor__r.Name,
+                AI_Request__c,
+                AI_Request__r.Name,
+                Assigned_To__c,
+                Assigned_To__r.Name,
+                AI_Headline__c,
+                AI_Recommended_Action__c,
+                AI_Homework__c,
+                AI_Field_Suggestions__c,
+                On_Hold__c,
+                On_Hold_Reason__c,
+                On_Hold_By__r.Name,
+                On_Hold_Since__c,
+                Asked_Firm_At__c,
+                Firm_Override__c,
+                Credited_Advisor__c,
+                Credited_Advisor__r.Name,
+                Import_Batch__r.Mapping_Profile__r.Firm__c,
+                Import_Batch__r.Mapping_Profile__r.Firm__r.Name,
+                Issue_Key__c,
+                Match_Candidates__c
             FROM Import_Staging_Row__c
             WHERE Id IN :ids
             WITH USER_MODE
@@ -655,8 +703,17 @@ public with sharing class ReviewController {
         String key = found[0].Issue_Key__c;
         Boolean onHold = found[0].On_Hold__c == true;
         for (Import_Staging_Row__c r : [
-            SELECT Id, Name, Import_Batch__r.Source_File_Name__c, Row_Number__c, Trade_Date__c, Source_Rep_Code__c,
-                Source_Advisor_Name__c, Source_Firm_Name__c, Source_Fund_Name__c, Amount__c
+            SELECT
+                Id,
+                Name,
+                Import_Batch__r.Source_File_Name__c,
+                Row_Number__c,
+                Trade_Date__c,
+                Source_Rep_Code__c,
+                Source_Advisor_Name__c,
+                Source_Firm_Name__c,
+                Source_Fund_Name__c,
+                Amount__c
             FROM Import_Staging_Row__c
             WHERE Match_Status__c = :TradeMatcher.REVIEW AND Issue_Key__c = :key AND On_Hold__c = :onHold
             WITH USER_MODE
@@ -755,7 +812,7 @@ public with sharing class ReviewController {
         it.isCodeIssue = it.isRoster || intersects(flags, CODE_FLAGS);
         it.needsFirm = intersects(flags, ClaudeSuggestionService.FIRM_FLAGS);
         it.needsFund = !it.isRoster && intersects(flags, ClaudeSuggestionService.FUND_FLAGS);
-        it.needsAdvisor = it.isRoster && flags.contains('ADVISOR_AMBIGUOUS');
+        it.needsAdvisor = flags.contains('ADVISOR_AMBIGUOUS');
         // Same rule as ReviewDecisionService.teachAliases: only unresolved spellings can be remembered.
         it.canRemember = !it.isRoster && (flags.contains('FIRM_UNRESOLVED') || flags.contains('FUND_UNRESOLVED'));
         Boolean asksSomething = it.needsFirm || it.needsFund || it.needsAdvisor;
@@ -765,7 +822,10 @@ public with sharing class ReviewController {
             (!it.needsFirm || it.aiFirmId != null) &&
             (!it.needsFund || it.aiFundId != null) &&
             (!it.needsAdvisor || it.aiAdvisorId != null);
-        if (it.needsAdvisor && r.Matched_Firm__c != null && advisorsByFirm.containsKey(r.Matched_Firm__c)) {
+        if (it.needsAdvisor && !it.isRoster) {
+            // A trade row on a team code: the choice is between the team members its name fits.
+            it.advisorOptions = advisorCandidates(r.Match_Candidates__c);
+        } else if (it.needsAdvisor && r.Matched_Firm__c != null && advisorsByFirm.containsKey(r.Matched_Firm__c)) {
             it.advisorOptions = advisorsByFirm.get(r.Matched_Firm__c);
         }
         it.headline = String.isNotBlank(r.AI_Headline__c) ? r.AI_Headline__c : ruleHeadline(it, flags);
@@ -801,6 +861,26 @@ public with sharing class ReviewController {
         return title.abbreviate(100);
     }
 
+    /** The advisors matching listed for a team member choice, as options. A malformed list gives no options. */
+    @TestVisible
+    private static List<Option> advisorCandidates(String json) {
+        List<Option> result = new List<Option>();
+        if (String.isBlank(json)) {
+            return result;
+        }
+        try {
+            for (Object o : (List<Object>) System.JSON.deserializeUntyped(json)) {
+                Map<String, Object> c = (Map<String, Object>) o;
+                if ('advisor'.equals(c.get('type'))) {
+                    result.add(new Option((String) c.get('name'), (String) c.get('id')));
+                }
+            }
+        } catch (Exception e) {
+            result.clear();
+        }
+        return result;
+    }
+
     @TestVisible
     private static List<FieldLine> fieldLines(String json) {
         List<FieldLine> lines = new List<FieldLine>();
@@ -828,7 +908,11 @@ public with sharing class ReviewController {
     private static Map<Id, List<Option>> advisorOptions(List<Import_Staging_Row__c> rows) {
         Set<Id> firms = new Set<Id>();
         for (Import_Staging_Row__c r : rows) {
-            if (r.Row_Type__c == TradeRowNormalizer.ROW_ROSTER && r.Matched_Firm__c != null && ClaudeSuggestionService.flagSet(r.Match_Flags__c).contains('ADVISOR_AMBIGUOUS')) {
+            if (
+                r.Row_Type__c == TradeRowNormalizer.ROW_ROSTER &&
+                r.Matched_Firm__c != null &&
+                ClaudeSuggestionService.flagSet(r.Match_Flags__c).contains('ADVISOR_AMBIGUOUS')
+            ) {
                 firms.add(r.Matched_Firm__c);
             }
         }
@@ -858,9 +942,28 @@ public with sharing class ReviewController {
         List<Code_Follow_Up__c> followUps;
         if (scope == SCOPE_MINE) {
             followUps = [
-                SELECT Id, Name, Rep_Code_Value__c, Firm__r.Name, Reason__c, Status__c, Held_Row_Count__c, Held_Amount__c, Last_Seen_Date__c,
-                    AI_Status__c, AI_Confidence__c, Suggested_Resolution__c, AI_Suggested_Advisor__r.Name, AI_Request__c, AI_Request__r.Name,
-                    Assigned_To__c, Assigned_To__r.Name, Firm__c, AI_Homework__c, AI_Field_Suggestions__c, Asked_Firm_At__c
+                SELECT
+                    Id,
+                    Name,
+                    Rep_Code_Value__c,
+                    Firm__r.Name,
+                    Reason__c,
+                    Status__c,
+                    Held_Row_Count__c,
+                    Held_Amount__c,
+                    Last_Seen_Date__c,
+                    AI_Status__c,
+                    AI_Confidence__c,
+                    Suggested_Resolution__c,
+                    AI_Suggested_Advisor__r.Name,
+                    AI_Request__c,
+                    AI_Request__r.Name,
+                    Assigned_To__c,
+                    Assigned_To__r.Name,
+                    Firm__c,
+                    AI_Homework__c,
+                    AI_Field_Suggestions__c,
+                    Asked_Firm_At__c
                 FROM Code_Follow_Up__c
                 WHERE Status__c IN ('Open', 'In Progress') AND Assigned_To__c = :me
                 WITH USER_MODE
@@ -869,9 +972,28 @@ public with sharing class ReviewController {
             ];
         } else if (scope == SCOPE_UNASSIGNED) {
             followUps = [
-                SELECT Id, Name, Rep_Code_Value__c, Firm__r.Name, Reason__c, Status__c, Held_Row_Count__c, Held_Amount__c, Last_Seen_Date__c,
-                    AI_Status__c, AI_Confidence__c, Suggested_Resolution__c, AI_Suggested_Advisor__r.Name, AI_Request__c, AI_Request__r.Name,
-                    Assigned_To__c, Assigned_To__r.Name, Firm__c, AI_Homework__c, AI_Field_Suggestions__c, Asked_Firm_At__c
+                SELECT
+                    Id,
+                    Name,
+                    Rep_Code_Value__c,
+                    Firm__r.Name,
+                    Reason__c,
+                    Status__c,
+                    Held_Row_Count__c,
+                    Held_Amount__c,
+                    Last_Seen_Date__c,
+                    AI_Status__c,
+                    AI_Confidence__c,
+                    Suggested_Resolution__c,
+                    AI_Suggested_Advisor__r.Name,
+                    AI_Request__c,
+                    AI_Request__r.Name,
+                    Assigned_To__c,
+                    Assigned_To__r.Name,
+                    Firm__c,
+                    AI_Homework__c,
+                    AI_Field_Suggestions__c,
+                    Asked_Firm_At__c
                 FROM Code_Follow_Up__c
                 WHERE Status__c IN ('Open', 'In Progress') AND Assigned_To__c = NULL
                 WITH USER_MODE
@@ -880,9 +1002,28 @@ public with sharing class ReviewController {
             ];
         } else {
             followUps = [
-                SELECT Id, Name, Rep_Code_Value__c, Firm__r.Name, Reason__c, Status__c, Held_Row_Count__c, Held_Amount__c, Last_Seen_Date__c,
-                    AI_Status__c, AI_Confidence__c, Suggested_Resolution__c, AI_Suggested_Advisor__r.Name, AI_Request__c, AI_Request__r.Name,
-                    Assigned_To__c, Assigned_To__r.Name, Firm__c, AI_Homework__c, AI_Field_Suggestions__c, Asked_Firm_At__c
+                SELECT
+                    Id,
+                    Name,
+                    Rep_Code_Value__c,
+                    Firm__r.Name,
+                    Reason__c,
+                    Status__c,
+                    Held_Row_Count__c,
+                    Held_Amount__c,
+                    Last_Seen_Date__c,
+                    AI_Status__c,
+                    AI_Confidence__c,
+                    Suggested_Resolution__c,
+                    AI_Suggested_Advisor__r.Name,
+                    AI_Request__c,
+                    AI_Request__r.Name,
+                    Assigned_To__c,
+                    Assigned_To__r.Name,
+                    Firm__c,
+                    AI_Homework__c,
+                    AI_Field_Suggestions__c,
+                    Asked_Firm_At__c
                 FROM Code_Follow_Up__c
                 WHERE Status__c IN ('Open', 'In Progress')
                 WITH USER_MODE
@@ -947,7 +1088,12 @@ public with sharing class ReviewController {
     private static List<MappingItem> mappingItems() {
         List<MappingItem> result = new List<MappingItem>();
         for (Import_Batch__c b : [
-            SELECT Id, Name, Source_Firm__c, Source_File_Name__c, Error_Message__c,
+            SELECT
+                Id,
+                Name,
+                Source_Firm__c,
+                Source_File_Name__c,
+                Error_Message__c,
                 (SELECT Id, Name, AI_Rationale__c FROM Proposed_Mapping_Profiles__r WHERE Status__c = 'Draft' ORDER BY CreatedDate DESC LIMIT 1)
             FROM Import_Batch__c
             WHERE Status__c = :ImportBatchProcessor.STATUS_MAPPING_REVIEW
@@ -975,8 +1121,19 @@ public with sharing class ReviewController {
     private static List<FileItem> recentFiles() {
         List<FileItem> result = new List<FileItem>();
         for (Import_Batch__c b : [
-            SELECT Id, Name, Source_Firm__c, Source_File_Name__c, Status__c, Row_Count__c, Matched_Row_Count__c, Review_Row_Count__c,
-                Held_Row_Count__c, Error_Row_Count__c, Error_Message__c, CreatedDate
+            SELECT
+                Id,
+                Name,
+                Source_Firm__c,
+                Source_File_Name__c,
+                Status__c,
+                Row_Count__c,
+                Matched_Row_Count__c,
+                Review_Row_Count__c,
+                Held_Row_Count__c,
+                Error_Row_Count__c,
+                Error_Message__c,
+                CreatedDate
             FROM Import_Batch__c
             WITH USER_MODE
             ORDER BY CreatedDate DESC
@@ -1087,6 +1244,8 @@ public with sharing class ReviewController {
             if (advisorId != null) {
                 requireType(advisorId, Contact.SObjectType, 'The advisor must be a contact.');
                 change.Credited_Advisor__c = advisorId;
+                // Roster rows use the credited advisor directly; trade rows keep it as an override for re-matching.
+                change.Advisor_Override__c = advisorId;
             }
             change.Remember_Choice__c = rememberChoice == true;
         }
@@ -1170,10 +1329,34 @@ public with sharing class ReviewController {
             change.put('Assigned_To__c', null);
         }
         if (change instanceof Import_Staging_Row__c) {
-            // Everyone sees who is working an issue, whichever of its rows they open.
-            saveAll(sameIssueRows(recordId), new Import_Staging_Row__c(Assigned_To__c = (Id) change.get('Assigned_To__c')));
+            assignIssue(recordId, assignToMe == true);
         } else {
             save(change);
+        }
+    }
+
+    /**
+     * Assigns (or gives back) every row sharing this row's issue, so everyone sees who is working it whichever row they
+     * open. Taking an issue is refused if any of its rows is assigned to someone else; giving it back releases only your
+     * own rows. The rows are locked by sameIssueRows while this runs.
+     */
+    private static void assignIssue(Id rowId, Boolean assignToMe) {
+        Id me = UserInfo.getUserId();
+        Set<Id> ids = new Map<Id, Import_Staging_Row__c>(sameIssueRows(rowId)).keySet();
+        List<Import_Staging_Row__c> mine = new List<Import_Staging_Row__c>();
+        List<Import_Staging_Row__c> free = new List<Import_Staging_Row__c>();
+        for (Import_Staging_Row__c r : [SELECT Id, Assigned_To__c, Assigned_To__r.Name FROM Import_Staging_Row__c WHERE Id IN :ids WITH USER_MODE]) {
+            if (r.Assigned_To__c == null) {
+                free.add(r);
+            } else if (r.Assigned_To__c == me) {
+                mine.add(r);
+            } else if (assignToMe) {
+                throw fail('Some rows with this issue are assigned to ' + r.Assigned_To__r?.Name + '. Ask them to unassign it first.');
+            }
+        }
+        List<Import_Staging_Row__c> targets = assignToMe ? free : mine;
+        if (!targets.isEmpty()) {
+            saveAll(targets, new Import_Staging_Row__c(Assigned_To__c = assignToMe ? me : null));
         }
     }
 
@@ -1269,7 +1452,9 @@ public with sharing class ReviewController {
                 return 'Code ' + code + ' has had no confirmed activity for some time. Please confirm who holds it today.';
             }
             when 'Reassignment Suspected' {
-                return 'Recent trades on code ' + code + ' name an advisor who is not its holder in our records. Has the code moved? If so, to whom and from what date?';
+                return 'Recent trades on code ' +
+                    code +
+                    ' name an advisor who is not its holder in our records. Has the code moved? If so, to whom and from what date?';
             }
             when 'Allocation Incomplete' {
                 return 'The team shares on code ' + code + ' no longer add up to 100%. What is the current split?';
@@ -1284,7 +1469,12 @@ public with sharing class ReviewController {
     private static List<FirmFollowUp> firmFollowUps(List<RowItem> holdRows, List<FollowUpItem> followUps) {
         Map<Id, FirmFollowUp> byFirm = new Map<Id, FirmFollowUp>();
         for (RowItem r : holdRows) {
-            addQuestion(byFirm, r.followUpFirmId, r.followUpFirmName, question(r.id, r.holdReason, 'On hold · ' + r.headline + (r.groupCount > 1 ? ' · ' + String.valueOf(r.groupCount) + ' rows' : ''), r.askedAt));
+            addQuestion(
+                byFirm,
+                r.followUpFirmId,
+                r.followUpFirmName,
+                question(r.id, r.holdReason, 'On hold · ' + r.headline + (r.groupCount > 1 ? ' · ' + String.valueOf(r.groupCount) + ' rows' : ''), r.askedAt)
+            );
         }
         for (FollowUpItem f : followUps) {
             addQuestion(byFirm, f.firmId, f.firmName, question(f.id, f.question, 'Code ' + f.repCode + ' · ' + f.reason, f.askedAt));
@@ -1365,8 +1555,16 @@ public with sharing class ReviewController {
         // Rows held for the same issue are one question, with how many rows and files it affects.
         Map<String, List<Import_Staging_Row__c>> heldByIssue = new Map<String, List<Import_Staging_Row__c>>();
         for (Import_Staging_Row__c r : [
-            SELECT Id, Issue_Key__c, Import_Batch__c, Source_Rep_Code__c, Source_Advisor_Name__c, Source_Firm_Name__c,
-                Source_Fund_Name__c, Trade_Date__c, On_Hold_Reason__c
+            SELECT
+                Id,
+                Issue_Key__c,
+                Import_Batch__c,
+                Source_Rep_Code__c,
+                Source_Advisor_Name__c,
+                Source_Firm_Name__c,
+                Source_Fund_Name__c,
+                Trade_Date__c,
+                On_Hold_Reason__c
             FROM Import_Staging_Row__c
             WHERE
                 On_Hold__c = TRUE
@@ -1469,7 +1667,16 @@ public with sharing class ReviewController {
 
     @TestVisible
     private static String templateBody(String greeting, String firmName, List<String> questions) {
-        List<String> lines = new List<String>{ 'Hello ' + greeting + ',', '', 'Could you help us with the following about ' + firmName + '\'s recent files?', '' };
+        List<String> lines = new List<String>{
+            'Hello ' +
+            greeting +
+            ',',
+            '',
+            'Could you help us with the following about ' +
+            firmName +
+            '\'s recent files?',
+            ''
+        };
         Integer n = 0;
         for (String q : questions) {
             n++;
@@ -1499,7 +1706,10 @@ public with sharing class ReviewController {
                 '',
                 'Contact first name: ' + greeting,
                 'Dealer: ' + firmName,
-                'Sender: ' + UserInfo.getName() + ', ' + UserInfo.getOrganizationName(),
+                'Sender: ' +
+                UserInfo.getName() +
+                ', ' +
+                UserInfo.getOrganizationName(),
                 '',
                 'QUESTIONS:',
                 String.join(numbered, '\n')

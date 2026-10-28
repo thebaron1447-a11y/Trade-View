@@ -7,9 +7,27 @@ public inherited sharing class NameNormalizer {
     // Multi-word suffixes must come before the single words they end with.
     @TestVisible
     private static final List<String> SUFFIXES = new List<String>{
-        'and company', 'and co', 'and c', 'et compagnie', 'et cie',
-        'incorporated', 'corporation', 'limited', 'company', 'compagnie',
-        'corp', 'inc', 'ltd', 'ltée', 'ltee', 'llp', 'lp', 'cie', 'co', 'and', 'et'
+        'and company',
+        'and co',
+        'and c',
+        'et compagnie',
+        'et cie',
+        'incorporated',
+        'corporation',
+        'limited',
+        'company',
+        'compagnie',
+        'corp',
+        'inc',
+        'ltd',
+        'ltée',
+        'ltee',
+        'llp',
+        'lp',
+        'cie',
+        'co',
+        'and',
+        'et'
     };
 
     /**

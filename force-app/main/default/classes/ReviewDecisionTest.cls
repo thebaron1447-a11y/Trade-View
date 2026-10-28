@@ -141,7 +141,12 @@ private class ReviewDecisionTest {
             new List<Import_Staging_Row__c>{ TradeTestWorld.trade('Kestrel Capital', '1001', 'Ryan Chen', 'Wealth World Fund - Series A', SEP_29, 50000) }
         );
         Integer before = [SELECT COUNT() FROM Firm_Alias__c];
-        update new Import_Staging_Row__c(Id = TradeTestWorld.row(batch.Id, 1).Id, Firm_Override__c = w.kesInc.Id, Remember_Choice__c = true, Reviewer_Decision__c = 'Accept');
+        update new Import_Staging_Row__c(
+            Id = TradeTestWorld.row(batch.Id, 1).Id,
+            Firm_Override__c = w.kesInc.Id,
+            Remember_Choice__c = true,
+            Reviewer_Decision__c = 'Accept'
+        );
         Assert.areEqual(before, [SELECT COUNT() FROM Firm_Alias__c], 'an ambiguous name must keep going to review');
     }
 
@@ -150,7 +155,9 @@ private class ReviewDecisionTest {
         TradeTestWorld.build();
         // Julia Morales started on code 457 in 2020, so a 2019 row cannot be credited until the data is fixed.
         Import_Batch__c batch = reviewBatch(
-            new List<Import_Staging_Row__c>{ TradeTestWorld.trade('Barder & Company', '457', 'Julia Morales', 'Wealth World ETF', Date.newInstance(2019, 5, 1), 1000) }
+            new List<Import_Staging_Row__c>{
+                TradeTestWorld.trade('Barder & Company', '457', 'Julia Morales', 'Wealth World ETF', Date.newInstance(2019, 5, 1), 1000)
+            }
         );
         Id rowId = TradeTestWorld.row(batch.Id, 1).Id;
         Assert.areEqual('DATE_BEFORE_CODE_START', TradeTestWorld.row(batch.Id, 1).Match_Flags__c, 'date before the code started');

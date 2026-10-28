@@ -504,8 +504,14 @@ private class DemoScenarioTest {{
             {fu_lines}
         }};
         Map<String, Code_Follow_Up__c> byKey = new Map<String, Code_Follow_Up__c>();
-        for (Code_Follow_Up__c f : [SELECT Follow_Up_Key__c, Held_Row_Count__c, Held_Amount__c, Status__c FROM Code_Follow_Up__c]) {{
-            byKey.put(f.Follow_Up_Key__c, f);
+        // Follow-ups are keyed by the matched firm; the expectations name the dealer that sent the file.
+        Map<String, String> dealerOf = new Map<String, String>{{
+            'Barder & Company' => 'BARDER',
+            'Northgate Wealth Partners Inc.' => 'NORTHGATE',
+            'Lumière Valeurs Mobilières Ltée' => 'LUMIERE'
+        }};
+        for (Code_Follow_Up__c f : [SELECT Firm__r.Name, Rep_Code_Value__c, Reason__c, Held_Row_Count__c, Held_Amount__c, Status__c FROM Code_Follow_Up__c]) {{
+            byKey.put(dealerOf.get(f.Firm__r.Name) + '|' + f.Rep_Code_Value__c + '|' + f.Reason__c, f);
         }}
         Assert.areEqual(followUps.size(), byKey.size(), 'one follow-up per firm, code and reason: ' + byKey.keySet());
         for (List<String> e : followUps) {{
@@ -528,7 +534,7 @@ private class DemoScenarioTest {{
         update new Rep_Code_Assignment__c(Id = marcus.Id, Effective_End_Date__c = Date.newInstance(2026, 9, 14), End_Date_Source__c = 'Confirmed by Firm');
         Rep_Code__c code2210 = [SELECT Id FROM Rep_Code__c WHERE Name = '2210'];
         insert new Rep_Code_Assignment__c(Rep_Code__c = code2210.Id, Advisor__c = priya.Id, Allocation_Percent__c = 100, Effective_Start_Date__c = Date.newInstance(2026, 9, 15));
-        Code_Follow_Up__c f = [SELECT Id FROM Code_Follow_Up__c WHERE Follow_Up_Key__c = 'BARDER|2210|Reassignment Suspected'];
+        Code_Follow_Up__c f = [SELECT Id FROM Code_Follow_Up__c WHERE Rep_Code_Value__c = '2210' AND Reason__c = 'Reassignment Suspected'];
 
         Test.startTest();
         update new Code_Follow_Up__c(Id = f.Id, Status__c = 'Resolved');
@@ -545,7 +551,7 @@ private class DemoScenarioTest {{
     @IsTest
     static void resolvingWithoutFixingTheCodeReopensTheFollowUp() {{
         ingest(new Map<String, String>{{ 'BARDER' => BARDER_CSV }}, new Map<String, String>{{ 'BARDER' => 'BARDER' }});
-        Code_Follow_Up__c f = [SELECT Id FROM Code_Follow_Up__c WHERE Follow_Up_Key__c = 'BARDER|3390|Unknown Code'];
+        Code_Follow_Up__c f = [SELECT Id FROM Code_Follow_Up__c WHERE Rep_Code_Value__c = '3390' AND Reason__c = 'Unknown Code'];
         Test.startTest();
         update new Code_Follow_Up__c(Id = f.Id, Status__c = 'Resolved');
         Test.stopTest();
@@ -557,7 +563,7 @@ private class DemoScenarioTest {{
     @IsTest
     static void closingFollowUpSendsRowsToReview() {{
         Map<String, Id> ids = ingest(new Map<String, String>{{ 'NORTHGATE' => NORTHGATE_CSV }}, new Map<String, String>{{ 'NORTHGATE' => 'NORTHGATE' }});
-        Code_Follow_Up__c f = [SELECT Id FROM Code_Follow_Up__c WHERE Follow_Up_Key__c = 'NORTHGATE|5521|Code Dormant'];
+        Code_Follow_Up__c f = [SELECT Id FROM Code_Follow_Up__c WHERE Rep_Code_Value__c = '5521' AND Reason__c = 'Code Dormant'];
         Test.startTest();
         update new Code_Follow_Up__c(Id = f.Id, Status__c = 'Closed - No Action');
         Test.stopTest();

@@ -69,7 +69,11 @@ private class MappingServiceTest {
     static void enforcesDirectionConvention() {
         List<String> headers = new List<String>{ 'Trade Dt', 'Dealer Rep #', 'Fund', 'Gross Amt', 'Side' };
         Map<String, String> withType = new Map<String, String>{
-            'Trade Dt' => 'tradeDate', 'Dealer Rep #' => 'repCode', 'Fund' => 'fundName', 'Gross Amt' => 'amount', 'Side' => 'transactionType'
+            'Trade Dt' => 'tradeDate',
+            'Dealer Rep #' => 'repCode',
+            'Fund' => 'fundName',
+            'Gross Amt' => 'amount',
+            'Side' => 'transactionType'
         };
         String signedProblems = problemsFor(headers, TestDataFactory.profile('X', headers, withType, 'MM/DD/YYYY', 'Period', TestDataFactory.SIGNED));
         Assert.isTrue(signedProblems.contains('must be mapped to IGNORE'), 'problems: ' + signedProblems);
@@ -136,9 +140,12 @@ private class MappingServiceTest {
     static void rosterProfilesNeedCodeAdvisorAndDateButNoDirection() {
         List<String> headers = new List<String>{ 'Rep Code', 'Advisor Name', 'Branch', 'Effective Date' };
         Mapping_Profile__c p = TestDataFactory.profile(
-            'BARDER', headers,
+            'BARDER',
+            headers,
             new Map<String, String>{ 'Rep Code' => 'repCode', 'Advisor Name' => 'advisorName', 'Branch' => 'branchName', 'Effective Date' => 'tradeDate' },
-            'MM/DD/YYYY', 'Period', TestDataFactory.TYPE_COLUMN
+            'MM/DD/YYYY',
+            'Period',
+            TestDataFactory.TYPE_COLUMN
         );
         p.Feed_Type__c = MappingService.FEED_ROSTER;
         Assert.areEqual(
@@ -146,7 +153,9 @@ private class MappingServiceTest {
             MappingService.resolveColumns(headers, p),
             'roster columns resolve without fund, amount or transaction type'
         );
-        p.Column_Map__c = System.JSON.serialize(new Map<String, String>{ 'Rep Code' => 'repCode', 'Advisor Name' => 'IGNORE', 'Branch' => 'branchName', 'Effective Date' => 'tradeDate' });
+        p.Column_Map__c = System.JSON.serialize(
+            new Map<String, String>{ 'Rep Code' => 'repCode', 'Advisor Name' => 'IGNORE', 'Branch' => 'branchName', 'Effective Date' => 'tradeDate' }
+        );
         String problems = problemsFor(headers, p);
         Assert.isTrue(problems.contains('No column is mapped to advisorName'), 'problems: ' + problems);
     }
@@ -155,7 +164,11 @@ private class MappingServiceTest {
     static void aumSettingsMustBeConsistent() {
         List<String> headers = new List<String>{ 'Trade Dt', 'Dealer Rep #', 'Fund', 'Gross Amt', 'Record Type' };
         Map<String, String> m = new Map<String, String>{
-            'Trade Dt' => 'tradeDate', 'Dealer Rep #' => 'repCode', 'Fund' => 'fundName', 'Gross Amt' => 'amount', 'Record Type' => 'rowType'
+            'Trade Dt' => 'tradeDate',
+            'Dealer Rep #' => 'repCode',
+            'Fund' => 'fundName',
+            'Gross Amt' => 'amount',
+            'Record Type' => 'rowType'
         };
         Mapping_Profile__c p = TestDataFactory.profile('BARDER', headers, m, 'MM/DD/YYYY', 'Period', TestDataFactory.SIGNED);
         String noIndicators = problemsFor(headers, p);

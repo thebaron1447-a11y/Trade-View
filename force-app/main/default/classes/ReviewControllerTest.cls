@@ -198,7 +198,7 @@ private class ReviewControllerTest {
 
         ReviewController.decideRow(fundRowId, 'Reject', null, null, null, false);
         String twice = failureOf(fundRowId, 'Accept', null, w.wwfA.Id);
-        Assert.isTrue(twice.contains('Only rows in Needs Review'), 'already decided: ' + twice);
+        Assert.areEqual('This row is no longer waiting for a decision. Refresh to see its current state.', twice, 'already decided');
         Assert.areEqual('Rejected', TradeTestWorld.row(batch.Id, 2).Match_Status__c, 'unchanged');
     }
 
@@ -463,6 +463,118 @@ private class ReviewControllerTest {
     }
 
     @IsTest
+    static void takingAnIssueNeverTakesRowsSomeoneElseHolds() {
+        claudeOff();
+        TradeTestWorld.build();
+        repeatedFundSpelling();
+        Id sharedId = lineFor(ReviewController.getQueue('all'), 'Zephyr Growth Pool').id;
+        User other = otherUser();
+        Import_Staging_Row__c theirs = [SELECT Id FROM Import_Staging_Row__c WHERE Source_Fund_Name__c LIKE 'zephyr%' AND Id != :sharedId LIMIT 1];
+        update new Import_Staging_Row__c(Id = theirs.Id, Assigned_To__c = other.Id);
+
+        String refused = 'no error';
+        try {
+            ReviewController.setAssignment(sharedId, true);
+        } catch (AuraHandledException e) {
+            refused = e.getMessage();
+        }
+        Assert.isTrue(refused.startsWith('Some rows with this issue are assigned to '), 'refused: ' + refused);
+        Assert.areEqual(other.Id, [SELECT Assigned_To__c FROM Import_Staging_Row__c WHERE Id = :theirs.Id].Assigned_To__c, 'their row is still theirs');
+        Assert.areEqual(0, [SELECT COUNT() FROM Import_Staging_Row__c WHERE Assigned_To__c = :UserInfo.getUserId()], 'nothing was taken');
+
+        update new Import_Staging_Row__c(Id = theirs.Id, Assigned_To__c = null);
+        ReviewController.setAssignment(sharedId, true);
+        Assert.areEqual(3, [SELECT COUNT() FROM Import_Staging_Row__c WHERE Assigned_To__c = :UserInfo.getUserId()], 'a free issue is taken whole');
+        update new Import_Staging_Row__c(Id = theirs.Id, Assigned_To__c = other.Id);
+        ReviewController.setAssignment(sharedId, false);
+        Assert.areEqual(0, [SELECT COUNT() FROM Import_Staging_Row__c WHERE Assigned_To__c = :UserInfo.getUserId()], 'giving it back releases my rows');
+        Assert.areEqual(other.Id, [SELECT Assigned_To__c FROM Import_Staging_Row__c WHERE Id = :theirs.Id].Assigned_To__c, 'and leaves theirs alone');
+    }
+
+    @IsTest
+    static void aNameThatFitsSomeTeamMembersIsChosenByAPerson() {
+        claudeOff();
+        TradeTestWorld w = TradeTestWorld.build();
+        insert new Firm_Alias__c(Name = 'Kestrel West', Normalized_Key__c = NameNormalizer.firmKey('Kestrel West'), Firm__c = w.kesInc.Id);
+        Rep_Code__c team = new Rep_Code__c(Name = 'T100', Firm__c = w.kesInc.Id);
+        insert team;
+        insert new List<Rep_Code_Assignment__c>{
+            new Rep_Code_Assignment__c(
+                Rep_Code__c = team.Id,
+                Advisor__c = w.ryan.Id,
+                Allocation_Percent__c = 50,
+                Effective_Start_Date__c = Date.newInstance(2026, 1, 1)
+            ),
+            new Rep_Code_Assignment__c(
+                Rep_Code__c = team.Id,
+                Advisor__c = w.megan.Id,
+                Allocation_Percent__c = 30,
+                Effective_Start_Date__c = Date.newInstance(2026, 1, 1)
+            ),
+            new Rep_Code_Assignment__c(
+                Rep_Code__c = team.Id,
+                Advisor__c = w.julia.Id,
+                Allocation_Percent__c = 20,
+                Effective_Start_Date__c = Date.newInstance(2026, 1, 1)
+            )
+        };
+        Import_Batch__c batch = TradeTestWorld.stagedBatch(
+            'KESTREL',
+            new List<Import_Staging_Row__c>{ TradeTestWorld.trade('Kestrel West', 'T100', 'Chen', 'Wealth World ETF', SEP_29, 9000) }
+        );
+        TradeMatcher.run(new Set<Id>{ batch.Id });
+
+        Import_Staging_Row__c row = TradeTestWorld.row(batch.Id, 1);
+        Assert.areEqual('Needs Review', row.Match_Status__c, '"Chen" fits two of the three members: not split across all three');
+        Assert.isTrue(row.Match_Flags__c.contains('ADVISOR_AMBIGUOUS'), 'flags: ' + row.Match_Flags__c);
+        ReviewController.RowItem item = rowOf(ReviewController.getQueue('all'), row.Id);
+        Assert.isTrue(item.needsAdvisor, 'the reviewer chooses the advisor');
+        Assert.isTrue(item.isCodeIssue, 'worked in Dealer Code Review');
+        Set<String> offered = new Set<String>();
+        for (ReviewController.Option o : item.advisorOptions) {
+            offered.add(o.label);
+        }
+        Assert.areEqual(new Set<String>{ 'Ryan Chen', 'Megan Chen' }, offered, 'only the members the name fits');
+
+        String refused = failureOf(row.Id, 'Accept', null, null);
+        Assert.isTrue(refused.contains('Choose the Advisor Override'), 'an advisor must be chosen: ' + refused);
+
+        Test.startTest();
+        ReviewController.decideRow(row.Id, 'Accept', null, null, w.ryan.Id, false);
+        Test.stopTest();
+        Import_Staging_Row__c done = TradeTestWorld.row(batch.Id, 1);
+        Assert.areEqual('Matched', done.Match_Status__c, 're-matched with the choice');
+        Assert.areEqual(w.ryan.Id, done.Credited_Advisor__c, '100% to the chosen member');
+        Assert.isTrue(done.Match_Flags__c.contains('ADVISOR_FROM_REVIEWER'), 'and says so: ' + done.Match_Flags__c);
+    }
+
+    @IsTest
+    static void eachFirmInADealerFileGetsItsOwnCodeReview() {
+        claudeOff();
+        TradeTestWorld w = TradeTestWorld.build();
+        insert new List<Firm_Alias__c>{
+            new Firm_Alias__c(Name = 'Kestrel West', Normalized_Key__c = NameNormalizer.firmKey('Kestrel West'), Firm__c = w.kesInc.Id),
+            new Firm_Alias__c(Name = 'Kestrel East', Normalized_Key__c = NameNormalizer.firmKey('Kestrel East'), Firm__c = w.kesLtd.Id)
+        };
+        Import_Batch__c batch = TradeTestWorld.stagedBatch(
+            'KESTREL',
+            new List<Import_Staging_Row__c>{
+                TradeTestWorld.trade('Kestrel West', '9999', 'Ryan Chen', 'Wealth World ETF', SEP_29, 1000),
+                TradeTestWorld.trade('Kestrel East', '9999', 'Megan Chen', 'Wealth World ETF', SEP_29, 2000)
+            }
+        );
+        TradeMatcher.run(new Set<Id>{ batch.Id });
+
+        Map<Id, Code_Follow_Up__c> byFirm = new Map<Id, Code_Follow_Up__c>();
+        for (Code_Follow_Up__c f : [SELECT Firm__c, Held_Row_Count__c FROM Code_Follow_Up__c WHERE Rep_Code_Value__c = '9999']) {
+            byFirm.put(f.Firm__c, f);
+        }
+        Assert.areEqual(new Set<Id>{ w.kesInc.Id, w.kesLtd.Id }, byFirm.keySet(), 'one code review per firm, not per dealer');
+        Assert.areEqual(1, byFirm.get(w.kesInc.Id).Held_Row_Count__c, 'Inc. holds its own row');
+        Assert.areEqual(1, byFirm.get(w.kesLtd.Id).Held_Row_Count__c, 'Ltd. holds its own row');
+    }
+
+    @IsTest
     static void codeIssuesAreSeparatedFromOtherDecisions() {
         Map<Id, List<ReviewController.Option>> none = new Map<Id, List<ReviewController.Option>>();
         ReviewController.RowItem dated = ReviewController.rowItem(
@@ -488,7 +600,11 @@ private class ReviewControllerTest {
 
     @IsTest
     static void flagsWithoutWordsAreShownAsThemselves() {
-        Import_Staging_Row__c r = new Import_Staging_Row__c(Match_Flags__c = 'SOMETHING_NEW;FIRM_MISSING', Row_Type__c = 'Trade', Match_Status__c = 'Needs Review');
+        Import_Staging_Row__c r = new Import_Staging_Row__c(
+            Match_Flags__c = 'SOMETHING_NEW;FIRM_MISSING',
+            Row_Type__c = 'Trade',
+            Match_Status__c = 'Needs Review'
+        );
         ReviewController.RowItem it = ReviewController.rowItem(r, new Map<Id, List<ReviewController.Option>>());
         Assert.areEqual(2, it.reasons.size(), 'one reason per flag');
         Assert.isTrue(it.reasons.contains('SOMETHING_NEW'), 'unknown flag shown as is');
@@ -603,7 +719,10 @@ private class ReviewControllerTest {
         Assert.isTrue(d.htmlBody.contains('Hello Julia,'), 'greets by first name: ' + d.htmlBody);
         Assert.isTrue(d.htmlBody.contains('1. Which fund is &quot;ETF Wealth World Fund A&quot;?'), 'held row homework, escaped: ' + d.htmlBody);
         Assert.isTrue(d.htmlBody.contains('Code 3390 is not in our records.'), 'standard code question: ' + d.htmlBody);
-        Assert.isFalse(d.htmlBody.contains('12500') || d.htmlBody.contains('12,500') || d.htmlBody.contains('45000') || d.htmlBody.contains('45,000'), 'never amounts');
+        Assert.isFalse(
+            d.htmlBody.contains('12500') || d.htmlBody.contains('12,500') || d.htmlBody.contains('45000') || d.htmlBody.contains('45,000'),
+            'never amounts'
+        );
 
         ReviewController.markAsked(d.itemIds);
         q = ReviewController.getQueue('all');
@@ -620,7 +739,10 @@ private class ReviewControllerTest {
         Import_Batch__c batch = reviewBatch(w);
         juliaAnswersForBarder(w);
         FakeClaudeClient fake = FakeClaudeClient.install(
-            new List<Object>{ '{"subject": "Two questions on recent Barder files", "body": "Hi Julia,\\n\\n1. Which fund <is> it?\\n2. Who holds 3390?\\n\\nThanks"}', '{"subject": ""}' }
+            new List<Object>{
+                '{"subject": "Two questions on recent Barder files", "body": "Hi Julia,\\n\\n1. Which fund <is> it?\\n2. Who holds 3390?\\n\\nThanks"}',
+                '{"subject": ""}'
+            }
         );
 
         ReviewController.EmailDraft d = ReviewController.draftFirmEmail(w.barder.Id);
@@ -702,7 +824,11 @@ private class ReviewControllerTest {
 
     @IsTest
     static void standardQuestionsNameTheCodeAndNeverAmounts() {
-        Assert.areEqual('Code 3390 is not in our records. Who holds it, at which branch, and from what date?', ReviewController.standardQuestion('Unknown Code', '3390'), 'unknown');
+        Assert.areEqual(
+            'Code 3390 is not in our records. Who holds it, at which branch, and from what date?',
+            ReviewController.standardQuestion('Unknown Code', '3390'),
+            'unknown'
+        );
         Assert.isTrue(ReviewController.standardQuestion('Code Ended', '3102').contains('code 3102 as ended'), 'ended');
         Assert.isTrue(ReviewController.standardQuestion('Code Dormant', '5521').contains('5521'), 'dormant');
         Assert.isTrue(ReviewController.standardQuestion('Reassignment Suspected', '2210').contains('Has the code moved?'), 'reassignment');
@@ -750,7 +876,9 @@ private class ReviewControllerTest {
         Id kestrelId = TradeTestWorld.row(batch.Id, 1).Id;
         Import_Batch__c roster = TradeTestWorld.stagedBatch(
             'BARDER',
-            new List<Import_Staging_Row__c>{ TradeTestWorld.roster('Barder & Company', '3390', 'Hannah Pierce', 'Barder & Company - Oakville', Date.newInstance(2026, 9, 20)) }
+            new List<Import_Staging_Row__c>{
+                TradeTestWorld.roster('Barder & Company', '3390', 'Hannah Pierce', 'Barder & Company - Oakville', Date.newInstance(2026, 9, 20))
+            }
         );
         TradeMatcher.run(new Set<Id>{ roster.Id });
         Id rosterRowId = TradeTestWorld.row(roster.Id, 1).Id;
@@ -781,7 +909,11 @@ private class ReviewControllerTest {
         Assert.areEqual(w.barderOakville.Id, hannah.AccountId, 'roster approval created the advisor');
         Assert.areEqual(1, [SELECT COUNT() FROM Rep_Code_Assignment__c WHERE Advisor__c = :hannah.Id], 'and her assignment');
         Assert.areEqual('Resolved', [SELECT Status__c FROM Code_Follow_Up__c WHERE Rep_Code_Value__c = '3390'].Status__c, 'and resolved the follow-up');
-        Assert.areEqual('Mapping Review', [SELECT Status__c FROM Import_Batch__c WHERE Source_Firm__c = 'HARBOUR'].Status__c, 'the upload was processed as the reviewer');
+        Assert.areEqual(
+            'Mapping Review',
+            [SELECT Status__c FROM Import_Batch__c WHERE Source_Firm__c = 'HARBOUR'].Status__c,
+            'the upload was processed as the reviewer'
+        );
         Import_Staging_Row__c fundRow = [SELECT On_Hold__c, On_Hold_By__c, Asked_Firm_At__c FROM Import_Staging_Row__c WHERE Id = :fundRowId];
         Assert.areEqual(reviewer.Id, fundRow.On_Hold_By__c, 'held by the reviewer');
         Assert.isFalse(fundRow.On_Hold__c, 'and released');

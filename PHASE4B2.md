@@ -1,5 +1,11 @@
 # Phase 4b.2: review feedback
 
+**Update 4b.4 (audit fixes, part 1):** see section 19 of the build log. Visible changes: a row whose advisor name
+fits some but not all members of a team code (for example "Chen") now waits in Dealer Code Review with those members
+as the choices, instead of being split across the whole team; each firm in a multi-firm dealer file gets its own code
+review. New field Advisor Override. Validate with **159 tests**, then run the full demo reset (code reviews are now
+keyed by firm, so old open ones are replaced).
+
 **Update 4b.3 (shared issues):** rows with the same problem are one line. The same unknown fund spelling, unknown
 firm spelling, or missing or ambiguous firm (per rep code) from the same dealer, across every file still waiting, shows
 as one line with how many rows it affects, their total and how many files: *37 rows · $412,000.00*. Opening it says
@@ -41,7 +47,7 @@ What changes in Trade Review:
   cached, so repeat requests cost less.
 - The missing space in *Firm:Northgate…* is fixed.
 
-## 1. Validate (22 test classes, expect 151 tests)
+## 1. Validate (22 test classes, expect 159 tests)
 
 ```powershell
 cd C:\dev\trade-import-demo

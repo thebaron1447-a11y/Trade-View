@@ -286,6 +286,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>Import_Staging_Row__c.Advisor_Override__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>Import_Staging_Row__c.Amount__c</field>
         <readable>true</readable>
     </fieldPermissions>

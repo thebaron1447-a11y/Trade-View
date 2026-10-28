@@ -93,9 +93,23 @@ public with sharing class ClaudeSuggestionService {
     public static List<Import_Staging_Row__c> pendingRows(Set<Id> batchIds, Integer maxRows) {
         if (batchIds == null) {
             return [
-                SELECT Id, Import_Batch__c, Name, Row_Type__c, Source_Firm_Name__c, Source_Rep_Code__c, Source_Advisor_Name__c,
-                    Source_Branch_Name__c, Source_Fund_Name__c, Trade_Date__c, Transaction_Type__c, Amount__c, Match_Flags__c,
-                    Match_Notes__c, Match_Candidates__c, Matched_Firm__c
+                SELECT
+                    Id,
+                    Import_Batch__c,
+                    Name,
+                    Row_Type__c,
+                    Source_Firm_Name__c,
+                    Source_Rep_Code__c,
+                    Source_Advisor_Name__c,
+                    Source_Branch_Name__c,
+                    Source_Fund_Name__c,
+                    Trade_Date__c,
+                    Transaction_Type__c,
+                    Amount__c,
+                    Match_Flags__c,
+                    Match_Notes__c,
+                    Match_Candidates__c,
+                    Matched_Firm__c
                 FROM Import_Staging_Row__c
                 WHERE Match_Status__c = 'Needs Review' AND AI_Status__c = NULL AND Reviewer_Decision__c = NULL
                 WITH USER_MODE
@@ -104,9 +118,23 @@ public with sharing class ClaudeSuggestionService {
             ];
         }
         return [
-            SELECT Id, Import_Batch__c, Name, Row_Type__c, Source_Firm_Name__c, Source_Rep_Code__c, Source_Advisor_Name__c,
-                Source_Branch_Name__c, Source_Fund_Name__c, Trade_Date__c, Transaction_Type__c, Amount__c, Match_Flags__c,
-                Match_Notes__c, Match_Candidates__c, Matched_Firm__c
+            SELECT
+                Id,
+                Import_Batch__c,
+                Name,
+                Row_Type__c,
+                Source_Firm_Name__c,
+                Source_Rep_Code__c,
+                Source_Advisor_Name__c,
+                Source_Branch_Name__c,
+                Source_Fund_Name__c,
+                Trade_Date__c,
+                Transaction_Type__c,
+                Amount__c,
+                Match_Flags__c,
+                Match_Notes__c,
+                Match_Candidates__c,
+                Matched_Firm__c
             FROM Import_Staging_Row__c
             WHERE Import_Batch__c IN :batchIds AND Match_Status__c = 'Needs Review' AND AI_Status__c = NULL AND Reviewer_Decision__c = NULL
             WITH USER_MODE
@@ -231,9 +259,22 @@ public with sharing class ClaudeSuggestionService {
             List<Id> funds = candidates.get('fund');
             ask(it, 'fund', 'candidateFunds', ctx.keysFor(funds == null || funds.isEmpty() ? ctx.allFundIds() : funds));
         }
-        if (roster) {
-            if (flags.contains('ADVISOR_AMBIGUOUS') && row.Matched_Firm__c != null) {
-                ask(it, 'advisor', 'candidateAdvisors', ctx.keysFor(ctx.advisorIdsAtFirm(row.Matched_Firm__c)));
+        if (flags.contains('ADVISOR_AMBIGUOUS') && row.Matched_Firm__c != null) {
+            List<Id> atFirm = ctx.advisorIdsAtFirm(row.Matched_Firm__c);
+            if (roster) {
+                ask(it, 'advisor', 'candidateAdvisors', ctx.keysFor(atFirm));
+            } else {
+                // A trade row on a team code: only the team members the name fits (matching listed them).
+                List<Id> members = new List<Id>();
+                List<Id> named = candidates.get('advisor');
+                for (Id a : named == null ? new List<Id>() : named) {
+                    if (atFirm.contains(a)) {
+                        members.add(a);
+                    }
+                }
+                if (!members.isEmpty()) {
+                    ask(it, 'advisor', 'candidateAdvisors', ctx.keysFor(members));
+                }
             }
         }
         it.asks.add('action');
@@ -796,7 +837,9 @@ public with sharing class ClaudeSuggestionService {
             }
             for (Id fundId : aliases.keySet()) {
                 fundIds.add(fundId);
-                funds.add(new Map<String, Object>{ 'key' => assign('P', fundId, names.get(fundId)), 'name' => names.get(fundId), 'aliases' => aliases.get(fundId) });
+                funds.add(
+                    new Map<String, Object>{ 'key' => assign('P', fundId, names.get(fundId)), 'name' => names.get(fundId), 'aliases' => aliases.get(fundId) }
+                );
             }
         }
 

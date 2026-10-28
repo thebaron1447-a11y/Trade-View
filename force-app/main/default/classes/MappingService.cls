@@ -9,8 +9,16 @@ public inherited sharing class MappingService {
 
     public static final String IGNORE = 'IGNORE';
     public static final Set<String> CANONICAL_FIELDS = new Set<String>{
-        'repCode', 'advisorName', 'firmName', 'branchName', 'fundName', 'tradeDate', 'amount', 'transactionType',
-        'rowType', IGNORE
+        'repCode',
+        'advisorName',
+        'firmName',
+        'branchName',
+        'fundName',
+        'tradeDate',
+        'amount',
+        'transactionType',
+        'rowType',
+        IGNORE
     };
     // tradeDate is the row date: trade date, AUM as-of date, or code effective date.
     public static final List<String> REQUIRED_FIELDS = new List<String>{ 'repCode', 'fundName', 'tradeDate', 'amount' };
@@ -46,14 +54,26 @@ public inherited sharing class MappingService {
     }
 
     /**
-     * Returns the Active profile for this fingerprint, or null if there is none.
+     * Returns the Active profile for this fingerprint, or null if there is none (or the only one is another dealer's
+     * single-firm profile).
      * If several Active profiles share the fingerprint, the one for this source firm wins;
      * if that is still ambiguous, a MappingException is thrown.
      */
     public static Mapping_Profile__c findActiveProfile(String headerFingerprint, String sourceFirm) {
         List<Mapping_Profile__c> profiles = [
-            SELECT Id, Name, Source_Firm__c, Firm__c, Firm__r.Name, Column_Map__c, Date_Format__c,
-                Decimal_Separator__c, Direction_Convention__c, Single_Firm_Feed__c, Feed_Type__c, AUM_Indicator_Values__c
+            SELECT
+                Id,
+                Name,
+                Source_Firm__c,
+                Firm__c,
+                Firm__r.Name,
+                Column_Map__c,
+                Date_Format__c,
+                Decimal_Separator__c,
+                Direction_Convention__c,
+                Single_Firm_Feed__c,
+                Feed_Type__c,
+                AUM_Indicator_Values__c
             FROM Mapping_Profile__c
             WHERE Header_Fingerprint__c = :headerFingerprint AND Status__c = 'Active'
             WITH USER_MODE
@@ -64,7 +84,19 @@ public inherited sharing class MappingService {
             return null;
         }
         if (profiles.size() == 1) {
-            return profiles[0];
+            Mapping_Profile__c only = profiles[0];
+            // A single-firm profile fills in its own firm on every row. Another dealer whose export happens to use
+            // the same column headers must not inherit that firm: treat its file as a new layout (a profile of its
+            // own is proposed and activated), unless the profile is for this dealer or not tied to a dealer.
+            if (
+                only.Single_Firm_Feed__c == true &&
+                String.isNotBlank(only.Source_Firm__c) &&
+                String.isNotBlank(sourceFirm) &&
+                !only.Source_Firm__c.equalsIgnoreCase(sourceFirm)
+            ) {
+                return null;
+            }
+            return only;
         }
         List<Mapping_Profile__c> forFirm = new List<Mapping_Profile__c>();
         for (Mapping_Profile__c p : profiles) {
@@ -76,8 +108,7 @@ public inherited sharing class MappingService {
             return forFirm[0];
         }
         throw new MappingException(
-            'More than one Active mapping profile matches this file layout' +
-            (sourceFirm == null ? '' : ' for ' + sourceFirm) + '. Retire the extra profiles.'
+            'More than one Active mapping profile matches this file layout' + (sourceFirm == null ? '' : ' for ' + sourceFirm) + '. Retire the extra profiles.'
         );
     }
 
@@ -166,8 +197,13 @@ public inherited sharing class MappingService {
             String canonical = raw.get(header) == null ? null : String.valueOf(raw.get(header));
             if (canonical == null || !CANONICAL_FIELDS.contains(canonical)) {
                 problems.add(
-                    'Column "' + header + '" is mapped to "' + canonical + '", which is not a known field. Use one of: ' +
-                    String.join(new List<String>(CANONICAL_FIELDS), ', ') + '.'
+                    'Column "' +
+                        header +
+                        '" is mapped to "' +
+                        canonical +
+                        '", which is not a known field. Use one of: ' +
+                        String.join(new List<String>(CANONICAL_FIELDS), ', ') +
+                        '.'
                 );
                 continue;
             }

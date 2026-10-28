@@ -62,7 +62,10 @@ private class ClaudeServiceTest {
         s.anthropicModel = 'claude-test';
         AiSettings.current = s;
         ClaudeService.client = null;
-        AnthropicApiClientTest.Mock mock = new AnthropicApiClientTest.Mock(200, '{"content": [{"type": "text", "text": "{\\"ok\\": true}"}], "stop_reason": "end_turn"}');
+        AnthropicApiClientTest.Mock mock = new AnthropicApiClientTest.Mock(
+            200,
+            '{"content": [{"type": "text", "text": "{\\"ok\\": true}"}], "stop_reason": "end_turn"}'
+        );
         Test.setMock(HttpCalloutMock.class, mock);
 
         ClaudeService.Result r = ClaudeService.call('Row Suggestions', 'Say ok.', null, 1);
@@ -97,7 +100,9 @@ private class ClaudeServiceTest {
         // Models API: parameters.usage, OpenAI style.
         ClaudeService.Completion models = ClaudeService.withUsage(
             new ClaudeService.Completion('x'),
-            System.JSON.deserializeUntyped('{"generation": {"generatedText": "x", "parameters": {"finish_reason": "stop"}}, "parameters": {"usage": {"completion_tokens": 607, "prompt_tokens": 39, "total_tokens": 646}}}')
+            System.JSON.deserializeUntyped(
+                '{"generation": {"generatedText": "x", "parameters": {"finish_reason": "stop"}}, "parameters": {"usage": {"completion_tokens": 607, "prompt_tokens": 39, "total_tokens": 646}}}'
+            )
         );
         Assert.areEqual(39, models.inputTokens, 'prompt tokens');
         Assert.areEqual(607, models.outputTokens, 'completion tokens');
@@ -105,7 +110,9 @@ private class ClaudeServiceTest {
         // Anthropic: usage at the top, with cache counts.
         ClaudeService.Completion anthropic = ClaudeService.withUsage(
             new ClaudeService.Completion('x'),
-            System.JSON.deserializeUntyped('{"usage": {"input_tokens": 10, "cache_creation_input_tokens": 3000, "cache_read_input_tokens": 0, "output_tokens": 200}}')
+            System.JSON.deserializeUntyped(
+                '{"usage": {"input_tokens": 10, "cache_creation_input_tokens": 3000, "cache_read_input_tokens": 0, "output_tokens": 200}}'
+            )
         );
         Assert.areEqual(3010, anthropic.inputTokens, 'written to cache counts as input');
         Assert.areEqual(0, anthropic.cachedInputTokens, 'nothing read from cache yet');

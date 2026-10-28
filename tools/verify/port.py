@@ -224,6 +224,9 @@ def parse_amount(v, sep, errors):
         errors.append(f'Amount "{v}" is not a number.')
         return None
     a = round_half_up(s)
+    if abs(_D(str(a))) >= _D("1e16"):
+        errors.append(f'Amount "{v}" is too large.')
+        return None
     return -a if neg else a
 
 

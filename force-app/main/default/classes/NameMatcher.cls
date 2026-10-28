@@ -10,15 +10,35 @@ public inherited sharing class NameMatcher {
     // Lower-case accented letters common in English and French names, mapped to plain letters.
     @TestVisible
     private static final Map<String, String> FOLD = new Map<String, String>{
-        'à' => 'a', 'á' => 'a', 'â' => 'a', 'ä' => 'a', 'ã' => 'a', 'å' => 'a',
+        'à' => 'a',
+        'á' => 'a',
+        'â' => 'a',
+        'ä' => 'a',
+        'ã' => 'a',
+        'å' => 'a',
         'ç' => 'c',
-        'è' => 'e', 'é' => 'e', 'ê' => 'e', 'ë' => 'e',
-        'ì' => 'i', 'í' => 'i', 'î' => 'i', 'ï' => 'i',
+        'è' => 'e',
+        'é' => 'e',
+        'ê' => 'e',
+        'ë' => 'e',
+        'ì' => 'i',
+        'í' => 'i',
+        'î' => 'i',
+        'ï' => 'i',
         'ñ' => 'n',
-        'ò' => 'o', 'ó' => 'o', 'ô' => 'o', 'ö' => 'o', 'õ' => 'o',
-        'ù' => 'u', 'ú' => 'u', 'û' => 'u', 'ü' => 'u',
-        'ý' => 'y', 'ÿ' => 'y',
-        'œ' => 'oe', 'æ' => 'ae'
+        'ò' => 'o',
+        'ó' => 'o',
+        'ô' => 'o',
+        'ö' => 'o',
+        'õ' => 'o',
+        'ù' => 'u',
+        'ú' => 'u',
+        'û' => 'u',
+        'ü' => 'u',
+        'ý' => 'y',
+        'ÿ' => 'y',
+        'œ' => 'oe',
+        'æ' => 'ae'
     };
 
     /** Lower-cases, removes accents, and turns anything that is not a letter or digit into a space. */

@@ -681,11 +681,17 @@ field(SR, "Issue_Key__c", "Issue Key", "text",
       "What this row's problem has in common with other rows: the dealer, each firm or fund issue and the spelling it is about (plus the rep code when the right answer can differ by code, as for a missing or ambiguous name). Set by matching for rows waiting for review; blank for roster rows, code issues and rows not in review. Trade Review shows rows with the same key as one line with their count and total, and a decision on it applies to all of them. Indexed (External ID, not unique) so the rows sharing a key are found quickly. Keys over 255 characters are stored as a SHA-256 hash.",
       "Rows with the same issue key share the same problem and are decided together in Trade Review. Set by the system.",
       length=255, external_id=True)
+# Audit fixes (4b.4): a reviewer's choice of team member for a name that fits more than one of them
+field(SR, "Advisor_Override__c", "Advisor Override", "lookup",
+      "The team member a reviewer chose to credit when the row's advisor name fits more than one member of a team code (flag ADVISOR_AMBIGUOUS), for example \"Chen\" on a team with Ryan and Megan Chen. Matching credits this advisor 100% if they hold the code on the trade date, and flags the row ADVISOR_FROM_REVIEWER. If left blank on accept, Claude's suggested advisor is used.",
+      "Choose which team member to credit when the advisor name on the row fits more than one of them.",
+      ref="Contact", rel="Advisor_Override_Staging_Rows", rel_label="Advisor Override Staging Rows", required=False)
 for _f in F:
     if _f["obj"] == AL and _f["api"] == "Purpose__c":
         _f["values"] = _f["values"] + ["Firm Follow-up"]
         _f["desc"] = "What the request was for: suggestions on review rows and follow-ups, a proposed mapping profile for an unknown file layout, or a follow-up email to a firm."
 EXTRA_P3B[SR][0][1].append(("Issue_Key__c", "Readonly"))
+EXTRA_P3B[SR][0][1].insert(3, ("Advisor_Override__c", "Edit"))
 EXTRA_P3B[SR].append(("On Hold", [("On_Hold__c", "Readonly"), ("On_Hold_Reason__c", "Edit"), ("On_Hold_By__c", "Readonly"),
                                   ("On_Hold_Since__c", "Readonly"), ("Asked_Firm_At__c", "Readonly")]))
 for _name, _items in EXTRA_P3B[SR]:

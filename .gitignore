@@ -51,3 +51,6 @@ $RECYCLE.BIN/
 
 # Assistant file-check helper
 .dev_md5.txt
+
+# Working notes kept outside the public repository (see ARCHITECTURE.md instead)
+PROJECT_CONTEXT.md

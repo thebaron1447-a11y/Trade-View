@@ -58,6 +58,9 @@ AMOUNTS = [  # (value, decimal separator, expected string or None)
     ("abc", "Period", None),
     ("1,2,3.4.5", "Period", None),
     ("$", "Period", None),
+    ("12,345,678,901,234,567.00", "Period", None),
+    ("10,000,000,000,000,000.00", "Period", None),
+    ("9,999,999,999,999,999.99", "Period", "9999999999999999.99"),
 ]
 
 REP_CODES = [

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Advisor_Override__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The team member a reviewer chose to credit when the row's advisor name fits more than one member of a team code (flag ADVISOR_AMBIGUOUS), for example "Chen" on a team with Ryan and Megan Chen. Matching credits this advisor 100% if they hold the code on the trade date, and flags the row ADVISOR_FROM_REVIEWER. If left blank on accept, Claude's suggested advisor is used.</description>
+    <inlineHelpText>Choose which team member to credit when the advisor name on the row fits more than one of them.</inlineHelpText>
+    <label>Advisor Override</label>
+    <referenceTo>Contact</referenceTo>
+    <relationshipLabel>Advisor Override Staging Rows</relationshipLabel>
+    <relationshipName>Advisor_Override_Staging_Rows</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

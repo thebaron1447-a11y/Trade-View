@@ -109,7 +109,7 @@ add(
     ["Platform", "Salesforce Agentforce Developer Edition (CLI alias tradeDemo), Claude via Models API"],
     ["Project folder", "C:\\dev\\trade-import-demo (Salesforce DX project)"],
     ["Last updated", "2026-10-14"],
-    ["Current status", "Phases 1 and 2 deployed and verified end to end. Phase 3A (deterministic matching and the Code Follow-Up list) built; deployed and verified end to end 2026-10-14. Phase 3B (Claude suggestions, review decisions, roster approval, mapping proposals, matching rules) deployed with fixes 3B.1 and 3B.2 (110 of 110 tests) and verified end to end 2026-10-21. Phase 4a (Standard tier: Anthropic API provider) passed the org dry run (118 tests) 2026-10-21. Phase 4b (Trade Review app) passed the org dry run (132 tests) 2026-10-22; 4b.1a (names, issue types, full demo reset, complete sample data) and 4b.2 (headlines, On Hold, per-field Claude answers, roster preview, firm follow-up email, token logging and prompt caching) passed the org dry run (145 of 145 tests) 2026-10-23; 4b.2a (one table layout, code issues in Dealer Code Review, Email Firms tab) passed the org dry run (146 of 146 tests) 2026-10-25; 4b.3 (shared issues decided together) built and locally verified 2026-10-25. Next: 4c (cloud storage pull)."],
+    ["Current status", "Phases 1 and 2 deployed and verified end to end. Phase 3A (deterministic matching and the Code Follow-Up list) built; deployed and verified end to end 2026-10-14. Phase 3B (Claude suggestions, review decisions, roster approval, mapping proposals, matching rules) deployed with fixes 3B.1 and 3B.2 (110 of 110 tests) and verified end to end 2026-10-21. Phase 4a (Standard tier: Anthropic API provider) passed the org dry run (118 tests) 2026-10-21. Phase 4b (Trade Review app) passed the org dry run (132 tests) 2026-10-22; 4b.1a (names, issue types, full demo reset, complete sample data) and 4b.2 (headlines, On Hold, per-field Claude answers, roster preview, firm follow-up email, token logging and prompt caching) passed the org dry run (145 of 145 tests) 2026-10-23; 4b.2a (one table layout, code issues in Dealer Code Review, Email Firms tab) passed the org dry run (146 of 146 tests) 2026-10-25; 4b.3 (shared issues decided together) built 2026-10-25; audit fixes part 1 passed the org dry run (159 of 159 tests) 2026-10-28. Next: 4c (cloud storage pull)."],
     ["Data", "All data is synthetic. Firms, advisors and funds are fictional."],
   ], [2400, 6960]),
 );
@@ -826,6 +826,28 @@ add(B("Verification: 151 Apex tests (new: issue keys in TradeMatcherTest; one li
 add(B("Not yet: Claude is still asked about each row of a group separately; asking once per issue and copying the answer would cut cost for large groups."));
 add(H3("Field definition"));
 live["Import_Staging_Row__c@4B3"].forEach((f) => add(fieldBlock(f)));
+
+add(H1("19. Code audit and fixes, part 1 (2026-10-26)"));
+add(P("An independent audit (a separate agent that had not seen the code being built) read every class, trigger and component and ran the local checks on a copy. Its verdict: the pipeline design, the Claude safety model and the tests are strong; the weaknesses are the security model of the background steps, concurrency around Claude, a few matching edge cases and accuracy in the public repository. The findings are in CODE_AUDIT.md in the Claude Project. Part 1 fixes the repository findings and the small correctness findings; the security model (F-01), Claude concurrency (F-02), per-issue Claude calls, prompt-cache layout (F-19), the stranded-work sweeper (F-08), CI (F-29) and the larger refactors follow."));
+add(H2("19.1 Correctness fixes"));
+add(...table(["Finding", "Fix"], [
+  ["F-04 Team split credited people the name rules out", "When a row's name fits some members of a team code but not all (\"Chen\" on a team with Ryan Chen, Megan Chen and Julia Morales), the row goes to Dealer Code Review with ADVISOR_AMBIGUOUS and the members it fits as the choices. The reviewer's choice is stored in the new Advisor Override field; re-matching credits that member 100% (ADVISOR_FROM_REVIEWER). Claude is asked to choose among the same members."],
+  ["F-05 Code reviews were grouped by dealer, not firm", "The follow-up key is now the matched firm's Id + code + reason, so a dealer file covering two firms (Kestrel Inc. and Ltd.) gives each firm its own code review, roster approval resolves the right one, and the email goes to the right firm. DemoScenarioTest now identifies follow-ups by firm, code and reason instead of by the key text."],
+  ["F-06 Last Confirmed Trade Date was never written", "Each matched trade moves its credited assignments' date forward (all members for a team split). Written in system mode for that one field, because the integration user has no edit access to assignments."],
+  ["F-07 One dealer's single-firm profile could fill in its firm on another dealer's file", "When the only Active profile for a layout is another dealer's single-firm profile, the file is treated as a new layout for its own dealer (Mapping Review, Claude proposes a profile)."],
+  ["F-03 Assigning a shared issue overwrote other reviewers' rows", "Taking an issue is refused if any of its rows is assigned to someone else; giving it back releases only your own rows."],
+  ["F-09 Two jobs could stage the same file", "The batch is locked (FOR UPDATE) and moved to Processing before anything else."],
+  ["F-10 An amount too large for the field failed the whole file", "Amounts of 10^16 or more are a row error ('too large'); mirrored in the Python port with three new vectors (Number(18,2) holds 16 digits before the point)."],
+  ["F-12 A long flag list could cut the last flag in half", "Whole flags are kept and any that do not fit are dropped; FOLLOW_UP_CLOSED is always kept last."],
+], [3000, 6360]));
+add(H2("19.2 Repository fixes"));
+add(B("README counts corrected (42 Jest tests, not 50; 159 Apex tests) and the push-job setup steps written into the README instead of linking a guide that was not in the repository. The run guides for phases 1 to 3B are now included."));
+add(B("PROJECT_CONTEXT.md (working notes with the org username and our working agreements) is git-ignored and kept in the Claude Project; a public ARCHITECTURE.md carries the technical content. The org username was removed from the JWT setup guide."));
+add(B("Prettier: an Apex override (tab width 4, print width 160) and every Apex file reformatted to it, so the pre-commit hook no longer rewrites the codebase (verified: only whitespace changed). Sample CSVs keep their line endings (*.csv -text). Unused CSS removed, a misplaced comment moved, package name set, template leftovers removed from the repository."));
+add(H2("19.3 Verification"));
+add(B("159 Apex tests in 22 classes (new: team member choice, one code review per firm, assignment never takes others' rows, confirmed trade date, whole flags, processing lock, another dealer's profile, oversized amount). Parse, PMD (zero findings), lint, cross-reference, Python vectors (18 amounts), 42 Jest tests."));
+add(H3("Field definition"));
+live["Import_Staging_Row__c@4B4"].forEach((f) => add(fieldBlock(f)));
 
 // ------------------------------------------------------------------ document
 const doc = new Document({

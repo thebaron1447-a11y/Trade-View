@@ -65,7 +65,12 @@ public class TradeTestWorld {
     }
 
     private static Rep_Code_Assignment__c assignment(Id codeId, Id advisorId, Integer y, Integer m, Integer d) {
-        return new Rep_Code_Assignment__c(Rep_Code__c = codeId, Advisor__c = advisorId, Allocation_Percent__c = 100, Effective_Start_Date__c = Date.newInstance(y, m, d));
+        return new Rep_Code_Assignment__c(
+            Rep_Code__c = codeId,
+            Advisor__c = advisorId,
+            Allocation_Percent__c = 100,
+            Effective_Start_Date__c = Date.newInstance(y, m, d)
+        );
     }
 
     /** A Staged batch with these rows (numbered in order), ready for TradeMatcher.run. */
@@ -109,10 +114,30 @@ public class TradeTestWorld {
     public static Map<Id, Import_Staging_Row__c> rowsOf(Id batchId) {
         return new Map<Id, Import_Staging_Row__c>(
             [
-                SELECT Id, Name, Row_Number__c, Row_Type__c, Match_Status__c, Match_Method__c, Match_Flags__c, Matched_Firm__c, Matched_Fund__c,
-                    Credited_Advisor__c, Code_Follow_Up__c, AI_Status__c, AI_Confidence__c, AI_Suggestion__c, AI_Suggested_Firm__c,
-                    AI_Suggested_Fund__c, AI_Suggested_Advisor__c, AI_Request__c, Firm_Override__c, Fund_Override__c,
-                    Reviewer_Decision__c, Decided_By__c, Decided_At__c
+                SELECT
+                    Id,
+                    Name,
+                    Row_Number__c,
+                    Row_Type__c,
+                    Match_Status__c,
+                    Match_Method__c,
+                    Match_Flags__c,
+                    Matched_Firm__c,
+                    Matched_Fund__c,
+                    Credited_Advisor__c,
+                    Code_Follow_Up__c,
+                    AI_Status__c,
+                    AI_Confidence__c,
+                    AI_Suggestion__c,
+                    AI_Suggested_Firm__c,
+                    AI_Suggested_Fund__c,
+                    AI_Suggested_Advisor__c,
+                    AI_Request__c,
+                    Firm_Override__c,
+                    Fund_Override__c,
+                    Reviewer_Decision__c,
+                    Decided_By__c,
+                    Decided_At__c
                 FROM Import_Staging_Row__c
                 WHERE Import_Batch__c = :batchId
                 ORDER BY Row_Number__c
