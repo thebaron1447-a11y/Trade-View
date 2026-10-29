@@ -12,6 +12,8 @@ import releaseHold from "@salesforce/apex/ReviewController.releaseHold";
 import draftFirmEmail from "@salesforce/apex/ReviewController.draftFirmEmail";
 import markAsked from "@salesforce/apex/ReviewController.markAsked";
 import getIssueRows from "@salesforce/apex/ReviewController.getIssueRows";
+import creditCodeReview from "@salesforce/apex/ReviewController.creditCodeReview";
+import closeCodeReview from "@salesforce/apex/ReviewController.closeCodeReview";
 
 // While files, rows or Claude requests are still being worked on in the background, the queue refreshes
 // itself every few seconds, for up to three minutes after the last action.
@@ -76,6 +78,41 @@ function shortDate(value) {
 }
 
 /** "Accepted 37 rows. …" for a group; the single-row wording otherwise. Apex returns how many rows changed. */
+/** "1 row", "3 rows". */
+export function plural(count, noun) {
+  const n = Number(count) || 0;
+  return `${n} ${n === 1 ? noun : noun + "s"}`;
+}
+
+/** What a code review holds, by kind: "1 trade ($1,200,000.00) and 1 AUM balance held". */
+export function heldText(f) {
+  const trades = f.tradeCount || 0;
+  const aum = f.aumCount || 0;
+  const parts = [];
+  if (trades) {
+    parts.push(`${plural(trades, "trade")} (${money(f.heldAmount)})`);
+  }
+  if (aum) {
+    parts.push(plural(aum, "AUM balance"));
+  }
+  const other = (f.heldRowCount || 0) - trades - aum;
+  if (other > 0) {
+    parts.push(plural(other, "other row"));
+  }
+  return parts.length
+    ? `${parts.join(" and ")} held`
+    : `${plural(f.heldRowCount, "row")} held`;
+}
+
+/** Claude's advisor for a code review, pre-chosen only when it is one of the people the reviewer can credit. */
+export function claudeCredit(f) {
+  return f &&
+    f.aiAdvisorId &&
+    (f.creditOptions || []).some((o) => o.value === f.aiAdvisorId)
+    ? f.aiAdvisorId
+    : undefined;
+}
+
 export function bulkMessage(count, one, many) {
   const n = Number(count) || 1;
   return n > 1 ? many.replace("{n}", n) : one;
@@ -113,6 +150,7 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
   firmChoice;
   fundChoice;
   advisorChoice;
+  creditChoice;
   remember = false;
 
   // Upload dialog.
@@ -230,6 +268,7 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
     this.firmChoice = row ? row.aiFirmId || undefined : undefined;
     this.fundChoice = row ? row.aiFundId || undefined : undefined;
     this.advisorChoice = row ? row.aiAdvisorId || undefined : undefined;
+    this.creditChoice = claudeCredit(row ? undefined : this.selectedFollowUp);
     this.remember = false;
     this.loadIssueRows(row);
   }
@@ -324,6 +363,8 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
   fillFromClaude() {
     const row = this.selectedRow;
     if (!row) {
+      this.creditChoice =
+        this.creditChoice || claudeCredit(this.selectedFollowUp);
       return;
     }
     this.firmChoice = this.firmChoice || row.aiFirmId || undefined;
@@ -371,8 +412,11 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
       ...f,
       key: "fu:" + f.id,
       title: `Code ${f.repCode} · ${f.firmName || "unknown firm"}`,
-      subtitle: `${f.reason} · ${f.heldRowCount} held (${money(f.heldAmount)})`,
-      heldSummary: `${f.heldRowCount} · ${money(f.heldAmount)}`,
+      subtitle: heldText(f),
+      issueText: f.heldIssue || f.reason,
+      heldSummary: `${plural(f.heldRowCount, "row")} · ${money(f.heldAmount)}`,
+      canCredit: !!(f.advisorOptions && f.advisorOptions.length),
+      creditOptions: f.advisorOptions || [],
       hasConfidence: !!f.aiConfidence,
       confidenceClass: CONFIDENCE_CLASS[f.aiConfidence] || "",
       assignedLabel: this.assignedLabel(f),
@@ -599,14 +643,12 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
   /** Trades waiting behind codes, shown at the top of Dealer Code Review. */
   get heldNote() {
     const items = (this.queue && this.queue.followUps) || [];
-    const trades = items.reduce((n, f) => n + (f.heldRowCount || 0), 0);
-    if (!trades) {
+    const rows = items.reduce((n, f) => n + (f.heldRowCount || 0), 0);
+    if (!rows) {
       return "";
     }
     const amount = items.reduce((n, f) => n + Number(f.heldAmount || 0), 0);
-    const codes = items.length === 1 ? "1 code" : `${items.length} codes`;
-    const held = trades === 1 ? "1 trade" : `${trades} trades`;
-    return `${held} (${money(amount)}) are held until ${codes} below are fixed.`;
+    return `${plural(rows, "row")} (${money(amount)} in trades) ${rows === 1 ? "is" : "are"} held until the ${plural(items.length, "code")} below ${items.length === 1 ? "is" : "are"} fixed.`;
   }
 
   get hasFiles() {
@@ -747,6 +789,7 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
     return lines.map((l, i) => ({
       ...l,
       key: String(i),
+      valueClass: l.openQuestion ? "slds-text-color_weak open-question" : "",
       confidenceClass: "slds-badge " + (CONFIDENCE_CLASS[l.confidence] || "")
     }));
   }
@@ -846,9 +889,83 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
       ? f.heldRows.map((h, i) => ({
           ...h,
           key: String(i),
+          typeText: h.rowType === "AUM" ? "AUM balance" : "Trade",
+          advisorText: h.advisorName || "None named",
+          fundText: h.fundName || "None given",
           amountText: money(h.amount)
         }))
       : [];
+  }
+
+  /** Rows beyond the few listed. */
+  get heldRowsNote() {
+    const f = this.selectedFollowUp;
+    if (!f || !f.heldRows) {
+      return "";
+    }
+    const more = (f.heldRowCount || 0) - f.heldRows.length;
+    return more > 0 ? `and ${plural(more, "more row")}` : "";
+  }
+
+  // ------------------------------------------------------------------ code review decisions
+
+  get codeReviewHelp() {
+    const f = this.selectedFollowUp;
+    if (!f) {
+      return "";
+    }
+    return f.canCredit
+      ? `Credit one advisor who held code ${f.repCode} on every held row's date: each row is credited 100% to them and re-matched. Or fix the code in Salesforce and re-match.`
+      : `Set up or correct code ${f.repCode} in Salesforce, then re-match. If it cannot be fixed, send the rows to Needs Decision.`;
+  }
+
+  get creditLabel() {
+    const f = this.selectedFollowUp;
+    const n = f ? f.heldRowCount : 0;
+    return n > 1 ? `Credit all ${n} rows` : "Credit the row";
+  }
+
+  get creditDisabled() {
+    return this.busy || !this.creditChoice;
+  }
+
+  handleCreditChoice(event) {
+    this.creditChoice = event.detail.value;
+  }
+
+  handleCredit() {
+    const f = this.selectedFollowUp;
+    this.run(
+      () =>
+        creditCodeReview({ followUpId: f.id, advisorId: this.creditChoice }),
+      (n) =>
+        bulkMessage(
+          n,
+          "Credited. The row is being re-matched.",
+          "Credited {n} rows. They are being re-matched."
+        )
+    );
+  }
+
+  handleRematch() {
+    const f = this.selectedFollowUp;
+    this.run(
+      () => closeCodeReview({ followUpId: f.id, fixed: true }),
+      "Re-matching the held rows against the fixed code."
+    );
+  }
+
+  handleSendToReview() {
+    const f = this.selectedFollowUp;
+    this.run(
+      () => closeCodeReview({ followUpId: f.id, fixed: false }),
+      (n) =>
+        bulkMessage(
+          n,
+          "The row is now in Needs Decision.",
+          "{n} rows are now in Needs Decision."
+        )
+    );
   }
 
   // ------------------------------------------------------------------ decision inputs

@@ -8,6 +8,7 @@
  */
 public with sharing class CodeFollowUpService {
     public static final String STATUS_OPEN = 'Open';
+    public static final String STATUS_IN_PROGRESS = 'In Progress';
     public static final String STATUS_RESOLVED = 'Resolved';
     public static final String STATUS_CLOSED = 'Closed - No Action';
 

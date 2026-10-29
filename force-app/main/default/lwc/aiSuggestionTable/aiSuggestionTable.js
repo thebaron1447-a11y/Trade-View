@@ -42,6 +42,12 @@ const ACTION_LABELS = {
   Hold: "Claude recommends: Put on hold"
 };
 
+export const NO_SINGLE_ANSWER = "No single answer";
+
+function hasValue(v) {
+  return v !== null && v !== undefined && String(v).trim() !== "";
+}
+
 /** Claude's per-field answer, stored as JSON. Anything malformed shows as no table rather than an error. */
 export function parseFieldTable(json) {
   if (!json) {
@@ -57,7 +63,11 @@ export function parseFieldTable(json) {
       .map((l, i) => ({
         key: String(i),
         field: String(l.field || ""),
-        value: l.value === null || l.value === undefined ? "" : String(l.value),
+        // Claude leaves the value empty when nothing points to one answer; the reason says what is open.
+        value: hasValue(l.value) ? String(l.value) : NO_SINGLE_ANSWER,
+        valueClass: hasValue(l.value)
+          ? ""
+          : "slds-text-color_weak open-question",
         confidence: String(l.confidence || ""),
         confidenceClass: CONFIDENCE_CLASS[l.confidence] || "slds-badge",
         reason: String(l.reason || "")

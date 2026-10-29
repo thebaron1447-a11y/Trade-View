@@ -5,7 +5,10 @@ import TradeReview, {
   POLL_MS,
   MAX_POLLS,
   askedText,
-  bulkMessage
+  bulkMessage,
+  plural,
+  heldText,
+  claudeCredit
 } from "c/tradeReview";
 import getQueue from "@salesforce/apex/ReviewController.getQueue";
 import decideRow from "@salesforce/apex/ReviewController.decideRow";
@@ -17,6 +20,8 @@ import releaseHold from "@salesforce/apex/ReviewController.releaseHold";
 import draftFirmEmail from "@salesforce/apex/ReviewController.draftFirmEmail";
 import markAsked from "@salesforce/apex/ReviewController.markAsked";
 import getIssueRows from "@salesforce/apex/ReviewController.getIssueRows";
+import creditCodeReview from "@salesforce/apex/ReviewController.creditCodeReview";
+import closeCodeReview from "@salesforce/apex/ReviewController.closeCodeReview";
 import { encodeDefaultFieldValues } from "lightning/pageReferenceUtils";
 import { navigate } from "lightning/navigation";
 
@@ -83,6 +88,16 @@ jest.mock(
   () => ({ default: jest.fn() }),
   { virtual: true }
 );
+jest.mock(
+  "@salesforce/apex/ReviewController.creditCodeReview",
+  () => ({ default: jest.fn() }),
+  { virtual: true }
+);
+jest.mock(
+  "@salesforce/apex/ReviewController.closeCodeReview",
+  () => ({ default: jest.fn() }),
+  { virtual: true }
+);
 
 const ME = "005000000000001AAA";
 
@@ -137,12 +152,17 @@ function queue(overrides) {
         status: "Open",
         heldRowCount: 1,
         heldAmount: 25000,
+        tradeCount: 1,
+        aumCount: 0,
+        heldIssue: "The code has been dormant and the row names no advisor",
+        advisorOptions: [],
         aiStatus: "Suggested",
         aiConfidence: "Medium",
         aiSuggestion: "Tom Reilly most likely still holds 5521.",
         aiAdvisorName: "Tom Reilly",
         heldRows: [
           {
+            rowType: "Trade",
             tradeDate: "2026-09-15",
             issue: "The code has been dormant and the row names no advisor",
             advisorName: null,
@@ -598,14 +618,25 @@ describe("c-trade-review", () => {
       ".followup-detail .held-table tbody tr"
     );
     expect(held).toHaveLength(1);
-    expect(held[0].querySelectorAll("td")[1].textContent).toBe(
-      "The code has been dormant and the row names no advisor"
+    expect(
+      [...held[0].querySelectorAll("td")].map((td) => td.textContent)
+    ).toEqual([
+      "2026-09-15",
+      "Trade",
+      "None named",
+      "Wealth World ETF",
+      "$25,000.00"
+    ]);
+    expect(
+      element.shadowRoot.querySelector(".followup-summary").textContent.trim()
+    ).toBe(
+      "The code has been dormant and the row names no advisor · 1 trade ($25,000.00) held"
     );
     const codes = table(element, "codes-table").items;
     expect(codes).toHaveLength(1);
     expect(codes[0]).toMatchObject({
       issueType: "Code Dormant",
-      lastText: "1 · $25,000.00"
+      lastText: "1 row · $25,000.00"
     });
     expect(table(element, "codes-table").selectedKey).toBe(
       "fu:a0D000000000001AAA"
@@ -616,13 +647,195 @@ describe("c-trade-review", () => {
     ).toContain("Tom Reilly");
   });
 
-  it("says how many trades are held behind the codes", async () => {
+  it("says how many rows are held behind the codes", async () => {
     getQueue.mockResolvedValue(queue());
     const element = await render("codes");
 
     expect(
       element.shadowRoot.querySelector(".held-note").textContent
-    ).toContain("1 trade ($25,000.00) are held until 1 code below are fixed.");
+    ).toContain(
+      "1 row ($25,000.00 in trades) is held until the 1 code below is fixed."
+    );
+  });
+
+  it("labels AUM balances apart from trades, and counts only trades in the amount", async () => {
+    const fu = queue().followUps[0];
+    getQueue.mockResolvedValue(
+      queue({
+        rows: [],
+        followUps: [
+          {
+            ...fu,
+            reason: "Allocation Incomplete",
+            heldIssue: "The code's shares add up to less than 100%",
+            heldRowCount: 2,
+            heldAmount: 1200000,
+            tradeCount: 1,
+            aumCount: 1,
+            heldRows: [
+              {
+                rowType: "AUM",
+                tradeDate: "2026-09-30",
+                advisorName: null,
+                fundName: null,
+                amount: 9800000
+              },
+              {
+                rowType: "Trade",
+                tradeDate: "2026-09-20",
+                advisorName: null,
+                fundName: "Wealth World Fund - Series A",
+                amount: 1200000
+              }
+            ]
+          }
+        ]
+      })
+    );
+    const element = await render("codes");
+
+    expect(
+      element.shadowRoot.querySelector(".followup-summary").textContent.trim()
+    ).toBe(
+      "The code's shares add up to less than 100% · 1 trade ($1,200,000.00) and 1 AUM balance held"
+    );
+    const types = [
+      ...element.shadowRoot.querySelectorAll(".held-table tbody tr")
+    ].map((tr) => tr.querySelectorAll("td")[1].textContent);
+    expect(types).toEqual(["AUM balance", "Trade"]);
+    expect(
+      element.shadowRoot.querySelector(".held-table tbody td:nth-child(4)")
+        .textContent
+    ).toBe("None given");
+  });
+
+  it("credits one advisor for a code review, with Claude's choice filled in", async () => {
+    const fu = queue().followUps[0];
+    getQueue.mockResolvedValue(
+      queue({
+        rows: [],
+        followUps: [
+          {
+            ...fu,
+            heldRowCount: 2,
+            aiAdvisorId: "003000000000002AAA",
+            advisorOptions: [
+              { label: "Aisha Khan", value: "003000000000001AAA" },
+              { label: "Daniel Okafor", value: "003000000000002AAA" }
+            ]
+          }
+        ]
+      })
+    );
+    creditCodeReview.mockResolvedValue(2);
+    const element = await render("codes");
+
+    const combo = element.shadowRoot.querySelector(
+      "lightning-combobox.credit-choice"
+    );
+    expect(combo.options).toHaveLength(2);
+    expect(combo.value).toBe("003000000000002AAA");
+    const credit = button(element, "credit");
+    expect(credit.label).toBe("Credit all 2 rows");
+    expect(credit.disabled).toBe(false);
+
+    combo.dispatchEvent(
+      new CustomEvent("change", { detail: { value: "003000000000001AAA" } })
+    );
+    await flush();
+    credit.click();
+    await flush();
+
+    expect(creditCodeReview).toHaveBeenCalledWith({
+      followUpId: "a0D000000000001AAA",
+      advisorId: "003000000000001AAA"
+    });
+    expect(getQueue).toHaveBeenCalledTimes(2);
+  });
+
+  it("cannot credit until an advisor is chosen", async () => {
+    const fu = queue().followUps[0];
+    getQueue.mockResolvedValue(
+      queue({
+        rows: [],
+        followUps: [
+          {
+            ...fu,
+            // Claude's pick is not someone who held the code on every date, so nothing is pre-chosen.
+            aiAdvisorId: "003000000000009AAA",
+            advisorOptions: [
+              { label: "Tom Reilly", value: "003000000000001AAA" }
+            ]
+          }
+        ]
+      })
+    );
+    const element = await render("codes");
+
+    expect(button(element, "credit").label).toBe("Credit the row");
+    expect(button(element, "credit").disabled).toBe(true);
+  });
+
+  it("re-matches a fixed code, or sends its rows to Needs Decision", async () => {
+    getQueue.mockResolvedValue(queue({ rows: [] }));
+    closeCodeReview.mockResolvedValue(1);
+    const element = await render("codes");
+
+    expect(button(element, "credit")).toBeNull();
+    expect(
+      element.shadowRoot.querySelector(".code-help").textContent
+    ).toContain("Set up or correct code 5521 in Salesforce, then re-match.");
+
+    button(element, "rematch").click();
+    await flush();
+    expect(closeCodeReview).toHaveBeenLastCalledWith({
+      followUpId: "a0D000000000001AAA",
+      fixed: true
+    });
+
+    button(element, "send-to-review").click();
+    await flush();
+    expect(closeCodeReview).toHaveBeenLastCalledWith({
+      followUpId: "a0D000000000001AAA",
+      fixed: false
+    });
+  });
+
+  it("labels Claude's reasoning and its question for the firm", async () => {
+    getQueue.mockResolvedValue(
+      queue({
+        rows: [
+          kestrelRow({
+            aiHomework: "Confirm which Kestrel entity placed the trade.",
+            fieldLines: [
+              {
+                field: "Fund",
+                value: "Series A or Series F",
+                openQuestion: true,
+                confidence: "Low",
+                reason: "The name fits both."
+              }
+            ]
+          })
+        ]
+      })
+    );
+    const element = await render();
+
+    const headings = [
+      ...element.shadowRoot.querySelectorAll(".claude-box h3")
+    ].map((h) => h.textContent.trim());
+    expect(headings).toEqual(
+      expect.arrayContaining(["Why", "Question for the firm"])
+    );
+    expect(
+      element.shadowRoot.querySelector(".row-detail .homework").textContent
+    ).toBe("Confirm which Kestrel entity placed the trade.");
+    const value = element.shadowRoot.querySelector(
+      ".field-table tbody td:nth-child(2)"
+    );
+    expect(value.textContent).toBe("Series A or Series F");
+    expect(value.className).toContain("open-question");
   });
 
   it("switching tabs shows that tab's first item", async () => {
@@ -1187,6 +1400,31 @@ describe("helpers", () => {
     expect(askedText("2026-10-19T12:00:00.000Z", now)).toContain(
       "no answer after 4 days, send a reminder"
     );
+  });
+
+  it("counts nouns and describes what a code review holds", () => {
+    expect(plural(1, "row")).toBe("1 row");
+    expect(plural(3, "row")).toBe("3 rows");
+    expect(plural(undefined, "row")).toBe("0 rows");
+    expect(
+      heldText({ heldRowCount: 3, tradeCount: 2, aumCount: 1, heldAmount: 500 })
+    ).toBe("2 trades ($500.00) and 1 AUM balance held");
+    expect(heldText({ heldRowCount: 2, aumCount: 2 })).toBe(
+      "2 AUM balances held"
+    );
+    expect(heldText({ heldRowCount: 4 })).toBe("4 other rows held");
+    expect(heldText({ heldRowCount: 0 })).toBe("0 rows held");
+  });
+
+  it("pre-chooses Claude's advisor only when it can be credited", () => {
+    const options = [{ label: "A", value: "1" }];
+    expect(claudeCredit({ aiAdvisorId: "1", creditOptions: options })).toBe(
+      "1"
+    );
+    expect(
+      claudeCredit({ aiAdvisorId: "2", creditOptions: options })
+    ).toBeUndefined();
+    expect(claudeCredit(undefined)).toBeUndefined();
   });
 
   it("words a bulk result by how many rows changed", () => {

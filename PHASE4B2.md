@@ -1,5 +1,11 @@
 # Phase 4b.2: review feedback
 
+**Update 4b.5 (review feedback):** see section 20 of the build log. Code reviews are settled in Trade Review: credit
+one advisor who holds the code (**Credit all N rows**), **Code fixed: re-match**, or **Decide rows one by one**. The
+summary line and Held rows table say which rows are trades and which are AUM balances. When Claude leaves a field
+open, the Suggestion cell lists the choices it weighed (or *Ask the firm*), and the lines under Claude's table are
+headed **Why** and **Question for the firm**. No new fields. Validate with **163 tests**.
+
 **Update 4b.4 (audit fixes, part 1):** see section 19 of the build log. Visible changes: a row whose advisor name
 fits some but not all members of a team code (for example "Chen") now waits in Dealer Code Review with those members
 as the choices, instead of being split across the whole team; each firm in a multi-firm dealer file gets its own code
@@ -47,7 +53,7 @@ What changes in Trade Review:
   cached, so repeat requests cost less.
 - The missing space in *Firm:Northgate…* is fixed.
 
-## 1. Validate (22 test classes, expect 159 tests)
+## 1. Validate (22 test classes, expect 163 tests)
 
 ```powershell
 cd C:\dev\trade-import-demo
@@ -102,5 +108,5 @@ npm run test:unit
 python tools\verify\lwc_xref.py force-app\main\default
 ```
 
-42 Jest tests should pass (plus 3 for the queue table and 5 for the record-page table). `lwc_xref.py` checks every Apex call from the app passes exactly the parameter names
+50 Jest tests should pass across the three components. `lwc_xref.py` checks every Apex call from the app passes exactly the parameter names
 the Apex method expects, and every field the components import exists in the package.

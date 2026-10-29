@@ -24,15 +24,17 @@ fund is fictional.
 - **Matches every row** to its firm, rep code, the advisor(s) holding that code on the trade date (including team
   splits), and the fund. Each row ends up Matched, Needs Review, Held (behind a rep code problem) or Invalid.
 - **Asks Claude about what rules can't settle.** Claude answers per field, with a confidence and a reason, plus a
-  one-line root cause and a recommended action: accept, reject, or hold for the dealer.
+  one-line root cause and a recommended action: accept, reject, or hold for the firm. Where nothing points to one
+  answer, Claude leaves the field open and the app shows the choices it weighed (for example "Series A or Series F").
 - **Puts a person in charge of every decision** in the Trade Review app:
-  - **Dealer Code Review:** rep codes to fix, the trades held behind them, and roster changes. Each roster change
-    shows exactly what approving it will create or end.
+  - **Dealer Code Review:** rep codes to fix, the rows held behind them, and roster changes. A code review is
+    settled in place: credit one advisor who holds the code, re-match after fixing it, or send its rows to be
+    decided one by one. Each roster change shows exactly what approving it will create or end.
   - **Needs Decision:** firm, fund and other data questions. Rows with the same problem (the same misspelt fund from
     the same dealer, say) show as one line with their row count and total, and one decision settles them all.
   - **On Hold:** items only the dealer can answer.
-  - **Email Firms:** one email per dealer covering all of its open questions. Claude drafts it, it never includes
-    amounts, and a person sends it from Salesforce's standard email window, so it's logged on the dealer's account.
+  - **Email Firms:** one email per firm covering all of its open questions. Claude drafts it, it never includes
+    amounts, and a person sends it from Salesforce's standard email window, so it's logged on the firm's account.
   - **New File Format** and **Recent Files.**
 - **Learns as it goes.** Remembered spellings become aliases, so tomorrow's file matches on its own. Matching rules
   are written in plain language, and activating one can require a second person's approval (on by default).
@@ -101,9 +103,9 @@ Firms and branches are Accounts, advisors are Contacts, and funds are Products.
 
 ## Quality
 
-- **159 Apex tests** in 22 test classes. One test runs every reviewer action as a Standard User holding only the
+- **163 Apex tests** in 22 test classes. One test runs every reviewer action as a Standard User holding only the
   Reviewer permission set, to prove the permissions are complete.
-- **42 LWC Jest tests** across the three components.
+- **50 LWC Jest tests** across the three components.
 - **Python ports with shared test vectors** for CSV parsing, normalisation, name matching and Claude-answer validation.
 - **Checks before every deploy:**
   - Apex parse;

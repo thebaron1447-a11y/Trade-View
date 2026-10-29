@@ -919,4 +919,207 @@ private class ReviewControllerTest {
         Assert.isFalse(fundRow.On_Hold__c, 'and released');
         Assert.isNotNull(fundRow.Asked_Firm_At__c, 'marked as asked');
     }
+
+    /** Team code T200 at Kestrel Inc.: Ryan 50% and Megan 30% (80%), so unnamed rows are held as Allocation Incomplete. */
+    private static Import_Batch__c incompleteTeam(TradeTestWorld w) {
+        insert new Firm_Alias__c(Name = 'Kestrel West', Normalized_Key__c = NameNormalizer.firmKey('Kestrel West'), Firm__c = w.kesInc.Id);
+        Rep_Code__c team = new Rep_Code__c(Name = 'T200', Firm__c = w.kesInc.Id);
+        insert team;
+        insert new List<Rep_Code_Assignment__c>{
+            new Rep_Code_Assignment__c(
+                Rep_Code__c = team.Id,
+                Advisor__c = w.ryan.Id,
+                Allocation_Percent__c = 50,
+                Effective_Start_Date__c = Date.newInstance(2026, 1, 1)
+            ),
+            new Rep_Code_Assignment__c(
+                Rep_Code__c = team.Id,
+                Advisor__c = w.megan.Id,
+                Allocation_Percent__c = 30,
+                Effective_Start_Date__c = Date.newInstance(2026, 1, 1)
+            )
+        };
+        Import_Staging_Row__c aum = TradeTestWorld.trade('Kestrel West', 'T200', null, 'Wealth World ETF', SEP_29, 50000);
+        aum.Row_Type__c = 'AUM';
+        aum.Transaction_Type__c = null;
+        Import_Batch__c batch = TradeTestWorld.stagedBatch(
+            'KESTREL',
+            new List<Import_Staging_Row__c>{ TradeTestWorld.trade('Kestrel West', 'T200', null, 'Wealth World ETF', SEP_27, 9000), aum }
+        );
+        TradeMatcher.run(new Set<Id>{ batch.Id });
+        return batch;
+    }
+
+    private static ReviewController.FollowUpItem followUpOf(ReviewController.Queue q, Id followUpId) {
+        for (ReviewController.FollowUpItem f : q.followUps) {
+            if (f.id == followUpId) {
+                return f;
+            }
+        }
+        return null;
+    }
+
+    private static String creditFailure(Id followUpId, Id advisorId) {
+        try {
+            ReviewController.creditCodeReview(followUpId, advisorId);
+        } catch (AuraHandledException e) {
+            return e.getMessage();
+        }
+        return 'no error';
+    }
+
+    @IsTest
+    static void aCodeReviewIsSettledByCreditingOneAdvisor() {
+        claudeOff();
+        TradeTestWorld w = TradeTestWorld.build();
+        Import_Batch__c batch = incompleteTeam(w);
+        Code_Follow_Up__c fu = [SELECT Id, Reason__c FROM Code_Follow_Up__c WHERE Rep_Code_Value__c = 'T200'];
+        Assert.areEqual('Allocation Incomplete', fu.Reason__c, 'held behind the incomplete split');
+        // Claude answered but could not choose between the two members.
+        update new Code_Follow_Up__c(
+            Id = fu.Id,
+            AI_Status__c = 'Suggested',
+            AI_Field_Suggestions__c = '[{"field":"Advisor","value":null,"confidence":"Low","reason":"Nothing names either member."}]'
+        );
+        User reviewer = otherUser();
+
+        System.runAs(reviewer) {
+            ReviewController.FollowUpItem item = followUpOf(ReviewController.getQueue('all'), fu.Id);
+            Assert.areEqual(2, item.heldRowCount, 'a trade and an AUM balance are held');
+            Assert.areEqual(1, item.tradeCount, 'one trade');
+            Assert.areEqual(1, item.aumCount, 'one AUM balance');
+            Assert.areEqual(9000, item.heldAmount.intValue(), 'the held amount counts the trade only');
+            Assert.areEqual(50000, item.aumAmount.intValue(), 'the AUM balance is counted apart');
+            Set<String> types = new Set<String>();
+            for (ReviewController.HeldRow h : item.heldRows) {
+                types.add(h.rowType);
+            }
+            Assert.areEqual(new Set<String>{ 'Trade', 'AUM' }, types, 'each held row says what it is');
+            Assert.isTrue(item.heldIssue.contains('100%'), 'why they are held: ' + item.heldIssue);
+            List<String> offered = new List<String>();
+            for (ReviewController.Option o : item.advisorOptions) {
+                offered.add(o.label);
+            }
+            Assert.areEqual(new List<String>{ 'Megan Chen', 'Ryan Chen' }, offered, 'the members holding the code on every held date');
+            Assert.areEqual('Megan Chen or Ryan Chen', item.fieldLines[0].value, 'Claude left it open: the choices are shown');
+            Assert.isTrue(item.fieldLines[0].openQuestion, 'and marked as open');
+
+            String refused = creditFailure(fu.Id, w.julia.Id);
+            Assert.isTrue(refused.contains('did not hold code T200'), 'only someone holding the code: ' + refused);
+
+            Test.startTest();
+            Assert.areEqual(2, ReviewController.creditCodeReview(fu.Id, w.ryan.Id), 'both held rows credited');
+            Test.stopTest();
+
+            String again = creditFailure(fu.Id, w.ryan.Id);
+            Assert.isTrue(again.contains('already closed'), 'a closed review cannot be settled twice: ' + again);
+        }
+
+        Code_Follow_Up__c done = [SELECT Status__c, Resolution_Notes__c FROM Code_Follow_Up__c WHERE Id = :fu.Id];
+        Assert.areEqual('Resolved', done.Status__c, 'resolved');
+        Assert.isTrue(done.Resolution_Notes__c.startsWith('Credited Ryan Chen for 2 held rows'), 'and noted: ' + done.Resolution_Notes__c);
+        for (Import_Staging_Row__c r : TradeTestWorld.rowsOf(batch.Id).values()) {
+            Assert.areEqual('Matched', r.Match_Status__c, 'row ' + r.Row_Number__c + ' re-matched: ' + r.Match_Flags__c);
+            Assert.areEqual(w.ryan.Id, r.Credited_Advisor__c, 'row ' + r.Row_Number__c + ' credited 100% to Ryan');
+            Assert.areEqual(reviewer.Id, r.Decided_By__c, 'row ' + r.Row_Number__c + ' records who chose');
+            Assert.isTrue(r.Match_Flags__c.contains('ADVISOR_FROM_REVIEWER'), 'and says a reviewer chose: ' + r.Match_Flags__c);
+        }
+    }
+
+    @IsTest
+    static void aCodeReviewCanBeRematchedOrSentToNeedsDecision() {
+        claudeOff();
+        TradeTestWorld w = TradeTestWorld.build();
+        Import_Batch__c batch = TradeTestWorld.stagedBatch(
+            'BARDER',
+            new List<Import_Staging_Row__c>{
+                TradeTestWorld.trade('Barder & Company', '7001', 'Julia Morales', 'Wealth World ETF', SEP_29, 1000),
+                TradeTestWorld.trade('Barder & Company', '7002', 'Julia Morales', 'Wealth World ETF', SEP_29, 2000)
+            }
+        );
+        TradeMatcher.run(new Set<Id>{ batch.Id });
+        Code_Follow_Up__c unfixable = [SELECT Id FROM Code_Follow_Up__c WHERE Rep_Code_Value__c = '7001'];
+        Code_Follow_Up__c fixable = [SELECT Id FROM Code_Follow_Up__c WHERE Rep_Code_Value__c = '7002'];
+        update new Code_Follow_Up__c(
+            Id = unfixable.Id,
+            AI_Status__c = 'Suggested',
+            AI_Field_Suggestions__c = '[{"field":"Advisor","value":null,"confidence":"Low","reason":"The code is not set up."}]'
+        );
+
+        ReviewController.FollowUpItem item = followUpOf(ReviewController.getQueue('all'), unfixable.Id);
+        Assert.isTrue(item.advisorOptions.isEmpty(), 'an unknown code has nobody to credit');
+        Assert.areEqual('Ask the firm', item.fieldLines[0].value, 'with no choices to list, the firm is asked');
+        String refused = creditFailure(unfixable.Id, w.julia.Id);
+        Assert.isTrue(refused.contains('cannot be settled by crediting'), 'refused: ' + refused);
+
+        Assert.areEqual(1, ReviewController.closeCodeReview(unfixable.Id, false), 'one row was waiting');
+        Import_Staging_Row__c sent = TradeTestWorld.row(batch.Id, 1);
+        Assert.areEqual('Needs Review', sent.Match_Status__c, 'sent to Needs Decision');
+        Assert.isTrue(sent.Match_Flags__c.contains('FOLLOW_UP_CLOSED'), 'and says why: ' + sent.Match_Flags__c);
+        Assert.areEqual('Closed - No Action', [SELECT Status__c FROM Code_Follow_Up__c WHERE Id = :unfixable.Id].Status__c, 'closed');
+
+        // The code is set up in Salesforce, then re-matched from the app.
+        Rep_Code__c code = new Rep_Code__c(Name = '7002', Firm__c = w.barder.Id);
+        insert code;
+        insert new Rep_Code_Assignment__c(
+            Rep_Code__c = code.Id,
+            Advisor__c = w.julia.Id,
+            Allocation_Percent__c = 100,
+            Effective_Start_Date__c = Date.newInstance(2026, 1, 1)
+        );
+        Test.startTest();
+        ReviewController.closeCodeReview(fixable.Id, true);
+        Test.stopTest();
+        Import_Staging_Row__c rematched = TradeTestWorld.row(batch.Id, 2);
+        Assert.areEqual('Matched', rematched.Match_Status__c, 're-matched against the fixed code: ' + rematched.Match_Flags__c);
+        Assert.areEqual(w.julia.Id, rematched.Credited_Advisor__c, 'credited to the code holder');
+        Assert.isTrue(
+            [SELECT Resolution_Notes__c FROM Code_Follow_Up__c WHERE Id = :fixable.Id].Resolution_Notes__c.startsWith('Re-matched 1 held row after'),
+            'noted'
+        );
+    }
+
+    @IsTest
+    static void openChoicesAreListedByName() {
+        Assert.areEqual('A', ReviewController.choiceText(new List<String>{ 'A' }), 'one');
+        Assert.areEqual('A or B', ReviewController.choiceText(new List<String>{ 'A', 'B' }), 'two');
+        Assert.areEqual('A, B or C', ReviewController.choiceText(new List<String>{ 'A', 'B', 'C' }), 'three');
+        Assert.areEqual('A, B, C or 2 more', ReviewController.choiceText(new List<String>{ 'A', 'B', 'C', 'D', 'E' }), 'five');
+
+        Map<String, List<String>> names = ReviewController.candidateNames(
+            '[{"type":"fund","name":"Series A"},{"type":"fund","name":"Series F"},{"type":"fund","name":"Series A"},' +
+            '{"type":"firm","name":"Kestrel"},{"type":"other","name":"Q"},{"type":"advisor"}]'
+        );
+        Assert.areEqual(new List<String>{ 'Series A', 'Series F' }, names.get('Fund'), 'funds, once each');
+        Assert.areEqual(new List<String>{ 'Kestrel' }, names.get('Firm'), 'firms');
+        Assert.isFalse(names.containsKey('Advisor'), 'a candidate without a name is skipped');
+        Assert.areEqual(2, names.size(), 'unknown types are skipped');
+        Assert.isTrue(ReviewController.candidateNames('not json').isEmpty(), 'malformed gives nothing');
+        Assert.isTrue(ReviewController.candidateNames(null).isEmpty(), 'blank gives nothing');
+    }
+
+    @IsTest
+    static void aFundClaudeLeftOpenShowsTheFundsItWeighed() {
+        claudeOff();
+        TradeTestWorld w = TradeTestWorld.build();
+        Import_Batch__c batch = reviewBatch(w);
+        Id fundRowId = TradeTestWorld.row(batch.Id, 2).Id;
+        update new Import_Staging_Row__c(
+            Id = fundRowId,
+            Match_Candidates__c = '[{"type":"fund","id":"' +
+                w.wwfA.Id +
+                '","name":"Wealth World Fund - Series A"},{"type":"fund","id":"' +
+                w.wwEtf.Id +
+                '","name":"Wealth World ETF"}]',
+            AI_Status__c = 'Suggested',
+            AI_Field_Suggestions__c = '[{"field":"Fund","value":null,"confidence":"Low","reason":"The name fits both."},' +
+                '{"field":"Firm","value":"Barder & Company","confidence":"High","reason":"Known."}]'
+        );
+
+        ReviewController.RowItem item = rowOf(ReviewController.getQueue('all'), fundRowId);
+        Assert.areEqual('Wealth World Fund - Series A or Wealth World ETF', item.fieldLines[0].value, 'the funds weighed');
+        Assert.isTrue(item.fieldLines[0].openQuestion, 'marked as open');
+        Assert.areEqual('Barder & Company', item.fieldLines[1].value, 'an answer is shown as given');
+        Assert.isFalse(item.fieldLines[1].openQuestion, 'and is not open');
+    }
 }

@@ -82,6 +82,12 @@ public with sharing class ReviewController {
     /** Flags about the rep code itself. A row with any of them (or any roster row) belongs in Dealer Code Review. */
     @TestVisible
     private static final Set<String> CODE_FLAGS = TradeMatcher.CODE_FLAGS;
+    /** Code reviews a reviewer can settle by crediting one advisor who holds the code (unknown or ended codes cannot). */
+    private static final Set<String> CREDITABLE_REASONS = new Set<String>{
+        TradeMatcher.REASON_ALLOCATION,
+        TradeMatcher.REASON_REASSIGNED,
+        TradeMatcher.REASON_DORMANT
+    };
 
     // ================================================================== shapes returned to the app
 
@@ -99,6 +105,9 @@ public with sharing class ReviewController {
 
     /** One line of Claude's per-field answer, as stored in AI_Field_Suggestions__c. */
     public class FieldLine {
+        /** True when Claude could not choose: the value lists the choices left, or says to ask the firm. */
+        @AuraEnabled
+        public Boolean openQuestion = false;
         @AuraEnabled
         public String field;
         @AuraEnabled
@@ -265,6 +274,9 @@ public with sharing class ReviewController {
     }
 
     public class HeldRow {
+        /** Trade or AUM: an AUM row is a position balance, not a trade, so its amount is not counted as held trades. */
+        @AuraEnabled
+        public String rowType;
         @AuraEnabled
         public Date tradeDate;
         /** Why this trade is held, in plain words (from its first match flag). */
@@ -315,6 +327,8 @@ public with sharing class ReviewController {
         @AuraEnabled
         public String aiAdvisorName;
         @AuraEnabled
+        public Id aiAdvisorId;
+        @AuraEnabled
         public Id aiRequestId;
         @AuraEnabled
         public String aiRequestName;
@@ -324,6 +338,23 @@ public with sharing class ReviewController {
         public Id assignedToId;
         @AuraEnabled
         public String assignedToName;
+        /** Held rows by type: trades (whose total is heldAmount) and AUM balances. */
+        @AuraEnabled
+        public Integer tradeCount = 0;
+        @AuraEnabled
+        public Integer aumCount = 0;
+        @AuraEnabled
+        public Decimal aumAmount = 0;
+        /** Why the rows are held, in plain words (the same for every row of a code review). */
+        @AuraEnabled
+        public String heldIssue;
+        /** Advisors holding the code on every held row's date: who the reviewer can credit from the app. */
+        @AuraEnabled
+        public List<Option> advisorOptions = new List<Option>();
+        // Earliest and latest held row dates, for advisorOptions.
+        private Date firstHeld;
+        private Date lastHeld;
+        private Id repCodeId;
     }
 
     public class MappingItem {
@@ -772,7 +803,7 @@ public with sharing class ReviewController {
         it.assignedToName = r.Assigned_To__r?.Name;
         it.aiAction = r.AI_Recommended_Action__c;
         it.aiHomework = r.AI_Homework__c;
-        it.fieldLines = fieldLines(r.AI_Field_Suggestions__c);
+        it.fieldLines = fieldLines(r.AI_Field_Suggestions__c, candidateNames(r.Match_Candidates__c));
         it.onHold = r.On_Hold__c == true;
         it.holdReason = r.On_Hold_Reason__c;
         it.heldByName = r.On_Hold_By__r?.Name;
@@ -883,6 +914,14 @@ public with sharing class ReviewController {
 
     @TestVisible
     private static List<FieldLine> fieldLines(String json) {
+        return fieldLines(json, new Map<String, List<String>>());
+    }
+
+    /**
+     * Claude's table. Where Claude chose nothing (it had no evidence), the value lists the choices still open, by field
+     * label, so the reviewer sees what is being weighed; with no choices to list, it says to ask the firm.
+     */
+    private static List<FieldLine> fieldLines(String json, Map<String, List<String>> choicesByField) {
         List<FieldLine> lines = new List<FieldLine>();
         if (String.isBlank(json)) {
             return lines;
@@ -895,6 +934,11 @@ public with sharing class ReviewController {
                 l.value = (String) m.get('value');
                 l.confidence = (String) m.get('confidence');
                 l.reason = (String) m.get('reason');
+                if (String.isBlank(l.value)) {
+                    List<String> choices = choicesByField.get(l.field);
+                    l.value = choices == null || choices.isEmpty() ? 'Ask the firm' : choiceText(choices);
+                    l.openQuestion = true;
+                }
                 lines.add(l);
             }
         } catch (Exception e) {
@@ -902,6 +946,52 @@ public with sharing class ReviewController {
             lines.clear();
         }
         return lines;
+    }
+
+    /** "A or B", "A, B or C", or "A, B, C or 2 more". */
+    @TestVisible
+    private static String choiceText(List<String> choices) {
+        Integer shown = Math.min(choices.size(), 3);
+        List<String> listed = new List<String>();
+        for (Integer i = 0; i < shown; i++) {
+            listed.add(choices[i]);
+        }
+        if (choices.size() > shown) {
+            return String.join(listed, ', ') + ' or ' + String.valueOf(choices.size() - shown) + ' more';
+        }
+        if (shown == 1) {
+            return listed[0];
+        }
+        String finalChoice = listed.remove(shown - 1);
+        return String.join(listed, ', ') + ' or ' + finalChoice;
+    }
+
+    /** The names matching offered as candidates, by the field label Claude's table uses (Firm, Fund, Advisor). */
+    @TestVisible
+    private static Map<String, List<String>> candidateNames(String json) {
+        Map<String, List<String>> result = new Map<String, List<String>>();
+        if (String.isBlank(json)) {
+            return result;
+        }
+        try {
+            for (Object o : (List<Object>) System.JSON.deserializeUntyped(json)) {
+                Map<String, Object> c = (Map<String, Object>) o;
+                String label = ClaudeSuggestionService.FIELD_LABELS.get((String) c.get('type'));
+                String name = (String) c.get('name');
+                if (label == null || String.isBlank(name)) {
+                    continue;
+                }
+                if (!result.containsKey(label)) {
+                    result.put(label, new List<String>());
+                }
+                if (!result.get(label).contains(name)) {
+                    result.get(label).add(name);
+                }
+            }
+        } catch (Exception e) {
+            result.clear();
+        }
+        return result;
     }
 
     /** Advisors at each firm (and its branches) that has a roster row with an ambiguous advisor name. */
@@ -946,6 +1036,7 @@ public with sharing class ReviewController {
                     Id,
                     Name,
                     Rep_Code_Value__c,
+                    Rep_Code__c,
                     Firm__r.Name,
                     Reason__c,
                     Status__c,
@@ -955,6 +1046,7 @@ public with sharing class ReviewController {
                     AI_Status__c,
                     AI_Confidence__c,
                     Suggested_Resolution__c,
+                    AI_Suggested_Advisor__c,
                     AI_Suggested_Advisor__r.Name,
                     AI_Request__c,
                     AI_Request__r.Name,
@@ -976,6 +1068,7 @@ public with sharing class ReviewController {
                     Id,
                     Name,
                     Rep_Code_Value__c,
+                    Rep_Code__c,
                     Firm__r.Name,
                     Reason__c,
                     Status__c,
@@ -985,6 +1078,7 @@ public with sharing class ReviewController {
                     AI_Status__c,
                     AI_Confidence__c,
                     Suggested_Resolution__c,
+                    AI_Suggested_Advisor__c,
                     AI_Suggested_Advisor__r.Name,
                     AI_Request__c,
                     AI_Request__r.Name,
@@ -1006,6 +1100,7 @@ public with sharing class ReviewController {
                     Id,
                     Name,
                     Rep_Code_Value__c,
+                    Rep_Code__c,
                     Firm__r.Name,
                     Reason__c,
                     Status__c,
@@ -1015,6 +1110,7 @@ public with sharing class ReviewController {
                     AI_Status__c,
                     AI_Confidence__c,
                     Suggested_Resolution__c,
+                    AI_Suggested_Advisor__c,
                     AI_Suggested_Advisor__r.Name,
                     AI_Request__c,
                     AI_Request__r.Name,
@@ -1049,12 +1145,13 @@ public with sharing class ReviewController {
             it.aiConfidence = f.AI_Confidence__c;
             it.aiSuggestion = f.Suggested_Resolution__c;
             it.aiAdvisorName = f.AI_Suggested_Advisor__r?.Name;
+            it.aiAdvisorId = f.AI_Suggested_Advisor__c;
             it.aiRequestId = f.AI_Request__c;
             it.aiRequestName = f.AI_Request__r?.Name;
             it.assignedToId = f.Assigned_To__c;
             it.assignedToName = f.Assigned_To__r?.Name;
             it.firmId = f.Firm__c;
-            it.fieldLines = fieldLines(f.AI_Field_Suggestions__c);
+            it.repCodeId = f.Rep_Code__c;
             it.askedAt = f.Asked_Firm_At__c;
             it.question = String.isNotBlank(f.AI_Homework__c) ? f.AI_Homework__c : standardQuestion(f.Reason__c, f.Rep_Code_Value__c);
             byId.put(f.Id, it);
@@ -1062,7 +1159,7 @@ public with sharing class ReviewController {
         }
         if (!byId.isEmpty()) {
             for (Import_Staging_Row__c r : [
-                SELECT Code_Follow_Up__c, Trade_Date__c, Source_Advisor_Name__c, Source_Fund_Name__c, Amount__c, Match_Flags__c
+                SELECT Code_Follow_Up__c, Row_Type__c, Trade_Date__c, Source_Advisor_Name__c, Source_Fund_Name__c, Amount__c, Match_Flags__c
                 FROM Import_Staging_Row__c
                 WHERE Code_Follow_Up__c IN :byId.keySet() AND Match_Status__c = :TradeMatcher.HELD
                 WITH USER_MODE
@@ -1072,16 +1169,105 @@ public with sharing class ReviewController {
                 FollowUpItem it = byId.get(r.Code_Follow_Up__c);
                 if (it.heldRows.size() < MAX_HELD_ROWS_SHOWN) {
                     HeldRow h = new HeldRow();
+                    h.rowType = r.Row_Type__c;
                     h.tradeDate = r.Trade_Date__c;
                     h.issue = issueText(r.Match_Flags__c);
+                    if (it.heldIssue == null) {
+                        it.heldIssue = h.issue;
+                    }
                     h.advisorName = r.Source_Advisor_Name__c;
                     h.fundName = r.Source_Fund_Name__c;
                     h.amount = r.Amount__c;
                     it.heldRows.add(h);
                 }
             }
+            countHeldRows(byId);
+            addAdvisorOptions(byId.values());
+        }
+        for (Code_Follow_Up__c f : followUps) {
+            FollowUpItem it = byId.get(f.Id);
+            List<String> names = new List<String>();
+            for (Option o : it.advisorOptions) {
+                names.add(o.label);
+            }
+            it.fieldLines = fieldLines(f.AI_Field_Suggestions__c, new Map<String, List<String>>{ 'Advisor' => names });
         }
         return result;
+    }
+
+    /** Held rows per code review by type (trades and AUM balances), and the first and last held dates. */
+    private static void countHeldRows(Map<Id, FollowUpItem> byId) {
+        for (AggregateResult ar : [
+            SELECT Code_Follow_Up__c fid, Row_Type__c kind, COUNT(Id) n, SUM(Amount__c) amt, MIN(Trade_Date__c) earliest, MAX(Trade_Date__c) latest
+            FROM Import_Staging_Row__c
+            WHERE Code_Follow_Up__c IN :byId.keySet() AND Match_Status__c = :TradeMatcher.HELD
+            WITH USER_MODE
+            GROUP BY Code_Follow_Up__c, Row_Type__c
+        ]) {
+            FollowUpItem it = byId.get((Id) ar.get('fid'));
+            Integer n = (Integer) ar.get('n');
+            String kind = (String) ar.get('kind');
+            if (kind == TradeRowNormalizer.ROW_AUM) {
+                it.aumCount += n;
+                it.aumAmount += ar.get('amt') == null ? 0 : (Decimal) ar.get('amt');
+            } else if (kind == TradeRowNormalizer.ROW_TRADE) {
+                it.tradeCount += n;
+            }
+            Date earliest = (Date) ar.get('earliest');
+            Date latest = (Date) ar.get('latest');
+            if (earliest != null && (it.firstHeld == null || earliest < it.firstHeld)) {
+                it.firstHeld = earliest;
+            }
+            if (latest != null && (it.lastHeld == null || latest > it.lastHeld)) {
+                it.lastHeld = latest;
+            }
+        }
+    }
+
+    /** For each code review, the advisors who hold its code on every held row's date (so crediting them settles all). */
+    private static void addAdvisorOptions(List<FollowUpItem> items) {
+        Map<Id, List<FollowUpItem>> byCode = new Map<Id, List<FollowUpItem>>();
+        for (FollowUpItem it : items) {
+            if (it.repCodeId != null && it.firstHeld != null && CREDITABLE_REASONS.contains(it.reason)) {
+                if (!byCode.containsKey(it.repCodeId)) {
+                    byCode.put(it.repCodeId, new List<FollowUpItem>());
+                }
+                byCode.get(it.repCodeId).add(it);
+            }
+        }
+        if (byCode.isEmpty()) {
+            return;
+        }
+        for (Rep_Code_Assignment__c a : [
+            SELECT Rep_Code__c, Advisor__c, Advisor__r.Name, Effective_Start_Date__c, Effective_End_Date__c
+            FROM Rep_Code_Assignment__c
+            WHERE Rep_Code__c IN :byCode.keySet() AND Advisor__c != NULL
+            WITH USER_MODE
+            ORDER BY Advisor__r.LastName, Advisor__r.FirstName
+            LIMIT :MAX_OPTIONS
+        ]) {
+            for (FollowUpItem it : byCode.get(a.Rep_Code__c)) {
+                if (coversDates(a, it.firstHeld, it.lastHeld) && !hasOption(it.advisorOptions, a.Advisor__c)) {
+                    it.advisorOptions.add(new Option(a.Advisor__r.Name, a.Advisor__c));
+                }
+            }
+        }
+    }
+
+    private static Boolean hasOption(List<Option> options, Id value) {
+        for (Option o : options) {
+            if (o.value == String.valueOf(value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Boolean coversDates(Rep_Code_Assignment__c a, Date fromDate, Date toDate) {
+        return a.Effective_Start_Date__c != null &&
+            a.Effective_Start_Date__c <= fromDate &&
+            (a.Effective_End_Date__c == null ||
+            a.Effective_End_Date__c >= toDate);
     }
 
     /** Files waiting for a mapping, with Claude's Draft proposal when there is one. */
@@ -1266,6 +1452,137 @@ public with sharing class ReviewController {
             throw fail(e.getDmlMessage(0));
         }
         return changes.size();
+    }
+
+    // ================================================================== code reviews, settled from the app
+
+    /**
+     * Settles a code review by crediting one advisor who held the code on every held row's date: each held row gets
+     * that advisor as its override (credited 100%), and the review is resolved, which re-matches the rows.
+     * Returns how many rows were credited.
+     */
+    @AuraEnabled
+    public static Integer creditCodeReview(Id followUpId, Id advisorId) {
+        Code_Follow_Up__c f = openCodeReview(followUpId);
+        requireType(advisorId, Contact.SObjectType, 'Choose the advisor to credit.');
+        if (!CREDITABLE_REASONS.contains(f.Reason__c) || f.Rep_Code__c == null) {
+            throw fail('This code review cannot be settled by crediting an advisor. Fix the code in Salesforce, then choose Re-match.');
+        }
+        Integer cap = MAX_BULK + 1;
+        List<Import_Staging_Row__c> rows = [
+            SELECT Id, Trade_Date__c
+            FROM Import_Staging_Row__c
+            WHERE Code_Follow_Up__c = :f.Id AND Match_Status__c = :TradeMatcher.HELD
+            WITH USER_MODE
+            LIMIT :cap
+            FOR UPDATE
+        ];
+        if (rows.isEmpty()) {
+            throw fail('No rows are held on this code review any more. Refresh to see its current state.');
+        }
+        if (rows.size() > MAX_BULK) {
+            throw fail('This code review holds more than ' + MAX_BULK + ' rows. Open the follow-up record to resolve it.');
+        }
+        List<Rep_Code_Assignment__c> holdings = [
+            SELECT Effective_Start_Date__c, Effective_End_Date__c, Advisor__r.Name
+            FROM Rep_Code_Assignment__c
+            WHERE Rep_Code__c = :f.Rep_Code__c AND Advisor__c = :advisorId
+            WITH USER_MODE
+            LIMIT 50
+        ];
+        // Stamped like a decision, so each row records who chose the advisor.
+        Id me = UserInfo.getUserId();
+        Datetime now = System.now();
+        List<Import_Staging_Row__c> changes = new List<Import_Staging_Row__c>();
+        for (Import_Staging_Row__c r : rows) {
+            if (!holdsOn(holdings, r.Trade_Date__c)) {
+                throw fail(
+                    'That advisor did not hold code ' +
+                        f.Rep_Code_Value__c +
+                        ' on ' +
+                        (r.Trade_Date__c == null ? 'an undated row' : r.Trade_Date__c.format()) +
+                        '. Choose someone who held it on every held row\'s date.'
+                );
+            }
+            changes.add(new Import_Staging_Row__c(Id = r.Id, Advisor_Override__c = advisorId, Decided_By__c = me, Decided_At__c = now));
+        }
+        try {
+            update as user changes;
+        } catch (DmlException e) {
+            throw fail(e.getDmlMessage(0));
+        }
+        closeReview(f, CodeFollowUpService.STATUS_RESOLVED, 'Credited ' + holdings[0].Advisor__r?.Name + ' for ' + heldRows(changes.size()));
+        return changes.size();
+    }
+
+    /**
+     * Closes a code review from the app. Fixed: the code was set up in Salesforce, so the held rows are re-matched
+     * (Resolved). Not fixed: the rows go to Needs Decision to be settled one by one (Closed - No Action).
+     * Returns how many rows were waiting on it.
+     */
+    @AuraEnabled
+    public static Integer closeCodeReview(Id followUpId, Boolean fixed) {
+        Code_Follow_Up__c f = openCodeReview(followUpId);
+        Integer waiting = [
+            SELECT COUNT()
+            FROM Import_Staging_Row__c
+            WHERE Code_Follow_Up__c = :f.Id AND Match_Status__c = :TradeMatcher.HELD
+            WITH USER_MODE
+        ];
+        if (fixed == true) {
+            closeReview(f, CodeFollowUpService.STATUS_RESOLVED, 'Re-matched ' + heldRows(waiting) + ' after the code was fixed');
+        } else {
+            closeReview(f, CodeFollowUpService.STATUS_CLOSED, 'Sent ' + heldRows(waiting) + ' to Needs Decision');
+        }
+        return waiting;
+    }
+
+    /** The code review, locked, if it is still open. */
+    private static Code_Follow_Up__c openCodeReview(Id followUpId) {
+        requireType(followUpId, Code_Follow_Up__c.SObjectType, 'Choose a code review.');
+        List<Code_Follow_Up__c> found = [
+            SELECT Id, Status__c, Reason__c, Rep_Code__c, Rep_Code_Value__c, Resolution_Notes__c
+            FROM Code_Follow_Up__c
+            WHERE Id = :followUpId
+            WITH USER_MODE
+            LIMIT 1
+            FOR UPDATE
+        ];
+        if (found.isEmpty()) {
+            throw fail('This code review no longer exists or is not visible to you.');
+        }
+        String status = found[0].Status__c;
+        if (status != CodeFollowUpService.STATUS_OPEN && status != CodeFollowUpService.STATUS_IN_PROGRESS) {
+            throw fail('This code review is already closed. Refresh to see its current state.');
+        }
+        return found[0];
+    }
+
+    /** Sets the status (the trigger re-matches or releases the held rows) and notes who did what, newest first. */
+    private static void closeReview(Code_Follow_Up__c f, String status, String what) {
+        String note = what + ' (' + UserInfo.getName() + ', ' + System.now().format() + ', Trade Review).';
+        String notes = String.isBlank(f.Resolution_Notes__c) ? note : note + '\n' + f.Resolution_Notes__c;
+        try {
+            update as user new Code_Follow_Up__c(Id = f.Id, Status__c = status, Resolution_Notes__c = notes.abbreviate(5000));
+        } catch (DmlException e) {
+            throw fail(e.getDmlMessage(0));
+        }
+    }
+
+    private static String heldRows(Integer n) {
+        return String.valueOf(n) + (n == 1 ? ' held row' : ' held rows');
+    }
+
+    private static Boolean holdsOn(List<Rep_Code_Assignment__c> holdings, Date d) {
+        if (d == null) {
+            return false;
+        }
+        for (Rep_Code_Assignment__c a : holdings) {
+            if (a.Effective_Start_Date__c != null && a.Effective_Start_Date__c <= d && (a.Effective_End_Date__c == null || a.Effective_End_Date__c >= d)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Takes an item (row or follow-up) for yourself, or gives it back. Nobody can take an item someone else holds. */

@@ -19,3 +19,7 @@
 .field-table td {
   vertical-align: top;
 }
+
+.open-question {
+  font-style: italic;
+}

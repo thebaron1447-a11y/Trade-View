@@ -32,7 +32,7 @@
                 <template for:each={lines} for:item="l">
                   <tr key={l.key}>
                     <td>{l.field}</td>
-                    <td>{l.value}</td>
+                    <td class={l.valueClass}>{l.value}</td>
                     <td>
                       <span class={l.confidenceClass}>{l.confidence}</span>
                     </td>
@@ -43,13 +43,16 @@
             </table>
           </template>
           <template lwc:if={explanation}>
+            <h3 class="slds-text-title_caps slds-m-bottom_xx-small">Why</h3>
             <p class="explanation">{explanation}</p>
           </template>
           <template lwc:if={homework}>
-            <p class="slds-m-top_x-small homework">
-              <span class="slds-text-color_weak label">Ask the dealer:</span
-              ><span>{homework}</span>
-            </p>
+            <h3
+              class="slds-text-title_caps slds-m-top_small slds-m-bottom_xx-small"
+            >
+              Question for the firm
+            </h3>
+            <p class="homework">{homework}</p>
           </template>
           <template lwc:if={confidence}>
             <p class="slds-m-top_x-small">

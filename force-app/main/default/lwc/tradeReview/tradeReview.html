@@ -339,7 +339,7 @@
                         <template for:each={fieldTable} for:item="l">
                           <tr key={l.key}>
                             <td>{l.field}</td>
-                            <td>{l.value}</td>
+                            <td class={l.valueClass}>{l.value}</td>
                             <td>
                               <span class={l.confidenceClass}
                                 >{l.confidence}</span
@@ -360,15 +360,21 @@
                       </p>
                     </template>
                   </template>
-                  <p class="slds-m-top_x-small suggestion">{suggestionText}</p>
+                  <template lwc:if={suggestionText}>
+                    <h3
+                      class="slds-text-title_caps slds-m-top_small slds-m-bottom_xx-small"
+                    >
+                      Why
+                    </h3>
+                    <p class="suggestion">{suggestionText}</p>
+                  </template>
                   <template lwc:if={selectedRow.aiHomework}>
-                    <p class="slds-m-top_x-small homework">
-                      <span class="slds-text-color_weak choice-label"
-                        >Ask the dealer:</span
-                      ><span class="choice-value"
-                        >{selectedRow.aiHomework}</span
-                      >
-                    </p>
+                    <h3
+                      class="slds-text-title_caps slds-m-top_small slds-m-bottom_xx-small"
+                    >
+                      Question for the firm
+                    </h3>
+                    <p class="homework">{selectedRow.aiHomework}</p>
                   </template>
                 </template>
                 <template lwc:else>
@@ -508,13 +514,14 @@
               <h2 class="slds-text-heading_medium slds-m-bottom_x-small">
                 {selectedFollowUp.title}
               </h2>
-              <p class="slds-text-body_small slds-m-bottom_small">
-                {selectedFollowUp.reason} · {selectedFollowUp.status} ·
-                {selectedFollowUp.subtitle}
+              <p
+                class="slds-text-body_small slds-m-bottom_small followup-summary"
+              >
+                {selectedFollowUp.issueText} · {selectedFollowUp.subtitle}
               </p>
               <template lwc:if={hasHeldRows}>
                 <h3 class="slds-text-title_caps slds-m-bottom_x-small">
-                  Held trades
+                  Held rows
                 </h3>
                 <table
                   class="slds-table slds-table_cell-buffer slds-table_bordered slds-m-bottom_small held-table"
@@ -522,7 +529,7 @@
                   <thead>
                     <tr>
                       <th scope="col">Date</th>
-                      <th scope="col">Issue</th>
+                      <th scope="col">Type</th>
                       <th scope="col">Advisor named</th>
                       <th scope="col">Fund</th>
                       <th scope="col">Amount</th>
@@ -532,14 +539,21 @@
                     <template for:each={heldRowViews} for:item="h">
                       <tr key={h.key}>
                         <td>{h.tradeDate}</td>
-                        <td>{h.issue}</td>
-                        <td>{h.advisorName}</td>
-                        <td>{h.fundName}</td>
+                        <td>{h.typeText}</td>
+                        <td>{h.advisorText}</td>
+                        <td>{h.fundText}</td>
                         <td>{h.amountText}</td>
                       </tr>
                     </template>
                   </tbody>
                 </table>
+                <template lwc:if={heldRowsNote}>
+                  <p
+                    class="slds-text-body_small slds-text-color_weak slds-m-top_xx-small slds-m-bottom_small"
+                  >
+                    {heldRowsNote}
+                  </p>
+                </template>
               </template>
               <div
                 class="slds-box slds-box_x-small slds-m-bottom_small question-box"
@@ -582,7 +596,7 @@
                         <template for:each={fieldTable} for:item="l">
                           <tr key={l.key}>
                             <td>{l.field}</td>
-                            <td>{l.value}</td>
+                            <td class={l.valueClass}>{l.value}</td>
                             <td>
                               <span class={l.confidenceClass}
                                 >{l.confidence}</span
@@ -603,40 +617,87 @@
                       </p>
                     </template>
                   </template>
-                  <p class="slds-m-top_x-small suggestion">{suggestionText}</p>
+                  <template lwc:if={suggestionText}>
+                    <h3
+                      class="slds-text-title_caps slds-m-top_small slds-m-bottom_xx-small"
+                    >
+                      Why
+                    </h3>
+                    <p class="suggestion">{suggestionText}</p>
+                  </template>
                 </template>
                 <template lwc:else>
                   <p class="slds-text-color_weak claude-state">{claudeState}</p>
                 </template>
               </div>
-              <div class="slds-m-top_small">
-                <lightning-button
-                  class="slds-m-right_x-small open-followup"
-                  label="Open the follow-up to resolve"
+              <div class="slds-m-top_medium decision">
+                <h3 class="slds-text-title_caps slds-m-bottom_x-small">
+                  Your decision
+                </h3>
+                <p class="slds-text-body_small slds-m-bottom_x-small code-help">
+                  {codeReviewHelp}
+                </p>
+                <template lwc:if={selectedFollowUp.canCredit}>
+                  <lightning-combobox
+                    class="credit-choice"
+                    label="Advisor to credit"
+                    placeholder="Choose the advisor"
+                    options={selectedFollowUp.creditOptions}
+                    value={creditChoice}
+                    onchange={handleCreditChoice}
+                  ></lightning-combobox>
+                </template>
+                <div class="slds-m-top_small">
+                  <template lwc:if={selectedFollowUp.canCredit}>
+                    <lightning-button
+                      class="credit slds-m-right_x-small"
+                      variant="brand"
+                      label={creditLabel}
+                      disabled={creditDisabled}
+                      onclick={handleCredit}
+                    ></lightning-button>
+                  </template>
+                  <lightning-button
+                    class="rematch slds-m-right_x-small"
+                    label="Code fixed: re-match"
+                    disabled={busy}
+                    onclick={handleRematch}
+                  ></lightning-button>
+                  <lightning-button
+                    class="send-to-review slds-m-right_x-small"
+                    label="Decide rows one by one"
+                    disabled={busy}
+                    onclick={handleSendToReview}
+                  ></lightning-button>
+                  <template lwc:if={isUnassigned}>
+                    <lightning-button
+                      class="assign"
+                      label="Assign to me"
+                      disabled={busy}
+                      onclick={handleAssignToMe}
+                    ></lightning-button>
+                  </template>
+                  <template lwc:if={isMine}>
+                    <lightning-button
+                      class="unassign"
+                      label="Unassign"
+                      disabled={busy}
+                      onclick={handleUnassign}
+                    ></lightning-button>
+                  </template>
+                  <template lwc:if={assignedToOther}>
+                    <span class="slds-text-body_small slds-m-left_small"
+                      >Assigned to {selectedFollowUp.assignedToName}</span
+                    >
+                  </template>
+                </div>
+                <button
+                  class="slds-button slds-m-top_x-small open-followup"
                   data-id={selectedFollowUp.id}
                   onclick={handleOpenRecord}
-                ></lightning-button>
-                <template lwc:if={isUnassigned}>
-                  <lightning-button
-                    class="assign"
-                    label="Assign to me"
-                    disabled={busy}
-                    onclick={handleAssignToMe}
-                  ></lightning-button>
-                </template>
-                <template lwc:if={isMine}>
-                  <lightning-button
-                    class="unassign"
-                    label="Unassign"
-                    disabled={busy}
-                    onclick={handleUnassign}
-                  ></lightning-button>
-                </template>
-                <template lwc:if={assignedToOther}>
-                  <span class="slds-text-body_small slds-m-left_small"
-                    >Assigned to {selectedFollowUp.assignedToName}</span
-                  >
-                </template>
+                >
+                  Open the follow-up record
+                </button>
               </div>
             </div>
           </template>

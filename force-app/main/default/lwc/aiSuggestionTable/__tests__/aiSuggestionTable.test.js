@@ -86,6 +86,33 @@ describe("c-ai-suggestion-table", () => {
     );
   });
 
+  it("labels the reasoning and the question for the firm, and marks a field Claude left open", async () => {
+    const element = await render("Code_Follow_Up__c");
+    getRecord.emit(
+      record({
+        AI_Status__c: "Suggested",
+        AI_Field_Suggestions__c:
+          '[{"field":"Advisor","value":null,"confidence":"Low","reason":"Nothing names either member."}]',
+        Suggested_Resolution__c: "The code is split between two advisors.",
+        AI_Homework__c: "Which advisor placed the trade?",
+        AI_Confidence__c: "Low"
+      })
+    );
+    await flush();
+
+    const root = element.shadowRoot;
+    const headings = [...root.querySelectorAll("h3")].map((h) =>
+      h.textContent.trim()
+    );
+    expect(headings).toEqual(["Why", "Question for the firm"]);
+    expect(root.querySelector(".homework").textContent).toBe(
+      "Which advisor placed the trade?"
+    );
+    const value = root.querySelector(".field-table tbody td:nth-child(2)");
+    expect(value.textContent).toBe("No single answer");
+    expect(value.className).toContain("open-question");
+  });
+
   it("says when Claude has not answered", async () => {
     const element = await render("Code_Follow_Up__c");
     getRecord.emit(record({ AI_Status__c: "Failed" }));

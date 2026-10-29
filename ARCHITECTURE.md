@@ -132,7 +132,10 @@ points to https://api.anthropic.com. No Apex depends on either at compile time.
   - Roster: ROSTER_NEW_CODE, ROSTER_NEW_HOLDER, ROSTER_CONFIRMS.
   - Decisions: FOLLOW_UP_CLOSED, *_FROM_CLAUDE, *_FROM_REVIEWER.
 - **Held rows:** code problems hold the row behind one Code Follow-Up per firm, code and reason. Resolving the
-  follow-up re-matches its rows.
+  follow-up re-matches its rows. From the app, `creditCodeReview` settles an Allocation Incomplete, Reassignment
+  Suspected or Code Dormant review by setting Advisor Override on every held row (only someone holding the code on
+  each row's date) and resolving it; `closeCodeReview` resolves it after the code is fixed, or closes it so the rows
+  go to Needs Decision. Each adds a dated line to Resolution Notes.
 - **Roster rows:** approving one (RosterApprovalService) creates the advisor and code, ends the old holder's
   assignment on the day before, assigns the code 100% from the roster date, and closes the follow-up, re-matching
   its held trades. `preview()` lists those steps before the reviewer clicks. Roster rows are authoritative for Claude.
@@ -309,11 +312,11 @@ copy of the repository before running them.
 4. `xref.py` checks that every field and relationship used in Apex exists in the metadata.
 5. `lwc_xref.py` checks every LWC Apex import exists as @AuraEnabled, every call passes exactly the parameter names
    (shorthand properties included), and every `@salesforce/schema` import exists.
-6. Jest (sfdx-lwc-jest) with ESLint and Prettier (double quotes, no trailing commas): 42 tests (34 tradeReview, 3 reviewQueueTable, 5 aiSuggestionTable).
+6. Jest (sfdx-lwc-jest) with ESLint and Prettier (double quotes, no trailing commas): 50 tests (41 tradeReview, 3 reviewQueueTable, 6 aiSuggestionTable).
 7. Python ports and vectors: `check_vectors.py`, `check_claude_vectors.py`.
 8. Negative controls: break something on purpose and confirm the check fails.
 
-**Dry-run command** (22 test classes, 159 tests):
+**Dry-run command** (22 test classes, 163 tests):
 ```powershell
 sf project deploy start --source-dir force-app --target-org tradeDemo --dry-run --verbose --test-level RunSpecifiedTests --tests AiSettingsTest --tests AnthropicApiClientTest --tests ClaudeServiceTest --tests ClaudeSuggestionTest --tests ClaudeValidationVectorTest --tests CsvParserTest --tests DemoScenarioTest --tests FileIntakeServiceTest --tests ImportBatchProcessorTest --tests MappingProposalTest --tests MappingServiceTest --tests MatchingRuleTest --tests NameMatcherTest --tests NameNormalizerTest --tests ProductDeleteGuardTest --tests ReviewControllerTest --tests ReviewDecisionTest --tests RosterApprovalTest --tests TradeIngestResourceTest --tests TradeMatcherTest --tests TradeRowNormalizerTest --tests TradeRowNormalizerVectorTest
 ```
