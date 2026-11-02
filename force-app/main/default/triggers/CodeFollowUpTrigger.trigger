@@ -1,3 +1,7 @@
-trigger CodeFollowUpTrigger on Code_Follow_Up__c(after update) {
-    CodeFollowUpService.handleStatusChanges(Trigger.new, Trigger.oldMap);
+trigger CodeFollowUpTrigger on Code_Follow_Up__c(before update, after update) {
+    if (Trigger.isBefore) {
+        SystemFieldGuard.check(Trigger.new, Trigger.oldMap);
+    } else {
+        CodeFollowUpService.handleStatusChanges(Trigger.new, Trigger.oldMap);
+    }
 }

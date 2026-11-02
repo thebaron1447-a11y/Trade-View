@@ -9,5 +9,6 @@
     <relationshipLabel>Staging Rows</relationshipLabel>
     <relationshipName>Staging_Rows</relationshipName>
     <required>false</required>
+    <trackHistory>true</trackHistory>
     <type>Lookup</type>
 </CustomField>

@@ -146,5 +146,46 @@ for f in files:
         if re.search(r"\bFOR\s+UPDATE\b", q, re.I) and re.search(r"\bORDER\s+BY\b", q, re.I):
             line = text[: m.start()].count("\n") + 1
             problems.append(f"{f.split('/')[-1]}:{line} SOQL with FOR UPDATE cannot use ORDER BY")
+# Apex rejects a local variable declared twice where both are in scope ("Duplicate variable"), including a
+# nested block reusing a name from an enclosing block. The local parser accepts it. A for-loop variable belongs to
+# the loop's own block. Method parameters count as the outermost scope.
+DECL = r"(?:(?<=[;{}(])|^)\s*(?:final\s+)?(?:[A-Z]\w*(?:\.\w+)?(?:<[\w\s,<>.]*>)?(?:\[\])?)\s+([a-z_]\w*)\s*(=|;|:)"
+for f in files:
+    text = open(f, encoding="utf-8-sig").read()
+    text = re.sub(r"//[^\n]*", lambda m: " " * len(m.group(0)), text)
+    text = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S)
+    text = re.sub(r"'(?:\\.|[^'\\])*'", lambda m: "'" + " " * (len(m.group(0)) - 2) + "'", text)
+    text = re.sub(r"\[\s*SELECT\b.*?\]", lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S | re.I)
+    for mm in re.finditer(r"\b(?:public|private|protected|global|static|override|virtual)[\w<>,\s\[\]]*?\s+\w+\s*\(([^)]*)\)\s*\{", text):
+        start = mm.end()
+        depth, i = 1, start
+        while i < len(text) and depth:
+            depth += {"{": 1, "}": -1}.get(text[i], 0)
+            i += 1
+        body = text[start:i - 1]
+        stack = [set(p.split()[-1] for p in mm.group(1).split(",") if p.strip())]
+        pending = set()
+        for m in re.finditer(r"[{}]|" + DECL, body, re.M):
+            g = m.group(0).strip()
+            if g == "{":
+                stack.append(pending)
+                pending = set()
+                continue
+            if g == "}":
+                if len(stack) > 1:
+                    stack.pop()
+                continue
+            name = m.group(1)
+            if name in ("return", "new", "else", "throw"):
+                continue
+            in_for = re.search(r"\bfor\s*\($", body[: m.start()]) is not None
+            if any(name in sc for sc in stack) or name in pending:
+                line = text[: start + m.start(1)].count("\n") + 1
+                problems.append(f"{f.split('/')[-1]}:{line} local variable `{name}` is declared twice in the same scope")
+                continue
+            if in_for or m.group(2) == ":":
+                pending.add(name)
+            else:
+                stack[-1].add(name)
 print("\n".join(problems) if problems else f"apex lint: no problems in {len(files)} files")
 sys.exit(1 if problems else 0)

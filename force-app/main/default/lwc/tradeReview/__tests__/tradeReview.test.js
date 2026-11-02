@@ -8,7 +8,9 @@ import TradeReview, {
   bulkMessage,
   plural,
   heldText,
-  claudeCredit
+  claudeCredit,
+  dayText,
+  rosterState
 } from "c/tradeReview";
 import getQueue from "@salesforce/apex/ReviewController.getQueue";
 import decideRow from "@salesforce/apex/ReviewController.decideRow";
@@ -627,10 +629,13 @@ describe("c-trade-review", () => {
       "Wealth World ETF",
       "$25,000.00"
     ]);
-    expect(
-      element.shadowRoot.querySelector(".followup-summary").textContent.trim()
-    ).toBe(
-      "The code has been dormant and the row names no advisor · 1 trade ($25,000.00) held"
+    const issue = element.shadowRoot.querySelector(".issue-box");
+    expect(issue.querySelector("h3").textContent.trim()).toBe("Issue");
+    expect(issue.querySelector(".followup-issue").textContent.trim()).toBe(
+      "The code has been dormant and the row names no advisor"
+    );
+    expect(issue.querySelector(".followup-held").textContent.trim()).toBe(
+      "1 trade ($25,000.00) held"
     );
     const codes = table(element, "codes-table").items;
     expect(codes).toHaveLength(1);
@@ -695,10 +700,8 @@ describe("c-trade-review", () => {
     const element = await render("codes");
 
     expect(
-      element.shadowRoot.querySelector(".followup-summary").textContent.trim()
-    ).toBe(
-      "The code's shares add up to less than 100% · 1 trade ($1,200,000.00) and 1 AUM balance held"
-    );
+      element.shadowRoot.querySelector(".followup-held").textContent.trim()
+    ).toBe("1 trade ($1,200,000.00) and 1 AUM balance held");
     const types = [
       ...element.shadowRoot.querySelectorAll(".held-table tbody tr")
     ].map((tr) => tr.querySelectorAll("td")[1].textContent);
@@ -782,9 +785,12 @@ describe("c-trade-review", () => {
     const element = await render("codes");
 
     expect(button(element, "credit")).toBeNull();
-    expect(
-      element.shadowRoot.querySelector(".code-help").textContent
-    ).toContain("Set up or correct code 5521 in Salesforce, then re-match.");
+    const help = [...element.shadowRoot.querySelectorAll(".fix-help")].map(
+      (p) => p.textContent.trim()
+    );
+    expect(help).toHaveLength(2);
+    expect(help[0]).toContain("Use after code 5521 is set up or corrected");
+    expect(help[1]).toContain("The 1 row move to Needs Decision");
 
     button(element, "rematch").click();
     await flush();
@@ -799,6 +805,191 @@ describe("c-trade-review", () => {
       followUpId: "a0D000000000001AAA",
       fixed: false
     });
+  });
+
+  it("locks a code review until its roster change is decided, and links the two", async () => {
+    const fu = queue().followUps[0];
+    const roster = kestrelRow({
+      id: "a0E000000000009AAA",
+      isRoster: true,
+      rowType: "Code Roster",
+      needsFirm: false,
+      claudeAnswersIt: false,
+      isCodeIssue: true,
+      headline: "Priya Nair · code 2210 already held by Marcus Bell",
+      approvalPlan: ["Assign code 2210 100% to Priya Nair"],
+      canApprove: true,
+      settlesFollowUpId: "a0D000000000001AAA",
+      settlesCode: "2210",
+      settlesRowCount: 2,
+      settlesAmount: 280000
+    });
+    getQueue.mockResolvedValue(
+      queue({
+        rows: [roster],
+        followUps: [
+          {
+            ...fu,
+            repCode: "2210",
+            reason: "Reassignment Suspected",
+            heldRowCount: 2,
+            rosterRowId: "a0E000000000009AAA",
+            rosterText: "Priya Nair · BARDER row 2",
+            rosterApprovable: true,
+            rosterCovered: 2,
+            rosterDate: "2026-09-15",
+            rosterName: "Priya Nair",
+            advisorOptions: [
+              { label: "Marcus Bell", value: "003000000000001AAA" }
+            ]
+          }
+        ]
+      })
+    );
+    const element = await render("codes");
+
+    const items = table(element, "codes-table").items;
+    expect(items[0].issueDetail).toBe("Roster change first");
+    expect(items[1].note).toBe("Settles the code 2210 review");
+
+    const box = element.shadowRoot.querySelector(".roster-first");
+    expect(box.textContent).toContain("Priya Nair · BARDER row 2");
+    expect(button(element, "credit").disabled).toBe(true);
+    expect(button(element, "rematch").disabled).toBe(true);
+    expect(button(element, "send-to-review").disabled).toBe(true);
+    expect(
+      element.shadowRoot.querySelector("lightning-combobox.credit-choice")
+        .disabled
+    ).toBe(true);
+
+    element.shadowRoot.querySelector(".go-roster").click();
+    await flush();
+    expect(table(element, "codes-table").selectedKey).toBe(
+      "row:a0E000000000009AAA"
+    );
+    expect(
+      element.shadowRoot.querySelector(".settles-text").textContent
+    ).toContain(
+      "Approving this also closes the code 2210 review and re-matches its 2 held rows ($280,000.00 in trades)"
+    );
+
+    element.shadowRoot.querySelector(".go-review").click();
+    await flush();
+    expect(table(element, "codes-table").selectedKey).toBe(
+      "fu:a0D000000000001AAA"
+    );
+  });
+
+  it("says when the roster change is outside the current view", async () => {
+    const fu = queue().followUps[0];
+    getQueue.mockResolvedValue(
+      queue({
+        rows: [],
+        followUps: [
+          {
+            ...fu,
+            rosterRowId: "a0E000000000009AAA",
+            rosterText: "Priya Nair · BARDER row 2",
+            rosterApprovable: true,
+            rosterCovered: 1
+          }
+        ]
+      })
+    );
+    const element = await render("codes");
+
+    expect(element.shadowRoot.querySelector(".go-roster")).toBeNull();
+    expect(
+      element.shadowRoot.querySelector(".roster-first").textContent
+    ).toContain("Choose All to see it.");
+  });
+
+  it("lets the rows a roster change does not cover be settled now", async () => {
+    const fu = queue().followUps[0];
+    getQueue.mockResolvedValue(
+      queue({
+        rows: [],
+        followUps: [
+          {
+            ...fu,
+            repCode: "2210",
+            reason: "Reassignment Suspected",
+            heldRowCount: 3,
+            rosterRowId: "a0E000000000009AAA",
+            rosterText: "Priya Nair · BARDER row 2",
+            rosterApprovable: true,
+            rosterCovered: 1,
+            rosterDate: "2026-09-15",
+            rosterName: "Priya Nair",
+            advisorOptions: [
+              { label: "Marcus Bell", value: "003000000000001AAA" }
+            ],
+            heldRows: [
+              { ...fu.heldRows[0], waitsOnRoster: true },
+              { ...fu.heldRows[0], tradeDate: "2026-09-10" }
+            ]
+          }
+        ]
+      })
+    );
+    creditCodeReview.mockResolvedValue(2);
+    const element = await render("codes");
+
+    expect(table(element, "codes-table").items[0].issueDetail).toBe(
+      "Roster change first for 1 of 3"
+    );
+    expect(element.shadowRoot.querySelector(".roster-first")).toBeNull();
+    expect(
+      element.shadowRoot.querySelector(".roster-partial").textContent
+    ).toContain(
+      "The firm's roster gives code 2210 to Priya Nair from Sep 15, 2026"
+    );
+    const badges = element.shadowRoot.querySelectorAll(
+      ".held-table .wait-badge"
+    );
+    expect(badges).toHaveLength(1);
+    expect(badges[0].textContent).toBe("Waits for the roster change");
+
+    expect(button(element, "credit").label).toBe("Credit the other 2 rows");
+    expect(button(element, "rematch").disabled).toBe(true);
+    expect(button(element, "send-to-review").disabled).toBe(false);
+    element.shadowRoot
+      .querySelector("lightning-combobox.credit-choice")
+      .dispatchEvent(
+        new CustomEvent("change", { detail: { value: "003000000000001AAA" } })
+      );
+    await flush();
+    expect(button(element, "credit").disabled).toBe(false);
+  });
+
+  it("says why a waiting roster change holds nothing back", async () => {
+    const fu = queue().followUps[0];
+    getQueue.mockResolvedValue(
+      queue({
+        rows: [],
+        followUps: [
+          {
+            ...fu,
+            repCode: "2210",
+            reason: "Reassignment Suspected",
+            rosterRowId: "a0E000000000009AAA",
+            rosterText: "Priya Nair · BARDER row 2",
+            rosterApprovable: false,
+            rosterCovered: 0
+          }
+        ]
+      })
+    );
+    const element = await render("codes");
+
+    expect(
+      element.shadowRoot.querySelector(".roster-info").textContent
+    ).toContain(
+      "but it cannot be approved as it stands, so nothing here waits for it"
+    );
+    expect(button(element, "rematch").disabled).toBe(false);
+    expect(button(element, "send-to-review").disabled).toBe(false);
+    expect(table(element, "codes-table").items[0].issueDetail).toBe("");
   });
 
   it("labels Claude's reasoning and its question for the firm", async () => {
@@ -1414,6 +1605,36 @@ describe("helpers", () => {
     );
     expect(heldText({ heldRowCount: 4 })).toBe("4 other rows held");
     expect(heldText({ heldRowCount: 0 })).toBe("0 rows held");
+  });
+
+  it("reads calendar dates without shifting them", () => {
+    expect(dayText("2026-09-15")).toBe("Sep 15, 2026");
+    expect(dayText(null)).toBe("");
+    expect(dayText("not a date")).toBe("");
+  });
+
+  it("works out how a roster change affects a code review", () => {
+    const base = { rosterRowId: "x", heldRowCount: 3, rosterApprovable: true };
+    expect(rosterState({ ...base, rosterCovered: 3 })).toMatchObject({
+      rosterFirst: true,
+      rosterPartial: false,
+      rosterInfo: false,
+      workableCount: 0
+    });
+    expect(rosterState({ ...base, rosterCovered: 1 })).toMatchObject({
+      rosterFirst: false,
+      rosterPartial: true,
+      workableCount: 2
+    });
+    expect(
+      rosterState({ ...base, rosterApprovable: false, rosterCovered: 3 })
+    ).toMatchObject({ rosterFirst: false, rosterInfo: true, workableCount: 3 });
+    expect(rosterState({ heldRowCount: 2 })).toMatchObject({
+      rosterFirst: false,
+      rosterPartial: false,
+      rosterInfo: false,
+      workableCount: 2
+    });
   });
 
   it("pre-chooses Claude's advisor only when it can be credited", () => {

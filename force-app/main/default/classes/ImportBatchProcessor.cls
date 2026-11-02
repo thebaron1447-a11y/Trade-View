@@ -43,7 +43,7 @@ public with sharing class ImportBatchProcessor implements Queueable {
             return;
         }
         Import_Batch__c batch = batches[0];
-        update as user new Import_Batch__c(Id = batch.Id, Status__c = STATUS_PROCESSING);
+        SystemWriter.updateOne(new Import_Batch__c(Id = batch.Id, Status__c = STATUS_PROCESSING));
         batch.Status__c = STATUS_PROCESSING;
         Savepoint sp = Database.setSavepoint();
         try {
@@ -83,14 +83,14 @@ public with sharing class ImportBatchProcessor implements Queueable {
             batch.Header_Fingerprint__c = fingerprint;
             batch.Status__c = STATUS_MAPPING_REVIEW;
             batch.Error_Message__c = e.getMessage().abbreviate(5000);
-            update as user batch;
+            SystemWriter.updateOne(batch);
             return;
         }
         if (profile == null) {
             batch.Status__c = STATUS_MAPPING_REVIEW;
             batch.Header_Fingerprint__c = fingerprint;
             batch.Error_Message__c = 'No Active mapping profile matches this file layout. A mapping must be confirmed before the file can be read.';
-            update as user batch;
+            SystemWriter.updateOne(batch);
             if (AiSettings.get().enabled && !Test.isRunningTest()) {
                 System.enqueueJob(new MappingProposalJob(batch.Id));
             }
@@ -104,12 +104,12 @@ public with sharing class ImportBatchProcessor implements Queueable {
             row.Import_Batch__c = batch.Id;
             staged.add(row);
         }
-        insert as user staged;
+        SystemWriter.insertAll(staged);
 
         batch.Mapping_Profile__c = profile.Id;
         batch.Status__c = STATUS_STAGED;
         batch.Error_Message__c = null;
-        update as user batch;
+        SystemWriter.updateOne(batch);
         // Matching runs as its own job so each stage has full limits. Apex tests cannot chain queueable
         // jobs, so tests run TradeMatcher directly.
         if (!Test.isRunningTest()) {
@@ -142,6 +142,6 @@ public with sharing class ImportBatchProcessor implements Queueable {
     private static void markFailed(Id batchId, Exception e) {
         Boolean expected = e instanceof ImportException || e instanceof CsvParser.CsvException;
         String message = expected ? e.getMessage() : e.getTypeName() + ': ' + e.getMessage();
-        update as user new Import_Batch__c(Id = batchId, Status__c = STATUS_FAILED, Error_Message__c = message.abbreviate(5000));
+        SystemWriter.updateOne(new Import_Batch__c(Id = batchId, Status__c = STATUS_FAILED, Error_Message__c = message.abbreviate(5000)));
     }
 }

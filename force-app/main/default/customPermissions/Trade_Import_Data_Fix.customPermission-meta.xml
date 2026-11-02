@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomPermission xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Lets a user change fields the system owns (match results, Claude's answers, decision and hold stamps, code review keys and counts) by hand, for data fixes. Granted by Trade Import Admin only. Every change to the tracked fields is kept in field history.</description>
+    <isLicensed>false</isLicensed>
+    <label>Trade Import Data Fix</label>
+</CustomPermission>

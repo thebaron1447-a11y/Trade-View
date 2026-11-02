@@ -111,8 +111,8 @@ public with sharing class CodeFollowUpService {
                 )
             );
         }
-        update as user updates;
-        insert as user inserts;
+        SystemWriter.updateAll(updates);
+        SystemWriter.insertAll(inserts);
         for (Code_Follow_Up__c c : inserts) {
             idsByKey.put(c.Follow_Up_Key__c, c.Id);
         }
@@ -150,7 +150,7 @@ public with sharing class CodeFollowUpService {
             Decimal amt = (Decimal) ar.get('amt');
             updates.get((Id) ar.get('fid')).Held_Amount__c = amt == null ? 0 : amt;
         }
-        update as user updates.values();
+        SystemWriter.updateAll(updates.values());
     }
 
     /** After-update trigger handler: release or close held rows when a follow-up is resolved or closed. */
@@ -180,28 +180,44 @@ public with sharing class CodeFollowUpService {
             WITH USER_MODE
             LIMIT 10000
         ];
-        // Fresh records with only the changed fields: user-mode DML rejects the queried batch master-detail.
         Set<Id> batchIds = new Set<Id>();
         List<Import_Staging_Row__c> changes = new List<Import_Staging_Row__c>();
         for (Import_Staging_Row__c row : rows) {
-            Import_Staging_Row__c change = new Import_Staging_Row__c(Id = row.Id, Code_Follow_Up__c = null);
-            if (released.contains(row.Code_Follow_Up__c)) {
-                change.Match_Status__c = TradeMatcher.PENDING;
+            Boolean again = released.contains(row.Code_Follow_Up__c);
+            changes.add(releaseChange(row, again));
+            if (again) {
                 batchIds.add(row.Import_Batch__c);
-            } else {
-                change.Match_Status__c = TradeMatcher.REVIEW;
-                // Appended last and always kept: earlier whole flags are dropped if the list would be too long.
-                List<String> flags = String.isBlank(row.Match_Flags__c) ? new List<String>() : row.Match_Flags__c.split(';');
-                while (!flags.isEmpty() && String.join(flags, ';').length() + ';FOLLOW_UP_CLOSED'.length() > 255) {
-                    flags.remove(flags.size() - 1);
-                }
-                flags.add('FOLLOW_UP_CLOSED');
-                change.Match_Flags__c = String.join(flags, ';');
             }
-            changes.add(change);
         }
-        update as user changes;
+        SystemWriter.updateAll(changes);
         recount(all);
+        rematch(batchIds);
+    }
+
+    /**
+     * The change that takes a held row off its code review: back to Pending to be matched again, or to manual review
+     * with FOLLOW_UP_CLOSED. A fresh record with only the changed fields: user-mode DML rejects the queried batch
+     * master-detail. The row needs Id and Match_Flags__c.
+     */
+    public static Import_Staging_Row__c releaseChange(Import_Staging_Row__c row, Boolean rematch) {
+        Import_Staging_Row__c change = new Import_Staging_Row__c(Id = row.Id, Code_Follow_Up__c = null);
+        if (rematch) {
+            change.Match_Status__c = TradeMatcher.PENDING;
+            return change;
+        }
+        change.Match_Status__c = TradeMatcher.REVIEW;
+        // Appended last and always kept: earlier whole flags are dropped if the list would be too long.
+        List<String> flags = String.isBlank(row.Match_Flags__c) ? new List<String>() : row.Match_Flags__c.split(';');
+        while (!flags.isEmpty() && String.join(flags, ';').length() + ';FOLLOW_UP_CLOSED'.length() > 255) {
+            flags.remove(flags.size() - 1);
+        }
+        flags.add('FOLLOW_UP_CLOSED');
+        change.Match_Flags__c = String.join(flags, ';');
+        return change;
+    }
+
+    /** Queues matching for these batches (their Pending rows), when the transaction can still queue a job. */
+    public static void rematch(Set<Id> batchIds) {
         if (!batchIds.isEmpty() && Limits.getQueueableJobs() < Limits.getLimitQueueableJobs()) {
             System.enqueueJob(new TradeMatcher(batchIds));
         }

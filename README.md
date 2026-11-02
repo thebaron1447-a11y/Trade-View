@@ -29,7 +29,8 @@ fund is fictional.
 - **Puts a person in charge of every decision** in the Trade Review app:
   - **Dealer Code Review:** rep codes to fix, the rows held behind them, and roster changes. A code review is
     settled in place: credit one advisor who holds the code, re-match after fixing it, or send its rows to be
-    decided one by one. Each roster change shows exactly what approving it will create or end.
+    decided one by one. When the firm's roster changes the same code, the rows it covers wait for that decision
+    (approving it settles them); rows it does not cover can be settled straight away. Each roster change shows exactly what approving it will create or end.
   - **Needs Decision:** firm, fund and other data questions. Rows with the same problem (the same misspelt fund from
     the same dealer, say) show as one line with their row count and total, and one decision settles them all.
   - **On Hold:** items only the dealer can answer.
@@ -103,9 +104,9 @@ Firms and branches are Accounts, advisors are Contacts, and funds are Products.
 
 ## Quality
 
-- **163 Apex tests** in 22 test classes. One test runs every reviewer action as a Standard User holding only the
+- **175 Apex tests** in 24 test classes. One test runs every reviewer action as a Standard User holding only the
   Reviewer permission set, to prove the permissions are complete.
-- **50 LWC Jest tests** across the three components.
+- **56 LWC Jest tests** across the three components.
 - **Python ports with shared test vectors** for CSV parsing, normalisation, name matching and Claude-answer validation.
 - **Checks before every deploy:**
   - Apex parse;
@@ -116,8 +117,12 @@ Firms and branches are Accounts, advisors are Contacts, and funds are Products.
   - LWC-to-Apex parameter and schema checks.
 
   Each check is proven with a negative control: break the code on purpose and confirm the check fails.
-- **Security:** every query and update runs in user mode, with least-privilege permission sets for the integration
-  user, reviewers and admins.
+- **Security:** everything a person does runs in user mode, with least-privilege permission sets for the integration
+  user, reviewers and admins. Background steps (matching, Claude's answers, counts, decision and hold stamps, roster
+  changes after an approval) save through one system writer. Those fields are read-only for reviewers and the
+  integration user (which edits nothing directly), a trigger guard refuses hand changes made any other way unless the
+  user holds a Data Fix permission, and field history records every change to decisions, match results, assignments
+  and statuses.
 
 ## Repository layout
 
@@ -169,6 +174,8 @@ review still work, just without suggestions.
 - **Loading approved rows** into Trade, Trade Allocation and AUM records.
 - **Holder confirmation** for dormant codes, and notifications instead of polling.
 - **One Claude call per shared issue** instead of per row, to cut cost on large files.
+- **Audit history:** a permanent, read-only record of every change and approval (who, when, what changed from
+  and to, why, and whether it came from a person, a rule or Claude's suggestion), exportable for auditors.
 
 ## Author
 

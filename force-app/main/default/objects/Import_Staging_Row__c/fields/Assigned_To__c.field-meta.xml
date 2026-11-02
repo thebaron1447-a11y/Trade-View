@@ -9,5 +9,6 @@
     <relationshipLabel>Assigned Review Rows</relationshipLabel>
     <relationshipName>Assigned_Review_Rows</relationshipName>
     <required>false</required>
+    <trackHistory>true</trackHistory>
     <type>Lookup</type>
 </CustomField>

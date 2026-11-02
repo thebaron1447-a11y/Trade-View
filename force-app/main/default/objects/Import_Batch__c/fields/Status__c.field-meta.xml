@@ -5,6 +5,7 @@
     <inlineHelpText>Shows where this import is in the process. Mapping Review and Pending Review batches are waiting on a reviewer.</inlineHelpText>
     <label>Status</label>
     <required>false</required>
+    <trackHistory>true</trackHistory>
     <type>Picklist</type>
     <valueSet>
         <restricted>true</restricted>

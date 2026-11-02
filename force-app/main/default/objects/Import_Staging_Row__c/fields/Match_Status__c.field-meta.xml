@@ -5,6 +5,7 @@
     <inlineHelpText>Where this row is in matching.</inlineHelpText>
     <label>Match Status</label>
     <required>false</required>
+    <trackHistory>true</trackHistory>
     <type>Picklist</type>
     <valueSet>
         <restricted>true</restricted>

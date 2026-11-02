@@ -9,5 +9,6 @@
     <relationshipLabel>Advisor Override Staging Rows</relationshipLabel>
     <relationshipName>Advisor_Override_Staging_Rows</relationshipName>
     <required>false</required>
+    <trackHistory>true</trackHistory>
     <type>Lookup</type>
 </CustomField>

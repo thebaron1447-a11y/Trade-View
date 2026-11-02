@@ -20,6 +20,20 @@ the fund. Each row ends as **Matched**, **Needs Review**, **Held** (behind a **C
 **Claude** then suggests answers for the rows rules can't settle. It sees short keys only, and its answers are
 validated strictly. It also proposes mapping profiles for unknown file formats and drafts follow-up emails to firms.
 
+**Who saves what.** Everything a person does (decide, hold, assign, upload, email, activate a mapping) runs in user
+mode, so the permission sets decide what each role can do. Background steps save through **SystemWriter**, the one
+class that writes in system mode: matching results, Claude's answers and logs, row and batch counts, decision and hold
+stamps (set by the row trigger), learned aliases, and the advisors, codes and assignments a roster approval creates
+or ends. Callers check what they save first. The system-owned fields are read-only for reviewers (who edit only
+what a person decides: decision, overrides, remember, hold and reason, assignment, asked date, a code review's status
+and notes, plus mappings, matching rules and the rep code roster) and for the integration user, which edits nothing
+directly. **SystemFieldGuard**, in the before-update triggers of staging rows and code reviews, refuses changes to
+system-owned fields made any other way (code or automation in system mode) unless the writer is saving or the user
+holds the Trade Import Data Fix custom permission (Trade Import Admin) or Modify All Data. Field history tracks
+decisions, overrides, match results, amounts, holds and assignment on rows; status, assignment and code on code
+reviews; advisor, share and dates on rep code assignments; and status on batches, mapping profiles and matching
+rules. SecurityModelTest checks the reviewer permission set and the guard agree (audit F-01, F-28).
+
 A person decides everything in the **Trade Review** app (an LWC on its own tab). Two tiers:
 - **Enterprise** (the default): Models API and the Trust Layer.
 - **Standard**: smaller firms use the Anthropic API with their own key, which also enables prompt caching.
@@ -136,6 +150,13 @@ points to https://api.anthropic.com. No Apex depends on either at compile time.
   Suspected or Code Dormant review by setting Advisor Override on every held row (only someone holding the code on
   each row's date) and resolving it; `closeCodeReview` resolves it after the code is fixed, or closes it so the rows
   go to Needs Decision. Each adds a dated line to Resolution Notes.
+- **Roster change first, row by row:** when a roster row for the same firm and code waits for a decision and the
+  review's reason is one a roster change settles, held rows it covers wait for it. Rules decide coverage, not Claude:
+  the roster change must be approvable as it stands (same rule as the Approve button), and a held row must be dated on
+  or after the roster date and name the roster advisor (NameMatcher) or no one. Covered rows cannot be credited,
+  re-matched or sent to review; the others can, and the review stays open for the covered ones. Re-match waits while
+  any row is covered, because the roster change is the fix. Approving the roster change resolves the review; rejecting
+  it releases the lock. The app links both items and marks each waiting row.
 - **Roster rows:** approving one (RosterApprovalService) creates the advisor and code, ends the old holder's
   assignment on the day before, assigns the code 100% from the roster date, and closes the follow-up, re-matching
   its held trades. `preview()` lists those steps before the reviewer clicks. Roster rows are authoritative for Claude.
@@ -312,13 +333,13 @@ copy of the repository before running them.
 4. `xref.py` checks that every field and relationship used in Apex exists in the metadata.
 5. `lwc_xref.py` checks every LWC Apex import exists as @AuraEnabled, every call passes exactly the parameter names
    (shorthand properties included), and every `@salesforce/schema` import exists.
-6. Jest (sfdx-lwc-jest) with ESLint and Prettier (double quotes, no trailing commas): 50 tests (41 tradeReview, 3 reviewQueueTable, 6 aiSuggestionTable).
+6. Jest (sfdx-lwc-jest) with ESLint and Prettier (double quotes, no trailing commas): 56 tests (47 tradeReview, 3 reviewQueueTable, 6 aiSuggestionTable).
 7. Python ports and vectors: `check_vectors.py`, `check_claude_vectors.py`.
 8. Negative controls: break something on purpose and confirm the check fails.
 
-**Dry-run command** (22 test classes, 163 tests):
+**Dry-run command** (24 test classes, 175 tests):
 ```powershell
-sf project deploy start --source-dir force-app --target-org tradeDemo --dry-run --verbose --test-level RunSpecifiedTests --tests AiSettingsTest --tests AnthropicApiClientTest --tests ClaudeServiceTest --tests ClaudeSuggestionTest --tests ClaudeValidationVectorTest --tests CsvParserTest --tests DemoScenarioTest --tests FileIntakeServiceTest --tests ImportBatchProcessorTest --tests MappingProposalTest --tests MappingServiceTest --tests MatchingRuleTest --tests NameMatcherTest --tests NameNormalizerTest --tests ProductDeleteGuardTest --tests ReviewControllerTest --tests ReviewDecisionTest --tests RosterApprovalTest --tests TradeIngestResourceTest --tests TradeMatcherTest --tests TradeRowNormalizerTest --tests TradeRowNormalizerVectorTest
+sf project deploy start --source-dir force-app --target-org tradeDemo --dry-run --verbose --test-level RunSpecifiedTests --tests AiSettingsTest --tests AnthropicApiClientTest --tests ClaudeServiceTest --tests ClaudeSuggestionTest --tests ClaudeValidationVectorTest --tests CsvParserTest --tests DemoScenarioTest --tests FileIntakeServiceTest --tests ImportBatchProcessorTest --tests MappingProposalTest --tests MappingServiceTest --tests MatchingRuleTest --tests NameMatcherTest --tests NameNormalizerTest --tests ProductDeleteGuardTest --tests ReviewControllerTest --tests ReviewDecisionTest --tests RosterApprovalTest --tests TradeIngestResourceTest --tests TradeMatcherTest --tests SystemWriterTest --tests SecurityModelTest --tests TradeRowNormalizerTest --tests TradeRowNormalizerVectorTest
 ```
 To deploy for real, run the same command without `--dry-run --verbose`.
 

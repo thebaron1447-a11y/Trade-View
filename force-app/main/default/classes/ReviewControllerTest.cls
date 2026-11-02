@@ -1122,4 +1122,159 @@ private class ReviewControllerTest {
         Assert.areEqual('Barder & Company', item.fieldLines[1].value, 'an answer is shown as given');
         Assert.isFalse(item.fieldLines[1].openQuestion, 'and is not open');
     }
+
+    @IsTest
+    static void aRosterChangeIsDecidedBeforeTheCodeReviewItSettles() {
+        claudeOff();
+        TradeTestWorld w = TradeTestWorld.build();
+        // Trades name Priya on code 2210, which Salesforce says Marcus holds; the firm's roster says Priya took it over.
+        Import_Batch__c trades = TradeTestWorld.stagedBatch(
+            'BARDER',
+            new List<Import_Staging_Row__c>{ TradeTestWorld.trade('Barder & Company', '2210', 'Priya Nair', 'Wealth World ETF', SEP_29, 220000) }
+        );
+        Import_Batch__c roster = TradeTestWorld.stagedBatch(
+            'BARDER',
+            new List<Import_Staging_Row__c>{
+                TradeTestWorld.roster('Barder & Company', '2210', 'Priya Nair', 'Barder & Company - Oakville', Date.newInstance(2026, 9, 1))
+            }
+        );
+        TradeMatcher.run(new Set<Id>{ trades.Id, roster.Id });
+        Code_Follow_Up__c fu = [SELECT Id, Reason__c FROM Code_Follow_Up__c WHERE Rep_Code_Value__c = '2210'];
+        Assert.areEqual('Reassignment Suspected', fu.Reason__c, 'the trades are held behind the code');
+        Id rosterRowId = TradeTestWorld.row(roster.Id, 1).Id;
+
+        ReviewController.Queue q = ReviewController.getQueue('all');
+        ReviewController.FollowUpItem item = followUpOf(q, fu.Id);
+        Assert.areEqual(rosterRowId, item.rosterRowId, 'the review points to the roster change');
+        Assert.isTrue(item.rosterText.startsWith('Priya Nair · BARDER row 1'), 'and names it: ' + item.rosterText);
+        ReviewController.RowItem rosterItem = rowOf(q, rosterRowId);
+        Assert.areEqual(fu.Id, rosterItem.settlesFollowUpId, 'the roster change points back to the review');
+        Assert.areEqual('2210', rosterItem.settlesCode, 'its code');
+        Assert.areEqual(1, rosterItem.settlesRowCount, 'how many rows approving re-matches');
+        Assert.areEqual(220000, rosterItem.settlesAmount.intValue(), 'and their trade value');
+
+        String credit = creditFailure(fu.Id, w.marcus.Id);
+        Assert.isTrue(credit.contains('Decide the roster change for code 2210 first'), 'crediting waits: ' + credit);
+        String send = 'no error';
+        try {
+            ReviewController.closeCodeReview(fu.Id, false);
+        } catch (AuraHandledException e) {
+            send = e.getMessage();
+        }
+        Assert.isTrue(send.contains('Decide the roster change for code 2210 first'), 'so does closing: ' + send);
+
+        // Rejecting the roster change unlocks the review.
+        ReviewController.decideRow(rosterRowId, 'Reject', null, null, null, false);
+        Assert.isNull(followUpOf(ReviewController.getQueue('all'), fu.Id).rosterRowId, 'no roster change waiting now');
+        Assert.areEqual(1, ReviewController.closeCodeReview(fu.Id, false), 'the review can be closed');
+    }
+
+    /** Trades on code 2210 (Marcus Bell's in Salesforce) and Priya Nair's roster row taking it over on the given date. */
+    private static Code_Follow_Up__c code2210WithRoster(List<Import_Staging_Row__c> trades, Date rosterDate) {
+        Import_Batch__c tradeFile = TradeTestWorld.stagedBatch('BARDER', trades);
+        Import_Batch__c rosterFile = TradeTestWorld.stagedBatch(
+            'BARDER',
+            new List<Import_Staging_Row__c>{ TradeTestWorld.roster('Barder & Company', '2210', 'Priya Nair', 'Barder & Company - Oakville', rosterDate) }
+        );
+        TradeMatcher.run(new Set<Id>{ tradeFile.Id, rosterFile.Id });
+        return [SELECT Id, Reason__c, Held_Row_Count__c FROM Code_Follow_Up__c WHERE Rep_Code_Value__c = '2210'];
+    }
+
+    @IsTest
+    static void onlyRowsTheRosterChangeCoversWaitForIt() {
+        claudeOff();
+        TradeTestWorld w = TradeTestWorld.build();
+        Code_Follow_Up__c fu = code2210WithRoster(
+            new List<Import_Staging_Row__c>{
+                // Covered: on or after the roster date, naming Priya.
+                TradeTestWorld.trade('Barder & Company', '2210', 'P. Nair', 'Wealth World ETF', SEP_29, 60000),
+                // Not covered: before the roster date.
+                TradeTestWorld.trade('Barder & Company', '2210', 'Priya Nair', 'Wealth World ETF', Date.newInstance(2026, 9, 10), 1000),
+                // Not covered: names someone else.
+                TradeTestWorld.trade('Barder & Company', '2210', 'Tom Reilly', 'Wealth World ETF', SEP_27, 2000)
+            },
+            Date.newInstance(2026, 9, 15)
+        );
+        Assert.areEqual(3, fu.Held_Row_Count__c.intValue(), 'all three are held behind the code');
+
+        ReviewController.FollowUpItem item = followUpOf(ReviewController.getQueue('all'), fu.Id);
+        Assert.isTrue(item.rosterApprovable, 'the roster change can be approved');
+        Assert.areEqual(1, item.rosterCovered, 'only the September 29 trade naming P. Nair falls under it');
+        Assert.areEqual(Date.newInstance(2026, 9, 15), item.rosterDate, 'its date');
+        Integer marked = 0;
+        for (ReviewController.HeldRow h : item.heldRows) {
+            if (h.waitsOnRoster) {
+                marked++;
+                Assert.areEqual(SEP_29, h.tradeDate, 'the covered row is marked');
+            }
+        }
+        Assert.areEqual(1, marked, 'one row marked as waiting');
+
+        String rematch = 'no error';
+        try {
+            ReviewController.closeCodeReview(fu.Id, true);
+        } catch (AuraHandledException e) {
+            rematch = e.getMessage();
+        }
+        Assert.isTrue(rematch.contains('Decide the roster change for code 2210 first'), 're-match waits for the roster change: ' + rematch);
+
+        Test.startTest();
+        Assert.areEqual(2, ReviewController.creditCodeReview(fu.Id, w.marcus.Id), 'the two rows it does not cover are credited');
+        Test.stopTest();
+
+        Code_Follow_Up__c review = [SELECT Status__c, Held_Row_Count__c, Resolution_Notes__c FROM Code_Follow_Up__c WHERE Id = :fu.Id];
+        Assert.areEqual('Open', review.Status__c, 'the review stays open for the covered row');
+        Assert.areEqual(1, review.Held_Row_Count__c.intValue(), 'which is still held');
+        Assert.isTrue(
+            review.Resolution_Notes__c.startsWith('Credited Marcus Bell for 2 held rows; 1 held row waits for the roster change'),
+            'noted: ' + review.Resolution_Notes__c
+        );
+        Assert.areEqual(
+            2,
+            [
+                SELECT COUNT()
+                FROM Import_Staging_Row__c
+                WHERE Match_Status__c = 'Matched' AND Credited_Advisor__c = :w.marcus.Id AND Source_Rep_Code__c = '2210'
+            ],
+            'the credited rows re-matched to Marcus'
+        );
+    }
+
+    @IsTest
+    static void aRosterChangeThatCannotBeApprovedLocksNothing() {
+        claudeOff();
+        TradeTestWorld w = TradeTestWorld.build();
+        // Dated before Marcus's own start, so the roster change cannot be approved as it stands.
+        Code_Follow_Up__c fu = code2210WithRoster(
+            new List<Import_Staging_Row__c>{ TradeTestWorld.trade('Barder & Company', '2210', 'Priya Nair', 'Wealth World ETF', SEP_29, 5000) },
+            Date.newInstance(2017, 1, 1)
+        );
+
+        ReviewController.FollowUpItem item = followUpOf(ReviewController.getQueue('all'), fu.Id);
+        Assert.isNotNull(item.rosterRowId, 'the roster change is still shown');
+        Assert.isFalse(item.rosterApprovable, 'but it cannot be approved');
+        Assert.areEqual(0, item.rosterCovered, 'so it holds nothing back');
+        Assert.areEqual(1, ReviewController.closeCodeReview(fu.Id, false), 'the review can be closed');
+        Assert.areEqual('Closed - No Action', [SELECT Status__c FROM Code_Follow_Up__c WHERE Id = :fu.Id].Status__c, 'closed');
+    }
+
+    @IsTest
+    static void coverageFollowsTheRosterDateAndName() {
+        Import_Staging_Row__c roster = new Import_Staging_Row__c(Source_Advisor_Name__c = 'Priya Nair', Trade_Date__c = Date.newInstance(2026, 9, 15));
+        Date afterDate = Date.newInstance(2026, 9, 20);
+        Assert.isTrue(ReviewController.coveredBy(roster, new Import_Staging_Row__c(Trade_Date__c = afterDate)), 'no name: covered');
+        Assert.isTrue(
+            ReviewController.coveredBy(roster, new Import_Staging_Row__c(Trade_Date__c = roster.Trade_Date__c, Source_Advisor_Name__c = 'P. Nair')),
+            'on the date, an initial: covered'
+        );
+        Assert.isFalse(
+            ReviewController.coveredBy(roster, new Import_Staging_Row__c(Trade_Date__c = afterDate, Source_Advisor_Name__c = 'Tom Reilly')),
+            'someone else: not covered'
+        );
+        Assert.isFalse(
+            ReviewController.coveredBy(roster, new Import_Staging_Row__c(Trade_Date__c = Date.newInstance(2026, 9, 14), Source_Advisor_Name__c = 'Priya Nair')),
+            'the day before: not covered'
+        );
+        Assert.isFalse(ReviewController.coveredBy(roster, new Import_Staging_Row__c(Source_Advisor_Name__c = 'Priya Nair')), 'undated: not covered');
+    }
 }

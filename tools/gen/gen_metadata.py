@@ -60,7 +60,7 @@ def object_xml(o):
     <enableActivities>false</enableActivities>
     <enableBulkApi>{flag}</enableBulkApi>
     <enableFeeds>false</enableFeeds>
-    <enableHistory>false</enableHistory>
+    <enableHistory>{B_(o.get('api') in HISTORY)}</enableHistory>
     <enableReports>true</enableReports>
     <enableSearch>true</enableSearch>
     <enableSharing>{flag}</enableSharing>
@@ -798,6 +798,8 @@ def field_xml(f):
             "\n        <valueSetDefinition>"
             "\n            <sorted>false</sorted>" + vals +
             "\n        </valueSetDefinition>\n    ")
+    if f["api"] in HISTORY.get(f["obj"], ()):
+        body["trackHistory"] = "true"
     for key in sorted(body):
         parts.append(f"    <{key}>{body[key]}</{key}>")
     return ('<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -950,11 +952,42 @@ def listview_xml(cols):
 """
 
 
+# ---------------------------------------------------------------- security model (audit F-01)
+# Fields only the system sets: background steps save them through SystemWriter (system mode), so the Reviewer and
+# Integration permission sets get them read-only, and a trigger guard (SystemFieldGuard) refuses hand changes made
+# any other way unless the user holds the Trade Import Data Fix permission or Modify All Data.
+# A reviewer edits only what a person decides.
+REVIEWER_FIELDS = {
+    SR: {"Advisor_Override__c", "Firm_Override__c", "Fund_Override__c", "Reviewer_Decision__c", "Remember_Choice__c",
+         "On_Hold__c", "On_Hold_Reason__c", "Assigned_To__c", "Asked_Firm_At__c"},
+    CF: {"Status__c", "Resolution_Notes__c", "Assigned_To__c", "Asked_Firm_At__c"},
+}
+LOCKED = {f"{f['obj']}.{f['api']}" for f in F if f["obj"] in REVIEWER_FIELDS and f["api"] not in REVIEWER_FIELDS[f["obj"]]}
+LOCKED |= {f"{MP}.AI_Rationale__c", f"{MP}.Proposed_From_Batch__c", f"{MP}.Header_Fingerprint__c",
+           f"{MR}.Approved_At__c", f"{MR}.Approved_By__c", f"{A}.Last_Confirmed_Trade_Date__c"}
+DATA_FIX = "Trade_Import_Data_Fix"
+# Field history: who changed a decision, a match result, an assignment or a status, and when (20 fields per object).
+HISTORY = {
+    SR: {"Match_Status__c", "Reviewer_Decision__c", "Firm_Override__c", "Fund_Override__c", "Advisor_Override__c",
+         "Credited_Advisor__c", "Matched_Firm__c", "Matched_Fund__c", "Amount__c", "On_Hold__c", "Assigned_To__c",
+         "Decided_By__c"},
+    CF: {"Status__c", "Assigned_To__c", "Rep_Code__c"},
+    A: {"Advisor__c", "Allocation_Percent__c", "Effective_Start_Date__c", "Effective_End_Date__c"},
+    IB: {"Status__c"},
+    MP: {"Status__c"},
+    MR: {"Status__c"},
+}
+for obj_, apis_ in HISTORY.items():
+    assert len(apis_) <= 20, obj_
+    for api_ in apis_:
+        assert any(f["obj"] == obj_ and f["api"] == api_ for f in F), (obj_, api_)
+
 # ---------------------------------------------------------------- permission sets
 B_ = lambda v: "true" if v else "false"
 
 
-def permset_xml(label, desc, objects, read_only_objects, classes, standard_read_fields=(), tabs=(), cmts=(), standard_edit_fields=()):
+def permset_xml(label, desc, objects, read_only_objects, classes, standard_read_fields=(), tabs=(), cmts=(), standard_edit_fields=(),
+                locked=frozenset(), custom_perms=()):
     """objects: {api: (create, read, edit, delete, viewAll, modifyAll)}; custom fields follow object access.
     standard_read_fields: Object.Field standard fields to grant read-only (Name-type fields need no entry)."""
     cas = "".join(f"""
@@ -966,7 +999,7 @@ def permset_xml(label, desc, objects, read_only_objects, classes, standard_read_
     for f in sorted(F, key=lambda f: (f["obj"], f["api"])):
         if f["obj"] not in objects or f["kind"] == "md" or f.get("required"):
             continue  # required and master-detail fields cannot carry field permissions
-        editable = f["kind"] not in ("formula", "summary") and f["obj"] not in read_only_objects
+        editable = f["kind"] not in ("formula", "summary") and f["obj"] not in read_only_objects and f"{f['obj']}.{f['api']}" not in locked
         fps.append(f"""
     <fieldPermissions>
         <editable>{B_(editable)}</editable>
@@ -1007,8 +1040,13 @@ def permset_xml(label, desc, objects, read_only_objects, classes, standard_read_
         <enabled>true</enabled>
         <name>{m}</name>
     </customMetadataTypeAccesses>""" for m in sorted(cmts))
+    cps = "".join(f"""
+    <customPermissions>
+        <enabled>true</enabled>
+        <name>{c}</name>
+    </customPermissions>""" for c in sorted(custom_perms))
     return f"""<?xml version="1.0" encoding="UTF-8"?>
-<PermissionSet {NS}>{cas}{cms}
+<PermissionSet {NS}>{cas}{cms}{cps}
     <description>{x(desc)}</description>{''.join(fps)}
     <hasActivationRequired>false</hasActivationRequired>
     <label>{x(label)}</label>{ops}{tss}
@@ -1028,7 +1066,7 @@ LAYOUTS[IB]["right"].append(("Header_Fingerprint__c", "Readonly"))
 VRS.extend(VRS_P2)
 VRS.extend(VRS_P3B)
 for api, o in OBJECTS.items():
-    w(f"objects/{api}/{api}.object-meta.xml", object_xml(o))
+    w(f"objects/{api}/{api}.object-meta.xml", object_xml(dict(o, api=api)))
     w(f"objects/{api}/listViews/All.listView-meta.xml", listview_xml(LAYOUTS[api]["listcols"]))
     w(f"layouts/{api}-{o['label']} Layout.layout-meta.xml", layout_xml(LAYOUTS[api], EXTRA_LAYOUT_ITEMS.get(api)))
 for f in F:
@@ -1135,30 +1173,30 @@ w("customMetadata/Trade_AI_Setting.Default.md-meta.xml", f"""<?xml version="1.0"
 </CustomMetadata>
 """)
 FULL = (True, True, True, True, True, True)
+CRE = (True, True, True, False, False, False)
+RE = (False, True, True, False, False, False)
+R_ = (False, True, False, False, False, False)
 w("permissionsets/Trade_Import_Admin.permissionset-meta.xml", permset_xml(
     "Trade Import Admin",
     "Full access to the trade import data model, ingestion objects and Apex. For admins and the demo user.",
     {o: FULL for o in OBJECTS}, set(), APEX_CLASSES, tabs=list(TABS) + ["Trade_Review"], cmts=[CMT],
-    standard_edit_fields=["Account.Operations_Contact__c"]))
+    standard_edit_fields=["Account.Operations_Contact__c"], custom_perms=[DATA_FIX]))
+w(f"customPermissions/{DATA_FIX}.customPermission-meta.xml", f"""<?xml version="1.0" encoding="UTF-8"?>
+<CustomPermission {NS}>
+    <description>Lets a user change fields the system owns (match results, Claude's answers, decision and hold stamps, code review keys and counts) by hand, for data fixes. Granted by Trade Import Admin only. Every change to the tracked fields is kept in field history.</description>
+    <isLicensed>false</isLicensed>
+    <label>Trade Import Data Fix</label>
+</CustomPermission>
+""")
 # Least privilege for the push job's integration user: create batches and staging rows, read profiles.
 w("permissionsets/Trade_Import_Integration.permissionset-meta.xml", permset_xml(
     "Trade Import Integration",
-    "Least privilege for the push job and its background jobs: ingest files, stage and match rows, raise follow-ups, read reference data, log Claude requests and save Draft mapping proposals.",
-    {IB: (True, True, True, False, False, False),
-     SR: (True, True, True, False, False, False),
-     MP: (True, True, False, False, False, False),  # create only: Claude's proposals are inserted as Draft
-     AL: (True, True, False, False, False, False),  # create only: the AI audit log is never edited
-     MR: (False, True, False, False, False, False),
-     "Rep_Code__c": (False, True, False, False, False, False),
-     "Rep_Code_Assignment__c": (False, True, False, False, False, False),
-     "Firm_Alias__c": (False, True, False, False, False, False),
-     "Fund_Alias__c": (False, True, False, False, False, False),
-     CF: (True, True, True, False, False, False),
+    "Least privilege for the push job and the background jobs it starts: send files and read what matching needs. Every save is made by the system writer, so this user edits nothing directly.",
+    {IB: R_, SR: R_, MP: R_, AL: R_, MR: R_, CF: R_,
+     "Rep_Code__c": R_, "Rep_Code_Assignment__c": R_, "Firm_Alias__c": R_, "Fund_Alias__c": R_,
      # Matching runs in the queued job as this user and reads firms, branches, advisors and funds in user mode.
-     "Account": (False, True, False, False, False, False),
-     "Contact": (False, True, False, False, False, False),
-     "Product2": (False, True, False, False, False, False)},
-    {MR, "Rep_Code__c", "Rep_Code_Assignment__c", "Firm_Alias__c", "Fund_Alias__c", "Account", "Contact", "Product2"},
+     "Account": R_, "Contact": R_, "Product2": R_},
+    {IB, SR, MP, AL, MR, CF, "Rep_Code__c", "Rep_Code_Assignment__c", "Firm_Alias__c", "Fund_Alias__c", "Account", "Contact", "Product2"},
     ["TradeIngestResource"], standard_read_fields=["Account.ParentId", "Contact.AccountId"], cmts=[CMT]))
 # Phase 4b: the Trade Review app as its own tab, and a permission set for reviewers who are not admins.
 w("tabs/Trade_Review.tab-meta.xml", f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -1169,22 +1207,20 @@ w("tabs/Trade_Review.tab-meta.xml", f"""<?xml version="1.0" encoding="UTF-8"?>
     <motif>Custom90: Scales</motif>
 </CustomTab>
 """)
-CRE = (True, True, True, False, False, False)
-CR = (True, True, False, False, False, False)
-R_ = (False, True, False, False, False, False)
-# A reviewer's actions start background work that runs as the reviewer: staging an uploaded file, re-matching,
-# applying roster rows (new advisors, codes and assignments), raising follow-ups, asking Claude, saving Claude's
-# mapping proposals. So a reviewer needs the same data access as the integration user plus the roster writes.
+# A reviewer edits what a person decides: decisions and overrides, holds, assignment, a code review's status and
+# notes, mappings to activate, matching rules to propose, and rep codes and assignments (the roster of who holds what,
+# kept with field history). Everything the system sets is read-only: background steps save it through SystemWriter,
+# including uploaded files, new advisors and learned spellings, so no create access is needed for those (audit F-01).
 w("permissionsets/Trade_Import_Reviewer.permissionset-meta.xml", permset_xml(
     "Trade Import Reviewer",
-    "For people who work the Trade Review queue: decide rows, approve rosters, work follow-ups, upload files and activate mappings. Grants the data access the background work they start needs. Claude calls also need the org's generative AI permission.",
-    {IB: CRE, SR: CRE, CF: CRE, MP: CRE, AL: CR, MR: CRE,
+    "For people who work the Trade Review queue: decide rows, approve rosters, work code reviews, upload files and activate mappings. Fields the system sets are read-only. Claude calls also need the org's generative AI permission.",
+    {IB: R_, SR: RE, CF: RE, MP: RE, AL: R_, MR: CRE,
      "Rep_Code__c": CRE, "Rep_Code_Assignment__c": CRE,
-     "Firm_Alias__c": CR, "Fund_Alias__c": CR,
-     "Account": R_, "Contact": CR, "Product2": R_},
-    {"Account", "Product2"},
-    ["ReviewController"], standard_read_fields=["Account.ParentId", "Contact.Email"], standard_edit_fields=["Contact.AccountId"],
-    tabs=list(TABS) + ["Trade_Review"], cmts=[CMT]))
+     "Firm_Alias__c": R_, "Fund_Alias__c": R_,
+     "Account": R_, "Contact": R_, "Product2": R_},
+    {IB, AL, "Firm_Alias__c", "Fund_Alias__c", "Account", "Contact", "Product2"},
+    ["ReviewController"], standard_read_fields=["Account.ParentId", "Contact.Email", "Contact.AccountId"],
+    tabs=list(TABS) + ["Trade_Review"], cmts=[CMT], locked=LOCKED))
 
 # Phase 4a, Standard tier. Kept apart from everything else so an Enterprise install can leave it out entirely:
 # no Apex refers to these components at compile time (only the callout:Anthropic_API endpoint string).

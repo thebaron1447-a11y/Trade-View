@@ -74,7 +74,9 @@ public with sharing class FileIntakeService {
         );
         Savepoint sp = Database.setSavepoint();
         try {
-            insert as user batch;
+            // The service set every field from the checked file (its hash, name and dealer), so the batch is saved
+            // through the system writer: nobody needs edit access to a batch's hash or status (audit F-01).
+            SystemWriter.insertOne(batch);
         } catch (DmlException e) {
             // Another request inserted the same file between the check above and this insert.
             if (e.getDmlType(0) == StatusCode.DUPLICATE_VALUE) {
@@ -91,7 +93,7 @@ public with sharing class FileIntakeService {
             }
             throw e;
         }
-        insert as user new ContentVersion(Title = name, PathOnClient = name, VersionData = file, FirstPublishLocationId = batch.Id);
+        SystemWriter.insertOne(new ContentVersion(Title = name, PathOnClient = name, VersionData = file, FirstPublishLocationId = batch.Id));
         System.enqueueJob(new ImportBatchProcessor(batch.Id));
         return receipt(batch, false);
     }

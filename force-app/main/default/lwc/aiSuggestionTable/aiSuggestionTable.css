@@ -9,3 +9,8 @@
 .open-question {
   font-style: italic;
 }
+
+h3.slds-text-title_caps {
+  font-weight: 700;
+  color: var(--slds-g-color-neutral-base-10, #181818);
+}

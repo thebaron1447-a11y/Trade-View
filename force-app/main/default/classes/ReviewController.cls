@@ -168,6 +168,17 @@ public with sharing class ReviewController {
         /** For roster rows: what approving will create, end and close. */
         @AuraEnabled
         public List<String> approvalPlan = new List<String>();
+        /** For a roster row: the open code review approving it settles, and what that review holds. */
+        @AuraEnabled
+        public Id settlesFollowUpId;
+        @AuraEnabled
+        public String settlesCode;
+        @AuraEnabled
+        public Integer settlesRowCount;
+        @AuraEnabled
+        public Decimal settlesAmount;
+        // The firm a roster row is for (a reviewer's choice wins), to link it to its code review. Not sent to the app.
+        public Id rosterFirmId;
         @AuraEnabled
         public Boolean canApprove = true;
         @AuraEnabled
@@ -274,6 +285,11 @@ public with sharing class ReviewController {
     }
 
     public class HeldRow {
+        /** True when this row waits for the roster change on the same code. */
+        @AuraEnabled
+        public Boolean waitsOnRoster = false;
+        // The row, to mark the ones that wait for a roster change. Not sent to the app.
+        public Id rowId;
         /** Trade or AUM: an AUM row is a position balance, not a trade, so its amount is not counted as held trades. */
         @AuraEnabled
         public String rowType;
@@ -351,6 +367,21 @@ public with sharing class ReviewController {
         /** Advisors holding the code on every held row's date: who the reviewer can credit from the app. */
         @AuraEnabled
         public List<Option> advisorOptions = new List<Option>();
+        /** A roster change waiting for the same firm and code: decided first, because approving it settles this review. */
+        @AuraEnabled
+        public Id rosterRowId;
+        @AuraEnabled
+        public String rosterText;
+        /** Whether that roster change can be approved as it stands; only then does it hold rows back. */
+        @AuraEnabled
+        public Boolean rosterApprovable = false;
+        /** How many held rows fall under the roster change (dated on or after it, naming its advisor or no one). */
+        @AuraEnabled
+        public Integer rosterCovered = 0;
+        @AuraEnabled
+        public Date rosterDate;
+        @AuraEnabled
+        public String rosterName;
         // Earliest and latest held row dates, for advisorOptions.
         private Date firstHeld;
         private Date lastHeld;
@@ -529,7 +560,7 @@ public with sharing class ReviewController {
                 if (plans.containsKey(r.Id)) {
                     it.approvalPlan = plans.get(r.Id);
                     // A missing firm can still be chosen in the app before approving; every other refusal needs the dealer.
-                    it.canApprove = !(it.approvalPlan.size() == 1 && it.approvalPlan[0].startsWith('Cannot approve') && !it.approvalPlan[0].contains('firm'));
+                    it.canApprove = approvable(it.approvalPlan);
                 }
                 if (it.onHold) {
                     q.holdRows.add(it);
@@ -538,6 +569,7 @@ public with sharing class ReviewController {
                 }
             }
             q.followUps = followUpItems(scope);
+            linkRosterChanges(q);
             q.firmFollowUps = firmFollowUps(q.holdRows, q.followUps);
             q.mappings = mappingItems();
             q.recentFiles = recentFiles();
@@ -777,6 +809,9 @@ public with sharing class ReviewController {
         it.rowNumber = r.Row_Number__c == null ? null : r.Row_Number__c.intValue();
         it.rowType = r.Row_Type__c;
         it.isRoster = r.Row_Type__c == TradeRowNormalizer.ROW_ROSTER;
+        if (it.isRoster) {
+            it.rosterFirmId = r.Firm_Override__c != null ? r.Firm_Override__c : r.Matched_Firm__c;
+        }
         it.firmName = r.Source_Firm_Name__c;
         it.repCode = r.Source_Rep_Code__c;
         it.advisorName = r.Source_Advisor_Name__c;
@@ -1159,7 +1194,7 @@ public with sharing class ReviewController {
         }
         if (!byId.isEmpty()) {
             for (Import_Staging_Row__c r : [
-                SELECT Code_Follow_Up__c, Row_Type__c, Trade_Date__c, Source_Advisor_Name__c, Source_Fund_Name__c, Amount__c, Match_Flags__c
+                SELECT Id, Code_Follow_Up__c, Row_Type__c, Trade_Date__c, Source_Advisor_Name__c, Source_Fund_Name__c, Amount__c, Match_Flags__c
                 FROM Import_Staging_Row__c
                 WHERE Code_Follow_Up__c IN :byId.keySet() AND Match_Status__c = :TradeMatcher.HELD
                 WITH USER_MODE
@@ -1169,6 +1204,7 @@ public with sharing class ReviewController {
                 FollowUpItem it = byId.get(r.Code_Follow_Up__c);
                 if (it.heldRows.size() < MAX_HELD_ROWS_SHOWN) {
                     HeldRow h = new HeldRow();
+                    h.rowId = r.Id;
                     h.rowType = r.Row_Type__c;
                     h.tradeDate = r.Trade_Date__c;
                     h.issue = issueText(r.Match_Flags__c);
@@ -1429,8 +1465,8 @@ public with sharing class ReviewController {
             }
             if (advisorId != null) {
                 requireType(advisorId, Contact.SObjectType, 'The advisor must be a contact.');
-                change.Credited_Advisor__c = advisorId;
-                // Roster rows use the credited advisor directly; trade rows keep it as an override for re-matching.
+                // Roster rows take it as their credited advisor (set by the row trigger); trade rows keep it as an
+                // override for re-matching.
                 change.Advisor_Override__c = advisorId;
             }
             change.Remember_Choice__c = rememberChoice == true;
@@ -1454,12 +1490,224 @@ public with sharing class ReviewController {
         return changes.size();
     }
 
+    // ================================================================== code reviews and roster changes
+
+    /**
+     * Links each open code review to a roster change waiting for the same firm and code, both ways. Approving the
+     * roster change settles the review (RosterApprovalService resolves it), so the review is decided after it.
+     * Looked up across every reviewer's items, so the link holds in the Mine and Unassigned views too.
+     */
+    private static void linkRosterChanges(Queue q) {
+        List<Code_Follow_Up__c> reviews = new List<Code_Follow_Up__c>();
+        for (FollowUpItem f : q.followUps) {
+            reviews.add(new Code_Follow_Up__c(Id = f.id, Firm__c = f.firmId, Rep_Code_Value__c = f.repCode, Reason__c = f.reason));
+        }
+        Map<Id, RosterLock> locks = rosterLocks(reviews);
+        for (FollowUpItem f : q.followUps) {
+            RosterLock lock = locks.get(f.id);
+            if (lock == null) {
+                continue;
+            }
+            f.rosterRowId = lock.roster.Id;
+            f.rosterText = rosterLabel(lock.roster);
+            f.rosterApprovable = lock.approvable;
+            f.rosterCovered = lock.covered.size();
+            f.rosterDate = lock.roster.Trade_Date__c;
+            f.rosterName = lock.roster.Source_Advisor_Name__c;
+            for (HeldRow h : f.heldRows) {
+                h.waitsOnRoster = lock.covered.contains(h.rowId);
+            }
+        }
+
+        Set<Id> firms = new Set<Id>();
+        Set<String> codes = new Set<String>();
+        List<RowItem> rosterItems = new List<RowItem>();
+        for (List<RowItem> items : new List<List<RowItem>>{ q.rows, q.holdRows }) {
+            for (RowItem r : items) {
+                if (r.isRoster && r.rosterFirmId != null && r.repCode != null) {
+                    rosterItems.add(r);
+                    firms.add(r.rosterFirmId);
+                    codes.add(r.repCode);
+                }
+            }
+        }
+        if (rosterItems.isEmpty()) {
+            return;
+        }
+        Map<String, Code_Follow_Up__c> reviewByCode = new Map<String, Code_Follow_Up__c>();
+        for (Code_Follow_Up__c f : [
+            SELECT Id, Firm__c, Rep_Code_Value__c, Held_Row_Count__c, Held_Amount__c
+            FROM Code_Follow_Up__c
+            WHERE Firm__c IN :firms AND Rep_Code_Value__c IN :codes AND Status__c IN ('Open', 'In Progress') AND Reason__c IN :RosterApprovalService.RESOLVABLE
+            WITH USER_MODE
+            LIMIT :MAX_FOLLOW_UPS
+        ]) {
+            reviewByCode.put(firmCodeKey(f.Firm__c, f.Rep_Code_Value__c), f);
+        }
+        for (RowItem r : rosterItems) {
+            Code_Follow_Up__c f = reviewByCode.get(firmCodeKey(r.rosterFirmId, r.repCode));
+            if (f != null) {
+                r.settlesFollowUpId = f.Id;
+                r.settlesCode = f.Rep_Code_Value__c;
+                r.settlesRowCount = f.Held_Row_Count__c == null ? 0 : f.Held_Row_Count__c.intValue();
+                r.settlesAmount = f.Held_Amount__c;
+            }
+        }
+    }
+
+    /** Roster rows waiting for a decision, by firm and code (the firm a reviewer chose wins over the matched one). */
+    private static Map<String, Import_Staging_Row__c> pendingRosterRows(Set<Id> firms, Set<String> codes) {
+        Map<String, Import_Staging_Row__c> result = new Map<String, Import_Staging_Row__c>();
+        for (Import_Staging_Row__c r : [
+            SELECT
+                Id,
+                Source_Advisor_Name__c,
+                Source_Rep_Code__c,
+                Source_Branch_Name__c,
+                Row_Number__c,
+                Trade_Date__c,
+                Import_Batch__r.Source_Firm__c,
+                Firm_Override__c,
+                Matched_Firm__c,
+                Credited_Advisor__c,
+                Credited_Advisor__r.Name,
+                Credited_Advisor__r.FirstName,
+                Credited_Advisor__r.LastName
+            FROM Import_Staging_Row__c
+            WHERE
+                Row_Type__c = :TradeRowNormalizer.ROW_ROSTER
+                AND Match_Status__c = :TradeMatcher.REVIEW
+                AND Source_Rep_Code__c IN :codes
+                AND (Firm_Override__c IN :firms
+                OR Matched_Firm__c IN :firms)
+            WITH USER_MODE
+            ORDER BY Trade_Date__c DESC NULLS LAST
+            LIMIT 200
+        ]) {
+            String key = firmCodeKey(r.Firm_Override__c != null ? r.Firm_Override__c : r.Matched_Firm__c, r.Source_Rep_Code__c);
+            if (!result.containsKey(key)) {
+                result.put(key, r);
+            }
+        }
+        return result;
+    }
+
+    /** A roster change waiting for a code review's firm and code, and which of the review's held rows it covers. */
+    private class RosterLock {
+        Import_Staging_Row__c roster;
+        Boolean approvable = false;
+        Set<Id> covered = new Set<Id>();
+    }
+
+    /**
+     * For each review a roster change settles (RosterApprovalService.RESOLVABLE), the roster change waiting for its firm
+     * and code. Rules, not Claude, decide which held rows wait for it: only when it can be approved as it stands, and
+     * only rows dated on or after it that name its advisor or no one. Every other row can be worked straight away.
+     * Reviews need Id, Firm__c, Rep_Code_Value__c and Reason__c.
+     */
+    private static Map<Id, RosterLock> rosterLocks(List<Code_Follow_Up__c> reviews) {
+        Map<Id, RosterLock> result = new Map<Id, RosterLock>();
+        Set<Id> firms = new Set<Id>();
+        Set<String> codes = new Set<String>();
+        for (Code_Follow_Up__c f : reviews) {
+            if (f.Firm__c != null && f.Rep_Code_Value__c != null && RosterApprovalService.RESOLVABLE.contains(f.Reason__c)) {
+                firms.add(f.Firm__c);
+                codes.add(f.Rep_Code_Value__c);
+            }
+        }
+        if (firms.isEmpty()) {
+            return result;
+        }
+        Map<String, Import_Staging_Row__c> waiting = pendingRosterRows(firms, codes);
+        if (waiting.isEmpty()) {
+            return result;
+        }
+        Map<Id, List<String>> plans = RosterApprovalService.preview(waiting.values());
+        for (Code_Follow_Up__c f : reviews) {
+            Import_Staging_Row__c roster = RosterApprovalService.RESOLVABLE.contains(f.Reason__c)
+                ? waiting.get(firmCodeKey(f.Firm__c, f.Rep_Code_Value__c))
+                : null;
+            if (roster != null) {
+                RosterLock lock = new RosterLock();
+                lock.roster = roster;
+                lock.approvable = approvable(plans.get(roster.Id));
+                result.put(f.Id, lock);
+            }
+        }
+        if (result.isEmpty()) {
+            return result;
+        }
+        for (Import_Staging_Row__c held : [
+            SELECT Id, Code_Follow_Up__c, Trade_Date__c, Source_Advisor_Name__c
+            FROM Import_Staging_Row__c
+            WHERE Code_Follow_Up__c IN :result.keySet() AND Match_Status__c = :TradeMatcher.HELD
+            WITH USER_MODE
+            LIMIT 10000
+        ]) {
+            RosterLock lock = result.get(held.Code_Follow_Up__c);
+            if (lock.approvable && coveredBy(lock.roster, held)) {
+                lock.covered.add(held.Id);
+            }
+        }
+        return result;
+    }
+
+    /** A held row falls under a roster change when it is dated on or after it and names its advisor, or no one. */
+    @TestVisible
+    private static Boolean coveredBy(Import_Staging_Row__c roster, Import_Staging_Row__c held) {
+        if (roster.Trade_Date__c != null && (held.Trade_Date__c == null || held.Trade_Date__c < roster.Trade_Date__c)) {
+            return false;
+        }
+        if (String.isBlank(held.Source_Advisor_Name__c)) {
+            return true;
+        }
+        String firstName;
+        String lastName;
+        if (roster.Credited_Advisor__c != null) {
+            firstName = roster.Credited_Advisor__r?.FirstName;
+            lastName = roster.Credited_Advisor__r?.LastName;
+        } else if (String.isNotBlank(roster.Source_Advisor_Name__c)) {
+            List<String> parts = roster.Source_Advisor_Name__c.normalizeSpace().split(' ');
+            lastName = parts.remove(parts.size() - 1);
+            firstName = parts.isEmpty() ? null : String.join(parts, ' ');
+        } else {
+            return true;
+        }
+        return NameMatcher.isCompatible(held.Source_Advisor_Name__c, firstName, lastName);
+    }
+
+    /** Same rule as the app's Approve button: a single "Cannot approve" line blocks it, unless only the firm is missing. */
+    private static Boolean approvable(List<String> plan) {
+        return plan != null && !(plan.size() == 1 && plan[0].startsWith('Cannot approve') && !plan[0].contains('firm'));
+    }
+
+    private static String waitMessage(Code_Follow_Up__c f, RosterLock lock) {
+        return 'Decide the roster change for code ' +
+            f.Rep_Code_Value__c +
+            ' first (' +
+            rosterLabel(lock.roster) +
+            '). These rows fall under it: approving it settles them; rejecting it unlocks them.';
+    }
+
+    private static String firmCodeKey(Id firmId, String code) {
+        return String.valueOf(firmId) + '|' + (code == null ? '' : code.toUpperCase());
+    }
+
+    private static String rosterLabel(Import_Staging_Row__c r) {
+        return (String.isBlank(r.Source_Advisor_Name__c) ? 'Roster row' : r.Source_Advisor_Name__c) +
+            ' · ' +
+            (r.Import_Batch__r?.Source_Firm__c == null ? 'file' : r.Import_Batch__r.Source_Firm__c) +
+            ' row ' +
+            String.valueOf(r.Row_Number__c == null ? null : r.Row_Number__c.intValue());
+    }
+
     // ================================================================== code reviews, settled from the app
 
     /**
      * Settles a code review by crediting one advisor who held the code on every held row's date: each held row gets
-     * that advisor as its override (credited 100%), and the review is resolved, which re-matches the rows.
-     * Returns how many rows were credited.
+     * that advisor as its override (credited 100%) and is matched again. When no row waits for a roster change, the
+     * review is resolved (its trigger re-matches the rows); otherwise only the other rows are credited and released,
+     * and the review stays open for the rows the roster change will settle. Returns how many rows were credited.
      */
     @AuraEnabled
     public static Integer creditCodeReview(Id followUpId, Id advisorId) {
@@ -1468,21 +1716,9 @@ public with sharing class ReviewController {
         if (!CREDITABLE_REASONS.contains(f.Reason__c) || f.Rep_Code__c == null) {
             throw fail('This code review cannot be settled by crediting an advisor. Fix the code in Salesforce, then choose Re-match.');
         }
-        Integer cap = MAX_BULK + 1;
-        List<Import_Staging_Row__c> rows = [
-            SELECT Id, Trade_Date__c
-            FROM Import_Staging_Row__c
-            WHERE Code_Follow_Up__c = :f.Id AND Match_Status__c = :TradeMatcher.HELD
-            WITH USER_MODE
-            LIMIT :cap
-            FOR UPDATE
-        ];
-        if (rows.isEmpty()) {
-            throw fail('No rows are held on this code review any more. Refresh to see its current state.');
-        }
-        if (rows.size() > MAX_BULK) {
-            throw fail('This code review holds more than ' + MAX_BULK + ' rows. Open the follow-up record to resolve it.');
-        }
+        RosterLock lock = rosterLocks(new List<Code_Follow_Up__c>{ f }).get(f.Id);
+        Set<Id> waiting = lock == null ? new Set<Id>() : lock.covered;
+        List<Import_Staging_Row__c> rows = workableRows(f, waiting, lock);
         List<Rep_Code_Assignment__c> holdings = [
             SELECT Effective_Start_Date__c, Effective_End_Date__c, Advisor__r.Name
             FROM Rep_Code_Assignment__c
@@ -1493,6 +1729,7 @@ public with sharing class ReviewController {
         // Stamped like a decision, so each row records who chose the advisor.
         Id me = UserInfo.getUserId();
         Datetime now = System.now();
+        Set<Id> batchIds = new Set<Id>();
         List<Import_Staging_Row__c> changes = new List<Import_Staging_Row__c>();
         for (Import_Staging_Row__c r : rows) {
             if (!holdsOn(holdings, r.Trade_Date__c)) {
@@ -1504,44 +1741,109 @@ public with sharing class ReviewController {
                         '. Choose someone who held it on every held row\'s date.'
                 );
             }
-            changes.add(new Import_Staging_Row__c(Id = r.Id, Advisor_Override__c = advisorId, Decided_By__c = me, Decided_At__c = now));
+            // With rows waiting for a roster change, the review stays open, so these rows are released here.
+            Import_Staging_Row__c change = waiting.isEmpty() ? new Import_Staging_Row__c(Id = r.Id) : CodeFollowUpService.releaseChange(r, true);
+            change.Advisor_Override__c = advisorId;
+            change.Decided_By__c = me;
+            change.Decided_At__c = now;
+            changes.add(change);
+            batchIds.add(r.Import_Batch__c);
         }
         try {
-            update as user changes;
+            SystemWriter.updateAll(changes);
         } catch (DmlException e) {
             throw fail(e.getDmlMessage(0));
         }
-        closeReview(f, CodeFollowUpService.STATUS_RESOLVED, 'Credited ' + holdings[0].Advisor__r?.Name + ' for ' + heldRows(changes.size()));
+        String what = 'Credited ' + holdings[0].Advisor__r?.Name + ' for ' + heldRows(changes.size());
+        if (waiting.isEmpty()) {
+            noteReview(f, CodeFollowUpService.STATUS_RESOLVED, what);
+        } else {
+            CodeFollowUpService.recount(new Set<Id>{ f.Id });
+            CodeFollowUpService.rematch(batchIds);
+            noteReview(f, null, what + '; ' + heldRows(waiting.size()) + (waiting.size() == 1 ? ' waits' : ' wait') + ' for the roster change');
+        }
         return changes.size();
     }
 
     /**
      * Closes a code review from the app. Fixed: the code was set up in Salesforce, so the held rows are re-matched
-     * (Resolved). Not fixed: the rows go to Needs Decision to be settled one by one (Closed - No Action).
-     * Returns how many rows were waiting on it.
+     * (Resolved); refused while rows wait for a roster change, which is the fix. Not fixed: the rows go to Needs
+     * Decision to be settled one by one (Closed - No Action); with rows waiting for a roster change, only the others
+     * go and the review stays open. Returns how many rows were released.
      */
     @AuraEnabled
     public static Integer closeCodeReview(Id followUpId, Boolean fixed) {
         Code_Follow_Up__c f = openCodeReview(followUpId);
-        Integer waiting = [
-            SELECT COUNT()
-            FROM Import_Staging_Row__c
-            WHERE Code_Follow_Up__c = :f.Id AND Match_Status__c = :TradeMatcher.HELD
-            WITH USER_MODE
-        ];
-        if (fixed == true) {
-            closeReview(f, CodeFollowUpService.STATUS_RESOLVED, 'Re-matched ' + heldRows(waiting) + ' after the code was fixed');
-        } else {
-            closeReview(f, CodeFollowUpService.STATUS_CLOSED, 'Sent ' + heldRows(waiting) + ' to Needs Decision');
+        RosterLock lock = rosterLocks(new List<Code_Follow_Up__c>{ f }).get(f.Id);
+        Set<Id> waiting = lock == null ? new Set<Id>() : lock.covered;
+        if (fixed == true && !waiting.isEmpty()) {
+            throw fail(waitMessage(f, lock));
         }
-        return waiting;
+        if (waiting.isEmpty()) {
+            Integer held = [
+                SELECT COUNT()
+                FROM Import_Staging_Row__c
+                WHERE Code_Follow_Up__c = :f.Id AND Match_Status__c = :TradeMatcher.HELD
+                WITH USER_MODE
+            ];
+            if (fixed == true) {
+                noteReview(f, CodeFollowUpService.STATUS_RESOLVED, 'Re-matched ' + heldRows(held) + ' after the code was fixed');
+            } else {
+                noteReview(f, CodeFollowUpService.STATUS_CLOSED, 'Sent ' + heldRows(held) + ' to Needs Decision');
+            }
+            return held;
+        }
+        List<Import_Staging_Row__c> changes = new List<Import_Staging_Row__c>();
+        for (Import_Staging_Row__c r : workableRows(f, waiting, lock)) {
+            changes.add(CodeFollowUpService.releaseChange(r, false));
+        }
+        try {
+            SystemWriter.updateAll(changes);
+        } catch (DmlException e) {
+            throw fail(e.getDmlMessage(0));
+        }
+        CodeFollowUpService.recount(new Set<Id>{ f.Id });
+        noteReview(
+            f,
+            null,
+            'Sent ' +
+                heldRows(changes.size()) +
+                ' to Needs Decision; ' +
+                heldRows(waiting.size()) +
+                (waiting.size() == 1 ? ' waits' : ' wait') +
+                ' for the roster change'
+        );
+        return changes.size();
+    }
+
+    /** The held rows a reviewer can act on now (not waiting for a roster change), locked; refused when there are none. */
+    private static List<Import_Staging_Row__c> workableRows(Code_Follow_Up__c f, Set<Id> waiting, RosterLock lock) {
+        Integer cap = MAX_BULK + 1;
+        List<Import_Staging_Row__c> workable = [
+            SELECT Id, Import_Batch__c, Trade_Date__c, Match_Flags__c
+            FROM Import_Staging_Row__c
+            WHERE Code_Follow_Up__c = :f.Id AND Match_Status__c = :TradeMatcher.HELD AND Id NOT IN :waiting
+            WITH USER_MODE
+            LIMIT :cap
+            FOR UPDATE
+        ];
+        if (workable.isEmpty() && !waiting.isEmpty()) {
+            throw fail(waitMessage(f, lock));
+        }
+        if (workable.isEmpty()) {
+            throw fail('No rows are held on this code review any more. Refresh to see its current state.');
+        }
+        if (workable.size() > MAX_BULK) {
+            throw fail('This code review holds more than ' + MAX_BULK + ' rows. Open the follow-up record to resolve it.');
+        }
+        return workable;
     }
 
     /** The code review, locked, if it is still open. */
     private static Code_Follow_Up__c openCodeReview(Id followUpId) {
         requireType(followUpId, Code_Follow_Up__c.SObjectType, 'Choose a code review.');
         List<Code_Follow_Up__c> found = [
-            SELECT Id, Status__c, Reason__c, Rep_Code__c, Rep_Code_Value__c, Resolution_Notes__c
+            SELECT Id, Status__c, Reason__c, Rep_Code__c, Rep_Code_Value__c, Resolution_Notes__c, Firm__c
             FROM Code_Follow_Up__c
             WHERE Id = :followUpId
             WITH USER_MODE
@@ -1555,15 +1857,25 @@ public with sharing class ReviewController {
         if (status != CodeFollowUpService.STATUS_OPEN && status != CodeFollowUpService.STATUS_IN_PROGRESS) {
             throw fail('This code review is already closed. Refresh to see its current state.');
         }
-        return found[0];
+        Code_Follow_Up__c f = found[0];
+        return f;
     }
 
-    /** Sets the status (the trigger re-matches or releases the held rows) and notes who did what, newest first. */
-    private static void closeReview(Code_Follow_Up__c f, String status, String what) {
+    /**
+     * Adds a dated line to Resolution Notes saying who did what, newest first, and sets the status when one is given
+     * (the trigger then re-matches or releases the held rows).
+     */
+    private static void noteReview(Code_Follow_Up__c f, String status, String what) {
         String note = what + ' (' + UserInfo.getName() + ', ' + System.now().format() + ', Trade Review).';
-        String notes = String.isBlank(f.Resolution_Notes__c) ? note : note + '\n' + f.Resolution_Notes__c;
+        Code_Follow_Up__c change = new Code_Follow_Up__c(
+            Id = f.Id,
+            Resolution_Notes__c = (String.isBlank(f.Resolution_Notes__c) ? note : note + '\n' + f.Resolution_Notes__c).abbreviate(5000)
+        );
+        if (status != null) {
+            change.Status__c = status;
+        }
         try {
-            update as user new Code_Follow_Up__c(Id = f.Id, Status__c = status, Resolution_Notes__c = notes.abbreviate(5000));
+            update as user change;
         } catch (DmlException e) {
             throw fail(e.getDmlMessage(0));
         }
@@ -1731,9 +2043,8 @@ public with sharing class ReviewController {
             sameIssueRows(rowId),
             new Import_Staging_Row__c(
                 On_Hold__c = true,
-                On_Hold_Reason__c = homework.trim().abbreviate(MAX_HOMEWORK),
-                On_Hold_By__c = UserInfo.getUserId(),
-                On_Hold_Since__c = System.now()
+                // Who and when are stamped by the row trigger, so nobody can set them by hand.
+                On_Hold_Reason__c = homework.trim().abbreviate(MAX_HOMEWORK)
             )
         );
     }
@@ -1939,7 +2250,7 @@ public with sharing class ReviewController {
                     r.reject(new List<String>{ e.getMessage() });
                 }
             }
-            insert as user r.log;
+            SystemWriter.insertOne(r.log);
             d.note = d.draftedByClaude ? 'Drafted by Claude. Read it before sending.' : 'Claude could not draft this one; a standard list is used instead.';
         }
         d.htmlBody = '<p>' + body.escapeHtml4().replace('\n\n', '</p><p>').replace('\n', '<br>') + '</p>';

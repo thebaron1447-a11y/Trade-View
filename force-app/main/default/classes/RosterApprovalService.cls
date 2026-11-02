@@ -11,7 +11,8 @@
  */
 public with sharing class RosterApprovalService {
     public static final String END_SOURCE = 'Confirmed by Firm';
-    private static final Set<String> RESOLVABLE = new Set<String>{
+    /** Code review reasons a roster change settles (an incomplete team split needs the shares fixed instead). */
+    public static final Set<String> RESOLVABLE = new Set<String>{
         TradeMatcher.REASON_UNKNOWN,
         TradeMatcher.REASON_ENDED,
         TradeMatcher.REASON_DORMANT,
@@ -116,10 +117,10 @@ public with sharing class RosterApprovalService {
             return;
         }
 
-        insert as user newContacts;
-        insert as user newCodes;
+        SystemWriter.insertAll(newContacts);
+        SystemWriter.insertAll(newCodes);
         // End the old share before adding the new one: a code allows at most 100% across open assignments.
-        update as user endings;
+        SystemWriter.updateAll(endings);
         List<Rep_Code_Assignment__c> starts = new List<Rep_Code_Assignment__c>();
         Map<String, Plan> byFirmAndCode = new Map<String, Plan>();
         for (Plan p : ready) {
@@ -135,7 +136,7 @@ public with sharing class RosterApprovalService {
             );
             byFirmAndCode.put(p.firmId + '|' + p.code.toUpperCase(), p);
         }
-        insert as user starts;
+        SystemWriter.insertAll(starts);
         resolveFollowUps(firmIds, codes, byFirmAndCode);
     }
 
@@ -277,7 +278,7 @@ public with sharing class RosterApprovalService {
             );
         }
         // The follow-up trigger releases the held rows and queues re-matching.
-        update as user resolutions;
+        SystemWriter.updateAll(resolutions);
     }
 
     /** Branch Accounts under these firms by lower-cased name. */

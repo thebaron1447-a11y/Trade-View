@@ -9,5 +9,6 @@
     <relationshipLabel>Credited Staging Rows</relationshipLabel>
     <relationshipName>Credited_Staging_Rows</relationshipName>
     <required>false</required>
+    <trackHistory>true</trackHistory>
     <type>Lookup</type>
 </CustomField>

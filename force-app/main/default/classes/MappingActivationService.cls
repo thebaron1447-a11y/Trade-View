@@ -36,7 +36,7 @@ public with sharing class MappingActivationService {
         ]) {
             resets.add(new Import_Batch__c(Id = b.Id, Status__c = ImportBatchProcessor.STATUS_RECEIVED, Error_Message__c = null));
         }
-        update as user resets;
+        SystemWriter.updateAll(resets);
         for (Import_Batch__c b : resets) {
             if (Limits.getQueueableJobs() < Limits.getLimitQueueableJobs()) {
                 System.enqueueJob(new ImportBatchProcessor(b.Id));

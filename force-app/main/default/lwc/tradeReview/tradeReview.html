@@ -391,6 +391,25 @@
                 </template>
               </div>
 
+              <template lwc:if={selectedRow.settlesFollowUpId}>
+                <div
+                  class="slds-box slds-box_x-small slds-theme_shade slds-m-top_medium settles-box"
+                >
+                  <p class="slds-text-title_bold">Also settles a code review</p>
+                  <p class="slds-m-top_xx-small settles-text">
+                    {selectedRow.settlesText}. Rows on that review dated from
+                    this change that name this advisor (or no one) wait for this
+                    decision.
+                  </p>
+                  <button
+                    class="slds-button slds-m-top_xx-small go-review"
+                    data-key={selectedRow.settlesKey}
+                    onclick={handleGoTo}
+                  >
+                    View the code review
+                  </button>
+                </div>
+              </template>
               <template lwc:if={selectedRow.hasPlan}>
                 <div class="slds-box slds-m-top_medium approval-plan">
                   <h3 class="slds-text-title_caps slds-m-bottom_x-small">
@@ -514,11 +533,21 @@
               <h2 class="slds-text-heading_medium slds-m-bottom_x-small">
                 {selectedFollowUp.title}
               </h2>
-              <p
-                class="slds-text-body_small slds-m-bottom_small followup-summary"
+              <div
+                class="slds-box slds-box_x-small slds-m-bottom_small issue-box"
               >
-                {selectedFollowUp.issueText} · {selectedFollowUp.subtitle}
-              </p>
+                <h3 class="slds-text-title_caps slds-m-bottom_xx-small">
+                  Issue
+                </h3>
+                <p class="slds-text-body_regular followup-issue">
+                  {selectedFollowUp.issueText}
+                </p>
+                <p
+                  class="slds-text-body_small slds-text-color_weak followup-held"
+                >
+                  {selectedFollowUp.subtitle}
+                </p>
+              </div>
               <template lwc:if={hasHeldRows}>
                 <h3 class="slds-text-title_caps slds-m-bottom_x-small">
                   Held rows
@@ -539,7 +568,15 @@
                     <template for:each={heldRowViews} for:item="h">
                       <tr key={h.key}>
                         <td>{h.tradeDate}</td>
-                        <td>{h.typeText}</td>
+                        <td>
+                          {h.typeText}
+                          <template lwc:if={h.waitText}>
+                            <span
+                              class="slds-badge slds-m-left_xx-small wait-badge"
+                              >{h.waitText}</span
+                            >
+                          </template>
+                        </td>
                         <td>{h.advisorText}</td>
                         <td>{h.fundText}</td>
                         <td>{h.amountText}</td>
@@ -634,41 +671,129 @@
                 <h3 class="slds-text-title_caps slds-m-bottom_x-small">
                   Your decision
                 </h3>
+                <template lwc:if={rosterFirst}>
+                  <div
+                    class="slds-box slds-box_x-small slds-theme_warning slds-m-bottom_small roster-first"
+                  >
+                    <p class="slds-text-title_bold">
+                      Decide the roster change first
+                    </p>
+                    <p class="slds-m-top_xx-small">
+                      The firm's roster changes code {selectedFollowUp.repCode}
+                      ({selectedFollowUp.rosterText}). Approving it updates who
+                      holds the code, closes this review and re-matches these
+                      rows. Rejecting it unlocks the options below.
+                    </p>
+                    <template lwc:if={rosterVisible}>
+                      <button
+                        class="slds-button slds-m-top_xx-small go-roster"
+                        data-key={rosterKey}
+                        onclick={handleGoTo}
+                      >
+                        Open the roster change
+                      </button>
+                    </template>
+                    <template lwc:else>
+                      <p class="slds-text-body_small slds-m-top_xx-small">
+                        It is not in this view. Choose All to see it.
+                      </p>
+                    </template>
+                  </div>
+                </template>
+                <template lwc:if={rosterPartial}>
+                  <div
+                    class="slds-box slds-box_x-small slds-theme_warning slds-m-bottom_small roster-partial"
+                  >
+                    <p class="slds-text-title_bold">
+                      The roster change comes first for some rows
+                    </p>
+                    <p class="slds-m-top_xx-small">{rosterPartialText}</p>
+                    <template lwc:if={rosterVisible}>
+                      <button
+                        class="slds-button slds-m-top_xx-small go-roster"
+                        data-key={rosterKey}
+                        onclick={handleGoTo}
+                      >
+                        Open the roster change
+                      </button>
+                    </template>
+                  </div>
+                </template>
+                <template lwc:if={rosterInfo}>
+                  <div
+                    class="slds-box slds-box_x-small slds-theme_shade slds-m-bottom_small roster-info"
+                  >
+                    <p>{rosterInfoText}</p>
+                    <template lwc:if={rosterVisible}>
+                      <button
+                        class="slds-button slds-m-top_xx-small go-roster"
+                        data-key={rosterKey}
+                        onclick={handleGoTo}
+                      >
+                        Open the roster change
+                      </button>
+                    </template>
+                  </div>
+                </template>
                 <p class="slds-text-body_small slds-m-bottom_x-small code-help">
                   {codeReviewHelp}
                 </p>
                 <template lwc:if={selectedFollowUp.canCredit}>
                   <lightning-combobox
-                    class="credit-choice"
+                    class="credit-choice slds-m-bottom_small"
                     label="Advisor to credit"
                     placeholder="Choose the advisor"
                     options={selectedFollowUp.creditOptions}
                     value={creditChoice}
+                    disabled={rosterFirst}
                     onchange={handleCreditChoice}
                   ></lightning-combobox>
                 </template>
-                <div class="slds-m-top_small">
+                <ul class="fix-options">
                   <template lwc:if={selectedFollowUp.canCredit}>
-                    <lightning-button
-                      class="credit slds-m-right_x-small"
-                      variant="brand"
-                      label={creditLabel}
-                      disabled={creditDisabled}
-                      onclick={handleCredit}
-                    ></lightning-button>
+                    <li class="slds-grid slds-gutters_x-small fix-option">
+                      <div class="slds-col slds-no-flex fix-button">
+                        <lightning-button
+                          class="credit"
+                          variant="brand"
+                          label={creditLabel}
+                          disabled={creditDisabled}
+                          onclick={handleCredit}
+                        ></lightning-button>
+                      </div>
+                      <p class="slds-col slds-text-body_small fix-help">
+                        {creditHelp}
+                      </p>
+                    </li>
                   </template>
-                  <lightning-button
-                    class="rematch slds-m-right_x-small"
-                    label="Code fixed: re-match"
-                    disabled={busy}
-                    onclick={handleRematch}
-                  ></lightning-button>
-                  <lightning-button
-                    class="send-to-review slds-m-right_x-small"
-                    label="Decide rows one by one"
-                    disabled={busy}
-                    onclick={handleSendToReview}
-                  ></lightning-button>
+                  <li class="slds-grid slds-gutters_x-small fix-option">
+                    <div class="slds-col slds-no-flex fix-button">
+                      <lightning-button
+                        class="rematch"
+                        label="Code fixed: re-match"
+                        disabled={rematchDisabled}
+                        onclick={handleRematch}
+                      ></lightning-button>
+                    </div>
+                    <p class="slds-col slds-text-body_small fix-help">
+                      {rematchHelp}
+                    </p>
+                  </li>
+                  <li class="slds-grid slds-gutters_x-small fix-option">
+                    <div class="slds-col slds-no-flex fix-button">
+                      <lightning-button
+                        class="send-to-review"
+                        label="Decide rows one by one"
+                        disabled={codeActionDisabled}
+                        onclick={handleSendToReview}
+                      ></lightning-button>
+                    </div>
+                    <p class="slds-col slds-text-body_small fix-help">
+                      {sendHelp}
+                    </p>
+                  </li>
+                </ul>
+                <div class="slds-m-top_small">
                   <template lwc:if={isUnassigned}>
                     <lightning-button
                       class="assign"

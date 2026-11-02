@@ -1,10 +1,23 @@
 # Phase 4b.2: review feedback
 
+**Update 4b.7 (audit F-01, part B):** see section 21.2 of the build log. Fields the system sets are now read-only for
+reviewers and the integration user, a guard refuses hand changes made any other way, and field history is on. Users
+with Trade Import Admin can still fix data by hand (Trade Import Data Fix permission). Nothing changes in the app for a
+reviewer. New test class SecurityModelTest: validate with **24 classes, 175 tests**.
+
+**Update 4b.6 (audit F-01, part A):** see section 21 of the build log. Background steps now save through one system
+writer (SystemWriter); who put a row on hold and when are stamped by the row trigger. Nothing changes on screen and
+permissions are unchanged in this deploy; part B makes the system-owned fields read-only. New test class
+SystemWriterTest: validate with **23 classes, 170 tests**.
+
 **Update 4b.5 (review feedback):** see section 20 of the build log. Code reviews are settled in Trade Review: credit
 one advisor who holds the code (**Credit all N rows**), **Code fixed: re-match**, or **Decide rows one by one**. The
 summary line and Held rows table say which rows are trades and which are AUM balances. When Claude leaves a field
 open, the Suggestion cell lists the choices it weighed (or *Ask the firm*), and the lines under Claude's table are
-headed **Why** and **Question for the firm**. No new fields. Validate with **163 tests**.
+headed **Why** and **Question for the firm**. Where the firm's roster changes the same code (Priya Nair taking 2210 from Marcus Bell), the held rows it covers
+(dated from the roster date, naming her or no one) wait for that decision, and each item links to the other; other
+rows can be settled straight away, and a roster change that cannot be approved holds nothing back. Section titles are bold, the code
+review has an **Issue** box, and each fix option explains itself. No new fields. Validate with **167 tests**.
 
 **Update 4b.4 (audit fixes, part 1):** see section 19 of the build log. Visible changes: a row whose advisor name
 fits some but not all members of a team code (for example "Chen") now waits in Dealer Code Review with those members
@@ -53,11 +66,11 @@ What changes in Trade Review:
   cached, so repeat requests cost less.
 - The missing space in *Firm:Northgate…* is fixed.
 
-## 1. Validate (22 test classes, expect 163 tests)
+## 1. Validate (24 test classes, expect 175 tests)
 
 ```powershell
 cd C:\dev\trade-import-demo
-sf project deploy start --source-dir C:\dev\trade-import-demo\force-app --target-org tradeDemo --dry-run --verbose --test-level RunSpecifiedTests --tests AiSettingsTest --tests AnthropicApiClientTest --tests ClaudeServiceTest --tests ClaudeSuggestionTest --tests ClaudeValidationVectorTest --tests CsvParserTest --tests DemoScenarioTest --tests FileIntakeServiceTest --tests ImportBatchProcessorTest --tests MappingProposalTest --tests MappingServiceTest --tests MatchingRuleTest --tests NameMatcherTest --tests NameNormalizerTest --tests ProductDeleteGuardTest --tests ReviewControllerTest --tests ReviewDecisionTest --tests RosterApprovalTest --tests TradeIngestResourceTest --tests TradeMatcherTest --tests TradeRowNormalizerTest --tests TradeRowNormalizerVectorTest
+sf project deploy start --source-dir C:\dev\trade-import-demo\force-app --target-org tradeDemo --dry-run --verbose --test-level RunSpecifiedTests --tests AiSettingsTest --tests AnthropicApiClientTest --tests ClaudeServiceTest --tests ClaudeSuggestionTest --tests ClaudeValidationVectorTest --tests CsvParserTest --tests DemoScenarioTest --tests FileIntakeServiceTest --tests ImportBatchProcessorTest --tests MappingProposalTest --tests MappingServiceTest --tests MatchingRuleTest --tests NameMatcherTest --tests NameNormalizerTest --tests ProductDeleteGuardTest --tests ReviewControllerTest --tests ReviewDecisionTest --tests RosterApprovalTest --tests TradeIngestResourceTest --tests TradeMatcherTest --tests SystemWriterTest --tests SecurityModelTest --tests TradeRowNormalizerTest --tests TradeRowNormalizerVectorTest
 ```
 
 Continue only on `Status: Succeeded`. If anything fails, send the full output. The new tests most likely to need a
@@ -108,5 +121,5 @@ npm run test:unit
 python tools\verify\lwc_xref.py force-app\main\default
 ```
 
-50 Jest tests should pass across the three components. `lwc_xref.py` checks every Apex call from the app passes exactly the parameter names
+56 Jest tests should pass across the three components. `lwc_xref.py` checks every Apex call from the app passes exactly the parameter names
 the Apex method expects, and every field the components import exists in the package.

@@ -16,6 +16,7 @@ public with sharing class ReviewDecisionService {
     /** Before update: validate the decision and set the row's fields. No DML. */
     public static void beforeUpdate(List<Import_Staging_Row__c> rows, Map<Id, Import_Staging_Row__c> previous) {
         Id me = UserInfo.getUserId();
+        stampHolds(rows, previous, me);
         for (Import_Staging_Row__c row : decided(rows, previous)) {
             if (previous.get(row.Id).Match_Status__c != TradeMatcher.REVIEW) {
                 row.Reviewer_Decision__c.addError('Only rows in Needs Review can be accepted or rejected.');
@@ -39,12 +40,16 @@ public with sharing class ReviewDecisionService {
                 continue;
             }
             if (row.Row_Type__c == TradeRowNormalizer.ROW_ROSTER) {
+                // The reviewer's choice arrives as the Advisor Override; the credited advisor is a match result.
+                if (row.Advisor_Override__c != null) {
+                    row.Credited_Advisor__c = row.Advisor_Override__c;
+                }
                 if (row.Credited_Advisor__c == null && flags.contains('ADVISOR_AMBIGUOUS')) {
                     row.Credited_Advisor__c = row.AI_Suggested_Advisor__c;
                 }
                 if (row.Credited_Advisor__c == null && flags.contains('ADVISOR_AMBIGUOUS')) {
-                    row.Credited_Advisor__c.addError(
-                        'More than one advisor could be "' + row.Source_Advisor_Name__c + '". Choose the Credited Advisor before approving.'
+                    row.Advisor_Override__c.addError(
+                        'More than one advisor could be "' + row.Source_Advisor_Name__c + '". Choose the Advisor Override before approving.'
                     );
                     continue;
                 }
@@ -110,6 +115,18 @@ public with sharing class ReviewDecisionService {
         }
     }
 
+    /** Who put a row on hold and when, stamped here rather than sent by the app, so nobody can set them by hand. */
+    private static void stampHolds(List<Import_Staging_Row__c> rows, Map<Id, Import_Staging_Row__c> previous, Id me) {
+        Datetime now = System.now();
+        for (Import_Staging_Row__c row : rows) {
+            Import_Staging_Row__c before = previous.get(row.Id);
+            if (row.On_Hold__c == true && (before == null || before.On_Hold__c != true)) {
+                row.On_Hold_By__c = me;
+                row.On_Hold_Since__c = now;
+            }
+        }
+    }
+
     /** Rows whose decision was just set (a change to blank, made when a row is re-matched, is ignored). */
     private static List<Import_Staging_Row__c> decided(List<Import_Staging_Row__c> rows, Map<Id, Import_Staging_Row__c> previous) {
         List<Import_Staging_Row__c> result = new List<Import_Staging_Row__c>();
@@ -153,13 +170,13 @@ public with sharing class ReviewDecisionService {
             for (Firm_Alias__c existing : [SELECT Normalized_Key__c FROM Firm_Alias__c WHERE Normalized_Key__c IN :firmAliases.keySet() WITH USER_MODE]) {
                 firmAliases.remove(existing.Normalized_Key__c);
             }
-            insert as user firmAliases.values();
+            SystemWriter.insertAll(firmAliases.values());
         }
         if (!fundAliases.isEmpty()) {
             for (Fund_Alias__c existing : [SELECT Normalized_Key__c FROM Fund_Alias__c WHERE Normalized_Key__c IN :fundAliases.keySet() WITH USER_MODE]) {
                 fundAliases.remove(existing.Normalized_Key__c);
             }
-            insert as user fundAliases.values();
+            SystemWriter.insertAll(fundAliases.values());
         }
     }
 

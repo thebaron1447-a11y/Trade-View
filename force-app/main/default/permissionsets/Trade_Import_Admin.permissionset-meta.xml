@@ -96,6 +96,10 @@
         <enabled>true</enabled>
         <name>Trade_AI_Setting__mdt</name>
     </customMetadataTypeAccesses>
+    <customPermissions>
+        <enabled>true</enabled>
+        <name>Trade_Import_Data_Fix</name>
+    </customPermissions>
     <description>Full access to the trade import data model, ingestion objects and Apex. For admins and the demo user.</description>
     <fieldPermissions>
         <editable>true</editable>

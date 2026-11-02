@@ -9,5 +9,6 @@
     <relationshipLabel>Rep Code Assignments</relationshipLabel>
     <relationshipName>Rep_Code_Assignments</relationshipName>
     <required>true</required>
+    <trackHistory>true</trackHistory>
     <type>Lookup</type>
 </CustomField>

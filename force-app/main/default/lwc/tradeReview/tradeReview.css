@@ -23,3 +23,23 @@
 .open-question {
   font-style: italic;
 }
+
+h3.slds-text-title_caps {
+  font-weight: 700;
+  color: var(--slds-g-color-neutral-base-10, #181818);
+}
+
+.fix-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fix-option {
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.fix-button {
+  min-width: 13rem;
+}

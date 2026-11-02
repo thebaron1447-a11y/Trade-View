@@ -18,7 +18,7 @@ for obj_dir in glob.glob(f"{ROOT}/objects/*"):
 objects = set(fields)
 STANDARD_FIELDS = {"Id", "Name", "OwnerId", "CreatedDate", "CreatedById", "LastModifiedById", "SystemModstamp"}
 STANDARD_OBJECTS = {"Account", "Contact", "Product2", "ContentVersion", "ContentDocument", "ContentDocumentLink", "User", "Profile",
-                    "PermissionSet", "PermissionSetAssignment"}
+                    "PermissionSet", "PermissionSetAssignment", "FieldPermissions", "ObjectPermissions", "SetupEntityAccess", "CustomPermission"}
 all_custom_fields = {f for fs in fields.values() for f in fs}
 # child relationship name (Assignments__r) -> child object, from each lookup/master-detail's relationshipName
 child_rels = {}

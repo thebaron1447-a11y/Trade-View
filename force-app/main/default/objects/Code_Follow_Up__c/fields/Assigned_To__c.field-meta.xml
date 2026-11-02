@@ -9,5 +9,6 @@
     <relationshipLabel>Assigned Follow-Ups</relationshipLabel>
     <relationshipName>Assigned_Follow_Ups</relationshipName>
     <required>false</required>
+    <trackHistory>true</trackHistory>
     <type>Lookup</type>
 </CustomField>

@@ -78,6 +78,39 @@ function shortDate(value) {
 }
 
 /** "Accepted 37 rows. …" for a group; the single-row wording otherwise. Apex returns how many rows changed. */
+/** A date-only value ("2026-09-15") as "Sep 15", read as a calendar date so no time zone moves it a day. */
+export function dayText(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value || "");
+  if (!m) {
+    return "";
+  }
+  return new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3])
+  ).toLocaleDateString("en-CA", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
+}
+
+/**
+ * How a waiting roster change affects a code review, from the rule the server applies: it holds rows back only when
+ * it can be approved, and only the rows it covers. All, some, or none (then it is shown for information).
+ */
+export function rosterState(f) {
+  const held = f.heldRowCount || 0;
+  const covered = f.rosterApprovable ? f.rosterCovered || 0 : 0;
+  return {
+    rosterFirst: !!f.rosterRowId && covered > 0 && covered >= held,
+    rosterPartial: !!f.rosterRowId && covered > 0 && covered < held,
+    rosterInfo: !!f.rosterRowId && covered === 0,
+    workableCount: held - covered,
+    rosterDateText: dayText(f.rosterDate)
+  };
+}
+
 /** "1 row", "3 rows". */
 export function plural(count, noun) {
   const n = Number(count) || 0;
@@ -398,6 +431,10 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
         heldSinceText: shortDate(r.heldSince),
         askedLabel: askedText(r.askedAt),
         hasPlan: !!(r.isRoster && r.approvalPlan && r.approvalPlan.length),
+        settlesKey: r.settlesFollowUpId ? "fu:" + r.settlesFollowUpId : "",
+        settlesText: r.settlesFollowUpId
+          ? `Approving this also closes the code ${r.settlesCode} review and re-matches its ${plural(r.settlesRowCount, "held row")}${r.settlesAmount ? ` (${money(r.settlesAmount)} in trades)` : ""}`
+          : "",
         planLines: (r.approvalPlan || []).map((line, i) => ({
           key: String(i),
           text: line
@@ -416,6 +453,8 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
       issueText: f.heldIssue || f.reason,
       heldSummary: `${plural(f.heldRowCount, "row")} · ${money(f.heldAmount)}`,
       canCredit: !!(f.advisorOptions && f.advisorOptions.length),
+      ...rosterState(f),
+      rosterKey: f.rosterRowId ? "row:" + f.rosterRowId : "",
       creditOptions: f.advisorOptions || [],
       hasConfidence: !!f.aiConfidence,
       confidenceClass: CONFIDENCE_CLASS[f.aiConfidence] || "",
@@ -545,7 +584,11 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
       note:
         f.askedLabel || (f.assignedLabel ? `Assigned: ${f.assignedLabel}` : ""),
       issueType: f.reason,
-      issueDetail: "",
+      issueDetail: f.rosterFirst
+        ? "Roster change first"
+        : f.rosterPartial
+          ? `Roster change first for ${f.rosterCovered} of ${f.heldRowCount}`
+          : "",
       badges: f.aiConfidence
         ? [
             {
@@ -559,7 +602,10 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
       group: "Codes to fix"
     }));
     const rows = this.codeRowViews.map((r) => ({
-      ...this.rowLine(r),
+      ...this.rowLine(
+        r,
+        r.settlesCode ? `Settles the code ${r.settlesCode} review` : ""
+      ),
       group: "Roster and code decisions"
     }));
     return this.grouped([...codes, ...rows], (l) => l.group);
@@ -890,6 +936,7 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
           ...h,
           key: String(i),
           typeText: h.rowType === "AUM" ? "AUM balance" : "Trade",
+          waitText: h.waitsOnRoster ? "Waits for the roster change" : "",
           advisorText: h.advisorName || "None named",
           fundText: h.fundName || "None given",
           amountText: money(h.amount)
@@ -914,19 +961,108 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
     if (!f) {
       return "";
     }
-    return f.canCredit
-      ? `Credit one advisor who held code ${f.repCode} on every held row's date: each row is credited 100% to them and re-matched. Or fix the code in Salesforce and re-match.`
-      : `Set up or correct code ${f.repCode} in Salesforce, then re-match. If it cannot be fixed, send the rows to Needs Decision.`;
+    return f.rosterPartial
+      ? `The options below apply to the ${plural(f.workableCount, "row")} not waiting for the roster change.`
+      : `Choose one way to settle the ${plural(f.heldRowCount, "held row")}.`;
+  }
+
+  get rosterPartial() {
+    const f = this.selectedFollowUp;
+    return !!(f && f.rosterPartial);
+  }
+
+  get rosterInfo() {
+    const f = this.selectedFollowUp;
+    return !!(f && f.rosterInfo);
+  }
+
+  /** Why a waiting roster change holds nothing back here. */
+  get rosterInfoText() {
+    const f = this.selectedFollowUp;
+    if (!f || !f.rosterInfo) {
+      return "";
+    }
+    const why = f.rosterApprovable
+      ? `none of these rows fall under it (they are dated before ${f.rosterDateText} or name someone other than ${f.rosterName})`
+      : "it cannot be approved as it stands";
+    return `A roster change for code ${f.repCode} is waiting (${f.rosterText}), but ${why}, so nothing here waits for it.`;
+  }
+
+  get rosterPartialText() {
+    const f = this.selectedFollowUp;
+    if (!f || !f.rosterPartial) {
+      return "";
+    }
+    return `The firm's roster gives code ${f.repCode} to ${f.rosterName} from ${f.rosterDateText} (${f.rosterText}). ${plural(f.rosterCovered, "row")} dated from then that name ${f.rosterName} or no one wait for it. The other ${plural(f.workableCount, "row")} fall outside it, so you can settle them now.`;
+  }
+
+  get rematchDisabled() {
+    return this.busy || this.rosterFirst || this.rosterPartial;
+  }
+
+  /** A roster change for this code is waiting: it is decided first, and the review's own options are locked. */
+  get rosterFirst() {
+    const f = this.selectedFollowUp;
+    return !!(f && f.rosterFirst);
+  }
+
+  get rosterKey() {
+    const f = this.selectedFollowUp;
+    return f ? f.rosterKey : "";
+  }
+
+  /** The roster change is in the current view (Mine or Unassigned may hide it). */
+  get rosterVisible() {
+    const key = this.rosterKey;
+    return !!key && this.allRowViews.some((r) => r.key === key);
+  }
+
+  get codeActionDisabled() {
+    return this.busy || this.rosterFirst;
+  }
+
+  get creditHelp() {
+    const f = this.selectedFollowUp;
+    return f
+      ? `Credits each held row 100% to the advisor chosen above, then matches it again. Use when the firm confirms who placed the trades. Only people who held code ${f.repCode} on every held row's date are listed.`
+      : "";
+  }
+
+  get rematchHelp() {
+    const f = this.selectedFollowUp;
+    if (!f) {
+      return "";
+    }
+    return f.rosterPartial
+      ? `Not available while the roster change is waiting: approving it is the fix for code ${f.repCode}.`
+      : `Use after code ${f.repCode} is set up or corrected in Salesforce (its Rep Code record and assignments). The held rows are matched again against it.`;
+  }
+
+  get sendHelp() {
+    const f = this.selectedFollowUp;
+    return f
+      ? f.rosterPartial
+        ? `The ${plural(f.workableCount, "row")} not waiting for the roster change move to Needs Decision to be accepted or rejected one at a time. This review stays open for the rest.`
+        : `Closes this review without fixing the code. The ${plural(f.heldRowCount, "row")} move to Needs Decision to be accepted or rejected one at a time.`
+      : "";
+  }
+
+  /** Jumps to a linked item (a roster change and the code review it settles). */
+  handleGoTo(event) {
+    this.select(event.currentTarget.dataset.key);
   }
 
   get creditLabel() {
     const f = this.selectedFollowUp;
-    const n = f ? f.heldRowCount : 0;
+    const n = f ? f.workableCount : 0;
+    if (f && f.rosterPartial) {
+      return n > 1 ? `Credit the other ${n} rows` : "Credit the other row";
+    }
     return n > 1 ? `Credit all ${n} rows` : "Credit the row";
   }
 
   get creditDisabled() {
-    return this.busy || !this.creditChoice;
+    return this.busy || this.rosterFirst || !this.creditChoice;
   }
 
   handleCreditChoice(event) {

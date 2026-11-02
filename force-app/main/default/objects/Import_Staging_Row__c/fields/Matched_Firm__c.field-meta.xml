@@ -9,5 +9,6 @@
     <relationshipLabel>Matched Staging Rows</relationshipLabel>
     <relationshipName>Matched_Staging_Rows</relationshipName>
     <required>false</required>
+    <trackHistory>true</trackHistory>
     <type>Lookup</type>
 </CustomField>

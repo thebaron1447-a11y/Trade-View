@@ -143,7 +143,7 @@ public with sharing class TradeMatcher implements Queueable {
                 result.Code_Follow_Up__c = key == null ? null : followUpIds.get(key);
                 results.add(result);
             }
-            update as user results;
+            SystemWriter.updateAll(results);
             recordConfirmedActivity(confirmedOn);
             touchedFollowUps.addAll(followUpIds.values());
         }
@@ -155,7 +155,7 @@ public with sharing class TradeMatcher implements Queueable {
                 statusUpdates.add(new Import_Batch__c(Id = b.Id, Status__c = STATUS_PENDING_REVIEW));
             }
         }
-        update as user statusUpdates;
+        SystemWriter.updateAll(statusUpdates);
         queueSuggestions(batches.keySet());
     }
 
@@ -181,7 +181,7 @@ public with sharing class TradeMatcher implements Queueable {
                 changes.add(new Rep_Code_Assignment__c(Id = a.Id, Last_Confirmed_Trade_Date__c = latest));
             }
         }
-        Database.update(changes, AccessLevel.SYSTEM_MODE);
+        SystemWriter.updateAll(changes);
     }
 
     /** Claude looks at whatever matching could not settle. Tests call ClaudeSuggestionJob directly. */

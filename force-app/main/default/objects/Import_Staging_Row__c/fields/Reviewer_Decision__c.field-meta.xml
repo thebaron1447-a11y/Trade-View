@@ -5,6 +5,7 @@
     <inlineHelpText>Accept to apply the suggestion or your overrides, or Reject to exclude the row.</inlineHelpText>
     <label>Reviewer Decision</label>
     <required>false</required>
+    <trackHistory>true</trackHistory>
     <type>Picklist</type>
     <valueSet>
         <restricted>true</restricted>

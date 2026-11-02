@@ -69,16 +69,18 @@ public with sharing class MappingProposalJob implements Queueable, Database.Allo
         }
 
         // The callout is done; now write.
-        insert as user result.log;
+        SystemWriter.insertOne(result.log);
         if (proposal == null) {
             return null;
         }
         Mapping_Profile__c draft = MappingProposalService.toDraft(proposal, batch, headers);
-        insert as user draft;
+        SystemWriter.insertOne(draft);
         String note = 'Claude proposed a mapping: ' + draft.Name + ' (Draft). Review its AI Rationale and set it to Active to process this file.';
-        update as user new Import_Batch__c(
-            Id = batch.Id,
-            Error_Message__c = ((String.isBlank(batch.Error_Message__c) ? '' : batch.Error_Message__c + '\n\n') + note).abbreviate(5000)
+        SystemWriter.updateOne(
+            new Import_Batch__c(
+                Id = batch.Id,
+                Error_Message__c = ((String.isBlank(batch.Error_Message__c) ? '' : batch.Error_Message__c + '\n\n') + note).abbreviate(5000)
+            )
         );
         return draft;
     }

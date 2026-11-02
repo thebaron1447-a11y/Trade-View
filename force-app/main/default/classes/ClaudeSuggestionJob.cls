@@ -73,7 +73,7 @@ public with sharing class ClaudeSuggestionJob implements Queueable, Database.All
         for (Call c : calls) {
             logs.add(c.result.log);
         }
-        insert as user logs;
+        SystemWriter.insertAll(logs);
         List<Import_Staging_Row__c> rowUpdates = new List<Import_Staging_Row__c>();
         List<Code_Follow_Up__c> followUpUpdates = new List<Code_Follow_Up__c>();
         for (Call c : calls) {
@@ -85,8 +85,8 @@ public with sharing class ClaudeSuggestionJob implements Queueable, Database.All
                 }
             }
         }
-        update as user rowUpdates;
-        update as user followUpUpdates;
+        SystemWriter.updateAll(rowUpdates);
+        SystemWriter.updateAll(followUpUpdates);
         return rowIndex < rows.size() || followUpIndex < followUps.size();
     }
 
