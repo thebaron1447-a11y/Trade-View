@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Status__c</fullName>
-    <description>Lifecycle stage of an import batch. Received is set by the inbound endpoint. Mapping Review means no active mapping profile matched the file's headers, or the matching profile is incomplete. Staged means every row was normalized into staging rows and the batch is ready for matching. Later values are used from phase 3. Set by Apex only.</description>
-    <inlineHelpText>Shows where this import is in the process. Mapping Review and Pending Review batches are waiting on a reviewer.</inlineHelpText>
+    <description>Lifecycle stage of an import batch. Received is set by the inbound endpoint. Mapping Review means no active mapping profile matched the file's headers, or the matching profile is incomplete. Staged means every row was normalized and the batch is ready for matching. Pending Review means matching ran and rows may be waiting on a person. Loading means a reviewer clicked Load file and matched rows are being booked. Completed means every row is loaded, rejected or invalid. Set by Apex only.</description>
+    <inlineHelpText>Shows where this import is in the process. Mapping Review and Pending Review files are waiting on a reviewer; Completed files are fully booked.</inlineHelpText>
     <label>Status</label>
     <required>false</required>
     <trackHistory>true</trackHistory>

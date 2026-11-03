@@ -28,8 +28,8 @@ fund is fictional.
   answer, Claude leaves the field open and the app shows the choices it weighed (for example "Series A or Series F").
 - **Puts a person in charge of every decision** in the Trade Review app:
   - **Dealer Code Review:** rep codes to fix, the rows held behind them, and roster changes. A code review is
-    settled in place: credit one advisor who holds the code, re-match after fixing it, or send its rows to be
-    decided one by one. When the firm's roster changes the same code, the rows it covers wait for that decision
+    settled in place: credit one advisor who holds the code, confirm a dormant code's holder with the firm, re-match
+    after fixing it, or send its rows to be decided one by one. When the firm's roster changes the same code, the rows it covers wait for that decision
     (approving it settles them); rows it does not cover can be settled straight away. Each roster change shows exactly what approving it will create or end.
   - **Needs Decision:** firm, fund and other data questions. Rows with the same problem (the same misspelt fund from
     the same dealer, say) show as one line with their row count and total, and one decision settles them all.
@@ -39,6 +39,15 @@ fund is fictional.
   - **New File Format** and **Recent Files.**
 - **Learns as it goes.** Remembered spellings become aliases, so tomorrow's file matches on its own. Matching rules
   are written in plain language, and activating one can require a second person's approval (on by default).
+- **Books what's settled.** Load file turns a file's matched rows into Trades and AUM Balances, each split into
+  per-advisor allocations that add up to the cent (redemptions as negatives, so allocations sum to net sales). Rows
+  still in review or on hold stay put and load with a later Load; a re-sent AUM balance replaces the earlier one;
+  no row can ever be booked twice. When nothing is left waiting, the file is Completed.
+- **Tells you when it's done.** Background work announces itself as it finishes, so Trade Review refreshes the
+  moment a file is read, matched, answered by Claude or loaded, instead of checking every few seconds. Whoever
+  uploaded a file or clicked Load file gets a Salesforce bell notification when it is ready, booked or needs them.
+- **Never loses work.** A sweeper runs every 15 minutes and restarts anything left stuck between steps: a file
+  received but never read, rows waiting to be matched, items Claude was never asked about, a load left part way.
 
 ## How it works
 
@@ -52,7 +61,7 @@ flowchart LR
     end
     I --> P[ImportBatchProcessor<br/>mapping profile, normalise, validate]
     P --> M[TradeMatcher<br/>firm, rep code, advisor, fund]
-    M -->|Matched| L[Ready to load]
+    M -->|Matched| L[TradeLoader<br/>Load file: trades, AUM balances,<br/>allocations to the cent]
     M -->|Held| F[Code Follow-Up]
     M -->|Needs Review| S[ClaudeSuggestionService]
     F --> S
@@ -98,15 +107,16 @@ an Enterprise install can leave them out entirely.
 | Code Follow-Up | A rep code problem with the trades held behind it |
 | Matching Rule | A plain-language convention Claude follows, approved by a second person |
 | AI Request Log | Every Claude call, with tokens and outcome |
-| Trade, Trade Allocation | The loaded result (next phase) |
+| Trade, Trade Allocation | A booked trade and each advisor's share of it |
+| AUM Balance, AUM Allocation | A booked AUM balance per code, fund and date, and each advisor's share |
 
 Firms and branches are Accounts, advisors are Contacts, and funds are Products.
 
 ## Quality
 
-- **175 Apex tests** in 24 test classes. One test runs every reviewer action as a Standard User holding only the
+- **206 Apex tests** in 29 test classes. One test runs every reviewer action as a Standard User holding only the
   Reviewer permission set, to prove the permissions are complete.
-- **56 LWC Jest tests** across the three components.
+- **62 LWC Jest tests** across the three components.
 - **Python ports with shared test vectors** for CSV parsing, normalisation, name matching and Claude-answer validation.
 - **Checks before every deploy:**
   - Apex parse;
@@ -136,7 +146,7 @@ Firms and branches are Accounts, advisors are Contacts, and funds are Products.
 | `tools/gen/` | Generators for the metadata, seed data and build log |
 | `tools/verify/` | Lint, cross-reference checks, Python ports and test-vector generators |
 | `ARCHITECTURE.md` | How it is built: pipeline, data model, matching rules, Claude integration, review app, checks |
-| `PHASE*.md` | Step-by-step run guide for each build phase (1, 2, 3A, 3B, 4A, 4B, 4B.2) |
+| `PHASE*.md` | Step-by-step run guide for each build phase (1, 2, 3A, 3B, 4A, 4B, 4B.2, 4E: loading, then notifications and holder confirmation) |
 
 ## Try it
 
@@ -171,8 +181,6 @@ review still work, just without suggestions.
 
 - **Cloud storage pull:** S3, Azure Blob and Google Cloud Storage.
 - **Setup Assistant:** a guided first-time configuration covering all three intake routes.
-- **Loading approved rows** into Trade, Trade Allocation and AUM records.
-- **Holder confirmation** for dormant codes, and notifications instead of polling.
 - **One Claude call per shared issue** instead of per row, to cut cost on large files.
 - **Audit history:** a permanent, read-only record of every change and approval (who, when, what changed from
   and to, why, and whether it came from a person, a rule or Claude's suggestion), exportable for auditors.

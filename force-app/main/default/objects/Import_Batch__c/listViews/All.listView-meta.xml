@@ -6,6 +6,7 @@
     <columns>Source_Firm__c</columns>
     <columns>Source_File_Name__c</columns>
     <columns>Row_Count__c</columns>
+    <columns>Loaded_Row_Count__c</columns>
     <columns>Matched_Row_Count__c</columns>
     <columns>Review_Row_Count__c</columns>
     <columns>Held_Row_Count__c</columns>

@@ -14,11 +14,18 @@ import markAsked from "@salesforce/apex/ReviewController.markAsked";
 import getIssueRows from "@salesforce/apex/ReviewController.getIssueRows";
 import creditCodeReview from "@salesforce/apex/ReviewController.creditCodeReview";
 import closeCodeReview from "@salesforce/apex/ReviewController.closeCodeReview";
+import loadFile from "@salesforce/apex/ReviewController.loadFile";
+import confirmHolder from "@salesforce/apex/ReviewController.confirmHolder";
+import { subscribe, unsubscribe, onError } from "lightning/empApi";
 
-// While files, rows or Claude requests are still being worked on in the background, the queue refreshes
-// itself every few seconds, for up to three minutes after the last action.
+// Background work announces itself when it finishes (Trade View Update platform event), and the page refreshes
+// then. If the page cannot listen (no streaming), it checks every few seconds instead, for up to three minutes
+// after the last action. While listening it still checks now and then, in case an update is missed.
+export const CHANNEL = "/event/Trade_View_Update__e";
 export const POLL_MS = 5000;
+export const SAFETY_POLL_MS = 30000;
 export const MAX_POLLS = 36;
+export const UPDATE_DEBOUNCE_MS = 750;
 export const MAX_UPLOAD_BYTES = 1024 * 1024;
 // A question asked this long ago without an answer gets a reminder label.
 export const NUDGE_DAYS = 3;
@@ -207,15 +214,66 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
 
   pollTimer;
   polls = 0;
+  // Listening for background updates.
+  subscription;
+  live = false;
+  updateTimer;
 
   scopeOptions = SCOPES;
 
   connectedCallback() {
     this.load();
+    this.listen();
   }
 
   disconnectedCallback() {
     this.stopPolling();
+    if (this.updateTimer) {
+      clearTimeout(this.updateTimer);
+      this.updateTimer = undefined;
+    }
+    if (this.subscription) {
+      unsubscribe(this.subscription).catch(() => {});
+      this.subscription = undefined;
+    }
+  }
+
+  /** Listens for background work finishing; falls back to checking every few seconds if it cannot. */
+  async listen() {
+    try {
+      onError(() => this.goOffline());
+      this.subscription = await subscribe(CHANNEL, -1, () =>
+        this.handleUpdate()
+      );
+      this.live = true;
+      this.restartPolling();
+    } catch {
+      // No streaming here (for example a community page): fall back to checking every few seconds.
+      this.goOffline();
+    }
+  }
+
+  goOffline() {
+    this.live = false;
+    this.restartPolling();
+  }
+
+  /** One refresh for a burst of updates (a load sends one per chunk). */
+  handleUpdate() {
+    if (this.updateTimer) {
+      return;
+    }
+    // eslint-disable-next-line @lwc/lwc/no-async-operation
+    this.updateTimer = setTimeout(() => {
+      this.updateTimer = undefined;
+      this.polls = 0;
+      this.load();
+    }, UPDATE_DEBOUNCE_MS);
+  }
+
+  restartPolling() {
+    this.stopPolling();
+    this.managePolling();
   }
 
   // ------------------------------------------------------------------ loading and refreshing
@@ -245,10 +303,13 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
       this.queue && this.queue.inFlight > 0 && this.polls < MAX_POLLS;
     if (working && !this.pollTimer) {
       // eslint-disable-next-line @lwc/lwc/no-async-operation
-      this.pollTimer = setInterval(() => {
-        this.polls += 1;
-        this.load();
-      }, POLL_MS);
+      this.pollTimer = setInterval(
+        () => {
+          this.polls += 1;
+          this.load();
+        },
+        this.live ? SAFETY_POLL_MS : POLL_MS
+      );
     } else if (!working) {
       this.stopPolling();
     }
@@ -512,8 +573,24 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
       summary:
         f.rowCount === null || f.rowCount === undefined
           ? f.status
-          : `${f.status} · ${f.rowCount} rows: ${f.matchedCount || 0} matched, ${f.reviewCount || 0} to review, ${f.heldCount || 0} held, ${f.errorCount || 0} invalid`
+          : `${f.status} · ${f.rowCount} rows: ${f.matchedCount || 0} matched, ${f.reviewCount || 0} to review, ${f.heldCount || 0} held, ${f.errorCount || 0} invalid` +
+            (f.loadedCount ? `, ${f.loadedCount} loaded` : ""),
+      loadLabel: `Load ${plural(f.loadableCount, "matched row")}`,
+      loadNote:
+        f.canLoad && (f.reviewCount || f.heldCount)
+          ? "Rows in review or on hold load later, once they are decided."
+          : ""
     }));
+  }
+
+  /** Load file: books the file's matched rows as trades and AUM balances, in the background. */
+  async handleLoadFile(event) {
+    const batchId = event.currentTarget.dataset.id;
+    await this.run(
+      () => loadFile({ batchId }),
+      (n) =>
+        `Loading ${plural(n, "row")}. Trades and AUM balances appear when it finishes.`
+    );
   }
 
   // Every tab shows the same table: the item, its issue type (with Claude's view) and an amount or count.
@@ -706,6 +783,9 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
   }
 
   get workingText() {
+    if (this.live) {
+      return `Working in the background (${this.queue.inFlight})… this page updates itself when it's done.`;
+    }
     return this.pollTimer
       ? `Working in the background (${this.queue.inFlight})… this page refreshes itself.`
       : `Still working in the background (${this.queue.inFlight}). Click Refresh to check again.`;
@@ -1079,6 +1159,30 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
           n,
           "Credited. The row is being re-matched.",
           "Credited {n} rows. They are being re-matched."
+        )
+    );
+  }
+
+  get confirmHolderDisabled() {
+    return this.busy || this.rosterFirst || this.rosterPartial;
+  }
+
+  get confirmHolderHelp() {
+    const f = this.selectedFollowUp;
+    return f
+      ? `Use when the firm confirms ${f.holderNames} still ${f.holderNames && f.holderNames.includes(" and ") ? "use" : "uses"} code ${f.repCode}. The confirmation is recorded on the assignment, so the code no longer counts as dormant, and the ${plural(f.heldRowCount, "held row")} are matched again and credited as usual.`
+      : "";
+  }
+
+  handleConfirmHolder() {
+    const f = this.selectedFollowUp;
+    this.run(
+      () => confirmHolder({ followUpId: f.id }),
+      (n) =>
+        bulkMessage(
+          n,
+          "Holder confirmed. The row is being re-matched.",
+          "Holder confirmed. {n} rows are being re-matched."
         )
     );
   }

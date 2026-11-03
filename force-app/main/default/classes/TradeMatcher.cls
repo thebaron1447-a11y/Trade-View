@@ -156,6 +156,8 @@ public with sharing class TradeMatcher implements Queueable {
             }
         }
         SystemWriter.updateAll(statusUpdates);
+        TradeViewNotifier.changed(TradeViewNotifier.KIND_ROWS, null);
+        TradeViewNotifier.fileSettled(batches.keySet(), TradeViewNotifier.MOMENT_MATCHED);
         queueSuggestions(batches.keySet());
     }
 
@@ -474,8 +476,11 @@ public with sharing class TradeMatcher implements Queueable {
     private static Boolean isDormant(List<Rep_Code_Assignment__c> active, Date d) {
         Date latest;
         for (Rep_Code_Assignment__c a : active) {
-            if (a.Last_Confirmed_Trade_Date__c != null && (latest == null || a.Last_Confirmed_Trade_Date__c > latest)) {
-                latest = a.Last_Confirmed_Trade_Date__c;
+            // A firm's confirmation that the holder still uses the code (Confirm holder) counts like a confirmed trade.
+            for (Date seen : new List<Date>{ a.Last_Confirmed_Trade_Date__c, a.Holder_Confirmed_On__c }) {
+                if (seen != null && (latest == null || seen > latest)) {
+                    latest = seen;
+                }
             }
         }
         return latest != null && latest.daysBetween(d) > DORMANCY_DAYS;
@@ -675,7 +680,8 @@ public with sharing class TradeMatcher implements Queueable {
                             Allocation_Percent__c,
                             Effective_Start_Date__c,
                             Effective_End_Date__c,
-                            Last_Confirmed_Trade_Date__c
+                            Last_Confirmed_Trade_Date__c,
+                            Holder_Confirmed_On__c
                         FROM Assignments__r
                     )
                 FROM Rep_Code__c

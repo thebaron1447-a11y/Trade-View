@@ -17,8 +17,8 @@ for obj_dir in glob.glob(f"{ROOT}/objects/*"):
         fields[obj][el.find("m:fullName", NS).text] = el
 objects = set(fields)
 STANDARD_FIELDS = {"Id", "Name", "OwnerId", "CreatedDate", "CreatedById", "LastModifiedById", "SystemModstamp"}
-STANDARD_OBJECTS = {"Account", "Contact", "Product2", "ContentVersion", "ContentDocument", "ContentDocumentLink", "User", "Profile",
-                    "PermissionSet", "PermissionSetAssignment", "FieldPermissions", "ObjectPermissions", "SetupEntityAccess", "CustomPermission"}
+STANDARD_OBJECTS = {"Account", "Contact", "Product2", "CustomNotificationType", "ContentVersion", "ContentDocument", "ContentDocumentLink", "User", "Profile",
+                    "PermissionSet", "PermissionSetAssignment", "FieldPermissions", "ObjectPermissions", "SetupEntityAccess", "CustomPermission", "CronTrigger", "AsyncApexJob"}
 all_custom_fields = {f for fs in fields.values() for f in fs}
 # child relationship name (Assignments__r) -> child object, from each lookup/master-detail's relationshipName
 child_rels = {}
@@ -177,6 +177,8 @@ for fp in glob.glob(f"{ROOT}/permissionsets/*.xml"):
     granted = {f.text for f in root.iterfind("m:fieldPermissions/m:field", NS)}
     objs = {o.text for o in root.iterfind("m:objectPermissions/m:object", NS)}
     for obj in objs:
+        if obj.endswith("__e"):
+            continue  # platform event fields have no field-level security; every message carries all fields
         for fld, el in fields.get(obj, {}).items():
             req = el.find("m:required", NS)
             optional = not (req is not None and req.text == "true") and el.find("m:type", NS).text != "MasterDetail"

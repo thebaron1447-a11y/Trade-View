@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Holder_Confirmed_By__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Who recorded the firm's confirmation that this advisor still holds the code (Confirm holder in Trade Review).</description>
+    <inlineHelpText>Who recorded the confirmation. Set by the system.</inlineHelpText>
+    <label>Holder Confirmed By</label>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>Confirmed Rep Code Holders</relationshipLabel>
+    <relationshipName>Confirmed_Rep_Code_Holders</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

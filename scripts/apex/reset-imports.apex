@@ -1,5 +1,6 @@
-// Deletes all import batches (with their staging rows and attached files), all code follow-ups, all AI request
-// logs and every mapping profile Claude proposed, so the sample files can be pushed again and Claude asked again.
+// Deletes all import batches (with their staging rows and attached files), everything a load booked from them (trades,
+// AUM balances and their allocations), all code follow-ups, all AI request logs and every mapping profile Claude
+// proposed, so the sample files can be pushed, loaded and sent to Claude again.
 // Reference data (firms, advisors, codes, aliases, seeded profiles, matching rules) is kept.
 // Changes made by approving roster rows or by hand (new advisors, codes, assignments, taught aliases) are NOT undone.
 // Run: sf apex run --file scripts/apex/reset-imports.apex --target-org tradeDemo
@@ -11,6 +12,11 @@ if (!batches.isEmpty()) {
         documentIds.add(link.ContentDocumentId);
     }
 }
+// Bookings first: they point back to the rows they came from.
+delete [SELECT Id FROM Trade_Allocation__c LIMIT 10000];
+delete [SELECT Id FROM Trade__c LIMIT 10000];
+delete [SELECT Id FROM AUM_Allocation__c LIMIT 10000];
+delete [SELECT Id FROM AUM_Balance__c LIMIT 10000];
 delete batches.values();
 delete [SELECT Id FROM Code_Follow_Up__c LIMIT 5000];
 delete [SELECT Id FROM AI_Request_Log__c LIMIT 5000];

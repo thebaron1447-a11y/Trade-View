@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Notify_User__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The person waiting on this file: whoever uploaded it in Trade Review or clicked Load file. When reading, matching or loading finishes, they get a Trade View bell notification and the field is cleared, so each wait is notified once. Blank for files the push job sends.</description>
+    <inlineHelpText>Who gets a notification when this file's background work finishes. Set by the system.</inlineHelpText>
+    <label>Notify User</label>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>Notified Import Batches</relationshipLabel>
+    <relationshipName>Notified_Import_Batches</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

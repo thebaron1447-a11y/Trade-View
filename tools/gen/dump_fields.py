@@ -4,7 +4,8 @@ NS = {"m": "http://soap.sforce.com/2006/04/metadata"}
 ROOT = "/home/claude/build/force-app/main/default/objects"
 LABEL = {"Account": "Account", "Contact": "Contact", "Product2": "Product2", "Rep_Code__c": "Rep Code", "User": "User",
          "Code_Follow_Up__c": "Code Follow-Up", "Import_Staging_Row__c": "Import Staging Row",
-         "AI_Request_Log__c": "AI Request Log", "Import_Batch__c": "Import Batch"}
+         "AI_Request_Log__c": "AI Request Log", "Import_Batch__c": "Import Batch", "Trade__c": "Trade",
+         "AUM_Balance__c": "AUM Balance"}
 WANT = {
     "Mapping_Profile__c": ["Feed_Type__c", "AUM_Indicator_Values__c"],
     "Import_Staging_Row__c": ["Row_Type__c", "Source_Branch_Name__c", "Match_Status__c", "Matched_Firm__c", "Matched_Rep_Code__c",
@@ -53,6 +54,17 @@ WANT_4B2 = {
 
 WANT_4B3 = {"Import_Staging_Row__c": ["Issue_Key__c"]}
 WANT_4B4 = {"Import_Staging_Row__c": ["Advisor_Override__c"]}
+WANT_4E2 = {
+    "Import_Batch__c": ["Notify_User__c"],
+    "Rep_Code_Assignment__c": ["Holder_Confirmed_On__c", "Holder_Confirmed_By__c"],
+}
+WANT_4E = {
+    "AUM_Balance__c": ["Rep_Code__c", "Fund__c", "As_Of_Date__c", "Balance__c", "Balance_Key__c", "Source_Row__c"],
+    "AUM_Allocation__c": ["AUM_Balance__c", "Advisor__c", "Allocation_Percent__c", "Allocated_Balance__c"],
+    "Trade__c": ["Source_Row__c", "Load_Key__c"],
+    "Import_Staging_Row__c": ["Loaded_At__c", "Loaded_Trade__c", "Loaded_AUM_Balance__c"],
+    "Import_Batch__c": ["Loaded_Row_Count__c"],
+}
 
 
 def g(r, t):
@@ -71,7 +83,13 @@ def type_text(r):
                 default = vals[-1]
         return f"Picklist (values: {', '.join(vals)})" + req + (f", default {default}" if default else "")
     if t == "Lookup":
+        if g(r, "required") == "true":
+            return f"Lookup({LABEL[g(r, 'referenceTo')]}), required, delete restricted"
         return f"Lookup({LABEL[g(r, 'referenceTo')]}), optional, clear value if deleted"
+    if t == "MasterDetail":
+        return f"Master-Detail({LABEL[g(r, 'referenceTo')]})"
+    if t == "Percent":
+        return f"Percent({g(r, 'precision')},{g(r, 'scale')})" + req
     if t == "Text":
         return f"Text({g(r, 'length')})" + req + (", Unique, External ID" if g(r, "unique") == "true" else
                                                    ", External ID (not unique)" if g(r, "externalId") == "true" else "")
@@ -92,7 +110,7 @@ def type_text(r):
 
 
 out = {}
-for obj, names in list(WANT.items()) + [(o + "@3B", n) for o, n in WANT_3B.items()] + [(o + "@4A", n) for o, n in WANT_4A.items()] + [(o + "@4B", n) for o, n in WANT_4B.items()] + [(o + "@4B2", n) for o, n in WANT_4B2.items()] + [(o + "@4B3", n) for o, n in WANT_4B3.items()] + [(o + "@4B4", n) for o, n in WANT_4B4.items()]:
+for obj, names in list(WANT.items()) + [(o + "@3B", n) for o, n in WANT_3B.items()] + [(o + "@4A", n) for o, n in WANT_4A.items()] + [(o + "@4B", n) for o, n in WANT_4B.items()] + [(o + "@4B2", n) for o, n in WANT_4B2.items()] + [(o + "@4B3", n) for o, n in WANT_4B3.items()] + [(o + "@4B4", n) for o, n in WANT_4B4.items()] + [(o + "@4E", n) for o, n in WANT_4E.items()] + [(o + "@4E2", n) for o, n in WANT_4E2.items()]:
     out[obj] = []
     for n in names:
         obj_dir = obj.split("@")[0]

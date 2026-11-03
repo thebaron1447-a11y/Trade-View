@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>AUM_Balance__c</fullName>
+    <description>The balance being allocated. Master-detail so allocations are deleted with the balance.</description>
+    <inlineHelpText>The balance this allocation belongs to.</inlineHelpText>
+    <label>AUM Balance</label>
+    <referenceTo>AUM_Balance__c</referenceTo>
+    <relationshipLabel>AUM Allocations</relationshipLabel>
+    <relationshipName>AUM_Allocations</relationshipName>
+    <relationshipOrder>0</relationshipOrder>
+    <reparentableMasterDetail>false</reparentableMasterDetail>
+    <type>MasterDetail</type>
+    <writeRequiresMasterRead>false</writeRequiresMasterRead>
+</CustomField>

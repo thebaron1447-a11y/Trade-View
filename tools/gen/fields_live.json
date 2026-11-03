@@ -20,7 +20,7 @@
    "name": "Row Type",
    "api": "Row_Type__c",
    "type": "Picklist (values: Trade, AUM, Code Roster)",
-   "desc": "Kind of row after normalization. Drives which validations apply, which matching rules run and what the row becomes when loaded (Trade, AUM Snapshot or Rep Code Assignment).",
+   "desc": "Kind of row after normalization. Drives which validations apply, which matching rules run and what the row becomes (a Trade or an AUM Balance when loaded, or Rep Code Assignments when a roster row is approved).",
    "help": "Shows whether this row is a trade, an AUM balance or an advisor code entry."
   },
   {
@@ -683,6 +683,153 @@
    "type": "Lookup(Contact), optional, clear value if deleted",
    "desc": "The team member a reviewer chose to credit when the row's advisor name fits more than one member of a team code (flag ADVISOR_AMBIGUOUS), for example \"Chen\" on a team with Ryan and Megan Chen. Matching credits this advisor 100% if they hold the code on the trade date, and flags the row ADVISOR_FROM_REVIEWER. If left blank on accept, Claude's suggested advisor is used.",
    "help": "Choose which team member to credit when the advisor name on the row fits more than one of them."
+  }
+ ],
+ "AUM_Balance__c@4E": [
+  {
+   "name": "Rep Code",
+   "api": "Rep_Code__c",
+   "type": "Lookup(Rep Code), required, delete restricted",
+   "desc": "The rep code the balance was reported for, as resolved by matching. The code belongs to one firm, so it also identifies the firm.",
+   "help": "The dealer code this balance was reported under."
+  },
+  {
+   "name": "Fund",
+   "api": "Fund__c",
+   "type": "Lookup(Product2), optional, clear value if deleted",
+   "desc": "The fund the balance is held in, when the firm reports AUM by fund. Blank when the firm reports one total per code. Lookups to Product2 must be optional and clear on delete.",
+   "help": "The fund this balance is held in. Blank means the total across all funds for the code."
+  },
+  {
+   "name": "As Of Date",
+   "api": "As_Of_Date__c",
+   "type": "Date, required",
+   "desc": "The date the firm reported the balance for. Determines which Rep Code Assignments (and splits) apply, and is part of the Balance Key.",
+   "help": "The date this balance was reported for."
+  },
+  {
+   "name": "Balance",
+   "api": "Balance__c",
+   "type": "Currency(18,2), required",
+   "desc": "Market value the firm reported for the code (and fund) on the as-of date. Replaced, not added to, when the firm sends the same balance again.",
+   "help": "The value of the assets on the as-of date."
+  },
+  {
+   "name": "Balance Key",
+   "api": "Balance_Key__c",
+   "type": "Text(80), Unique, External ID",
+   "desc": "Rep code Id, fund Id (or ALL) and as-of date, set by the load. Unique, so a re-sent balance updates the existing record instead of adding a second one.",
+   "help": "System-generated key that keeps one balance per code, fund and date. Do not edit."
+  },
+  {
+   "name": "Source Row",
+   "api": "Source_Row__c",
+   "type": "Lookup(Import Staging Row), optional, clear value if deleted",
+   "desc": "The staging row this balance was last loaded from, for tracing a number back to the firm's file. Clears if the staging row is deleted.",
+   "help": "The file row this balance came from."
+  }
+ ],
+ "AUM_Allocation__c@4E": [
+  {
+   "name": "AUM Balance",
+   "api": "AUM_Balance__c",
+   "type": "Master-Detail(AUM Balance)",
+   "desc": "The balance being allocated. Master-detail so allocations are deleted with the balance.",
+   "help": "The balance this allocation belongs to."
+  },
+  {
+   "name": "Advisor",
+   "api": "Advisor__c",
+   "type": "Lookup(Contact), required, delete restricted",
+   "desc": "The advisor credited with this portion of the balance.",
+   "help": "The advisor credited with this share."
+  },
+  {
+   "name": "Allocation Percent",
+   "api": "Allocation_Percent__c",
+   "type": "Percent(5,2), required",
+   "desc": "Snapshot of the advisor's share on the as-of date, copied at load time. Deliberately not a formula, so later split changes do not rewrite history.",
+   "help": "The advisor's share of this balance when it was loaded."
+  },
+  {
+   "name": "Allocated Balance",
+   "api": "Allocated_Balance__c",
+   "type": "Currency(18,2), required",
+   "desc": "This advisor's share of the Balance, calculated by TradeAllocator at load. Allocations for a balance always sum exactly to the Balance.",
+   "help": "The advisor's share of this balance."
+  }
+ ],
+ "Trade__c@4E": [
+  {
+   "name": "Source Row",
+   "api": "Source_Row__c",
+   "type": "Lookup(Import Staging Row), optional, clear value if deleted",
+   "desc": "The staging row this trade was loaded from, for tracing a trade back to the firm's file. Clears if the staging row is deleted.",
+   "help": "The file row this trade came from."
+  },
+  {
+   "name": "Load Key",
+   "api": "Load_Key__c",
+   "type": "Text(18), Unique, External ID",
+   "desc": "Id of the staging row the trade was loaded from. Unique, so loading the same row twice can never create a second trade.",
+   "help": "System-generated key that stops a row being loaded twice. Do not edit."
+  }
+ ],
+ "Import_Staging_Row__c@4E": [
+  {
+   "name": "Loaded At",
+   "api": "Loaded_At__c",
+   "type": "Date/Time",
+   "desc": "When the load turned this matched row into a Trade or an AUM Balance. Blank means not loaded yet. A loaded row can no longer be re-matched or decided.",
+   "help": "When this row was loaded. Set by the system."
+  },
+  {
+   "name": "Loaded Trade",
+   "api": "Loaded_Trade__c",
+   "type": "Lookup(Trade), optional, clear value if deleted",
+   "desc": "The Trade created from this row. Set by the load for Trade rows.",
+   "help": "The trade this row became."
+  },
+  {
+   "name": "Loaded AUM Balance",
+   "api": "Loaded_AUM_Balance__c",
+   "type": "Lookup(AUM Balance), optional, clear value if deleted",
+   "desc": "The AUM Balance this row created or replaced. Set by the load for AUM rows. Several rows can point to the same balance when a firm sends it again; the balance's Source Row is the latest.",
+   "help": "The AUM balance this row became."
+  }
+ ],
+ "Import_Batch__c@4E": [
+  {
+   "name": "Loaded Row Count",
+   "api": "Loaded_Row_Count__c",
+   "type": "Number(6,0)",
+   "desc": "Number of this file's rows loaded as Trades or AUM Balances, set by each load. With rejected and invalid rows, it reconciles to Row Count once the file is Completed.",
+   "help": "How many rows in this file have been loaded."
+  }
+ ],
+ "Import_Batch__c@4E2": [
+  {
+   "name": "Notify User",
+   "api": "Notify_User__c",
+   "type": "Lookup(User), optional, clear value if deleted",
+   "desc": "The person waiting on this file: whoever uploaded it in Trade Review or clicked Load file. When reading, matching or loading finishes, they get a Trade View bell notification and the field is cleared, so each wait is notified once. Blank for files the push job sends.",
+   "help": "Who gets a notification when this file's background work finishes. Set by the system."
+  }
+ ],
+ "Rep_Code_Assignment__c@4E2": [
+  {
+   "name": "Holder Confirmed On",
+   "api": "Holder_Confirmed_On__c",
+   "type": "Date",
+   "desc": "The date the firm confirmed this advisor still holds the code, recorded by Confirm holder on a Code Dormant review. Matching counts it like a confirmed trade, so the code is not treated as dormant for rows up to 180 days after it.",
+   "help": "When the firm last confirmed this advisor still uses the code. Set by Confirm holder in Trade Review."
+  },
+  {
+   "name": "Holder Confirmed By",
+   "api": "Holder_Confirmed_By__c",
+   "type": "Lookup(User), optional, clear value if deleted",
+   "desc": "Who recorded the firm's confirmation that this advisor still holds the code (Confirm holder in Trade Review).",
+   "help": "Who recorded the confirmation. Set by the system."
   }
  ]
 }

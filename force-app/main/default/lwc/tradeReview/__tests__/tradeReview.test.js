@@ -4,6 +4,9 @@ import TradeReview, {
   base64Of,
   POLL_MS,
   MAX_POLLS,
+  CHANNEL,
+  SAFETY_POLL_MS,
+  UPDATE_DEBOUNCE_MS,
   askedText,
   bulkMessage,
   plural,
@@ -24,6 +27,9 @@ import markAsked from "@salesforce/apex/ReviewController.markAsked";
 import getIssueRows from "@salesforce/apex/ReviewController.getIssueRows";
 import creditCodeReview from "@salesforce/apex/ReviewController.creditCodeReview";
 import closeCodeReview from "@salesforce/apex/ReviewController.closeCodeReview";
+import loadFile from "@salesforce/apex/ReviewController.loadFile";
+import confirmHolder from "@salesforce/apex/ReviewController.confirmHolder";
+import { subscribe, unsubscribe } from "lightning/empApi";
 import { encodeDefaultFieldValues } from "lightning/pageReferenceUtils";
 import { navigate } from "lightning/navigation";
 
@@ -97,6 +103,16 @@ jest.mock(
 );
 jest.mock(
   "@salesforce/apex/ReviewController.closeCodeReview",
+  () => ({ default: jest.fn() }),
+  { virtual: true }
+);
+jest.mock(
+  "@salesforce/apex/ReviewController.loadFile",
+  () => ({ default: jest.fn() }),
+  { virtual: true }
+);
+jest.mock(
+  "@salesforce/apex/ReviewController.confirmHolder",
   () => ({ default: jest.fn() }),
   { virtual: true }
 );
@@ -403,7 +419,9 @@ describe("c-trade-review", () => {
       "Claude has not answered yet."
     );
 
-    jest.advanceTimersByTime(POLL_MS);
+    // Claude's job announces that it is done.
+    subscribe.mock.calls[0][2]({ data: { payload: { Kind__c: "Claude" } } });
+    jest.advanceTimersByTime(UPDATE_DEBOUNCE_MS);
     await flush();
     expect(
       element.shadowRoot.querySelector("lightning-combobox.firm-choice").value
@@ -710,6 +728,42 @@ describe("c-trade-review", () => {
       element.shadowRoot.querySelector(".held-table tbody td:nth-child(4)")
         .textContent
     ).toBe("None given");
+  });
+
+  it("confirms a dormant code's holder and re-matches its rows", async () => {
+    const fu = queue().followUps[0];
+    getQueue.mockResolvedValue(
+      queue({
+        rows: [],
+        followUps: [
+          {
+            ...fu,
+            heldRowCount: 2,
+            canConfirmHolder: true,
+            holderNames: "Tom Reilly"
+          }
+        ]
+      })
+    );
+    confirmHolder.mockResolvedValue(2);
+    const element = await render("codes");
+
+    const confirm = button(element, "confirm-holder");
+    expect(confirm.disabled).toBe(false);
+    expect(
+      element.shadowRoot.querySelector(".fix-options").textContent
+    ).toContain("Use when the firm confirms Tom Reilly still uses code 5521");
+    confirm.click();
+    await flush();
+    expect(confirmHolder).toHaveBeenCalledWith({
+      followUpId: "a0D000000000001AAA"
+    });
+  });
+
+  it("offers Confirm holder only for a dormant code someone holds", async () => {
+    getQueue.mockResolvedValue(queue({ rows: [] }));
+    const element = await render("codes");
+    expect(button(element, "confirm-holder")).toBeNull();
   });
 
   it("credits one advisor for a code review, with Claude's choice filled in", async () => {
@@ -1520,8 +1574,45 @@ describe("c-trade-review", () => {
     expect(uploadFile).not.toHaveBeenCalled();
   });
 
+  it("refreshes when background work says it is done, instead of polling", async () => {
+    jest.useFakeTimers();
+    getQueue.mockResolvedValueOnce(queue({ inFlight: 2 }));
+    getQueue.mockResolvedValue(queue({ inFlight: 0 }));
+    const element = await render();
+    expect(subscribe).toHaveBeenCalledWith(CHANNEL, -1, expect.any(Function));
+    expect(element.shadowRoot.querySelector(".working").textContent).toContain(
+      "updates itself when it's done"
+    );
+
+    jest.advanceTimersByTime(POLL_MS * 2);
+    await flush();
+    expect(getQueue).toHaveBeenCalledTimes(1);
+
+    // A burst of updates (one per load chunk) gives one refresh.
+    const onUpdate = subscribe.mock.calls[0][2];
+    onUpdate({ data: { payload: { Kind__c: "Load" } } });
+    onUpdate({ data: { payload: { Kind__c: "Load" } } });
+    jest.advanceTimersByTime(UPDATE_DEBOUNCE_MS);
+    await flush();
+    expect(getQueue).toHaveBeenCalledTimes(2);
+    expect(element.shadowRoot.querySelector(".working")).toBeNull();
+
+    document.body.removeChild(element);
+    expect(unsubscribe).toHaveBeenCalled();
+  });
+
+  it("still checks now and then while listening, in case an update is missed", async () => {
+    jest.useFakeTimers();
+    getQueue.mockResolvedValue(queue({ inFlight: 1 }));
+    await render();
+    jest.advanceTimersByTime(SAFETY_POLL_MS);
+    await flush();
+    expect(getQueue).toHaveBeenCalledTimes(2);
+  });
+
   it("refreshes itself while background work runs, and stops when it is done", async () => {
     jest.useFakeTimers();
+    subscribe.mockRejectedValueOnce(new Error("Streaming is not available"));
     getQueue.mockResolvedValueOnce(queue({ inFlight: 3 }));
     getQueue.mockResolvedValueOnce(queue({ inFlight: 1 }));
     getQueue.mockResolvedValue(queue({ inFlight: 0 }));
@@ -1544,6 +1635,7 @@ describe("c-trade-review", () => {
   });
 
   it("stops refreshing after the time limit and says so", async () => {
+    subscribe.mockRejectedValueOnce(new Error("Streaming is not available"));
     jest.useFakeTimers();
     getQueue.mockResolvedValue(queue({ inFlight: 2 }));
     const element = await render();
@@ -1559,6 +1651,82 @@ describe("c-trade-review", () => {
     expect(element.shadowRoot.querySelector(".working").textContent).toContain(
       "Click Refresh"
     );
+  });
+
+  it("offers Load file for matched rows and loads the file", async () => {
+    const file = {
+      id: "a01000000000001AAA",
+      sourceFirm: "BARDER",
+      fileName: "barder_trades.csv",
+      status: "Pending Review",
+      rowCount: 3,
+      matchedCount: 2,
+      reviewCount: 1,
+      heldCount: 0,
+      errorCount: 0,
+      loadedCount: 0,
+      loadableCount: 2,
+      canLoad: true
+    };
+    const done = {
+      ...file,
+      status: "Completed",
+      loadedCount: 3,
+      loadableCount: 0,
+      canLoad: false,
+      reviewCount: 0,
+      matchedCount: 3
+    };
+    getQueue
+      .mockResolvedValueOnce(queue({ recentFiles: [file] }))
+      .mockResolvedValue(queue({ recentFiles: [done] }));
+    loadFile.mockResolvedValue(2);
+    const element = await render("files");
+    const load = element.shadowRoot.querySelector(
+      ".file-item lightning-button"
+    );
+    expect(load.label).toBe("Load 2 matched rows");
+    expect(
+      element.shadowRoot.querySelector(".file-item").textContent
+    ).toContain("Rows in review or on hold load later");
+
+    load.click();
+    await flush();
+    expect(loadFile).toHaveBeenCalledWith({ batchId: file.id });
+    expect(
+      element.shadowRoot.querySelector(".file-item lightning-button")
+    ).toBeNull();
+    expect(
+      element.shadowRoot.querySelector(".file-item").textContent
+    ).toContain(
+      "Completed · 3 rows: 3 matched, 0 to review, 0 held, 0 invalid, 3 loaded"
+    );
+  });
+
+  it("does not offer Load file when nothing is ready", async () => {
+    getQueue.mockResolvedValue(
+      queue({
+        recentFiles: [
+          {
+            id: "a01000000000002AAA",
+            sourceFirm: "KESTREL",
+            fileName: "kestrel.csv",
+            status: "Loading",
+            rowCount: 1,
+            matchedCount: 1,
+            loadableCount: 1,
+            canLoad: false
+          }
+        ]
+      })
+    );
+    const element = await render("files");
+    expect(
+      element.shadowRoot.querySelector(".file-item lightning-button")
+    ).toBeNull();
+    expect(
+      element.shadowRoot.querySelector(".file-item").textContent
+    ).toContain("Loading");
   });
 
   it("shows a load error", async () => {

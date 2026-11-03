@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Loaded_Trade__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The Trade created from this row. Set by the load for Trade rows.</description>
+    <inlineHelpText>The trade this row became.</inlineHelpText>
+    <label>Loaded Trade</label>
+    <referenceTo>Trade__c</referenceTo>
+    <relationshipLabel>Loaded Staging Rows</relationshipLabel>
+    <relationshipName>Loaded_Staging_Rows</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

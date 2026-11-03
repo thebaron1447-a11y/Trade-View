@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Advisor__c</fullName>
+    <deleteConstraint>Restrict</deleteConstraint>
+    <description>The advisor credited with this portion of the balance.</description>
+    <inlineHelpText>The advisor credited with this share.</inlineHelpText>
+    <label>Advisor</label>
+    <referenceTo>Contact</referenceTo>
+    <relationshipLabel>AUM Allocations</relationshipLabel>
+    <relationshipName>AUM_Allocations</relationshipName>
+    <required>true</required>
+    <type>Lookup</type>
+</CustomField>

@@ -1,5 +1,9 @@
 # Phase 4b.2: review feedback
 
+**Update 4b.8 (audit F-08):** see section 22 of the build log. A sweeper restarts work left stuck between background
+steps every 15 minutes. After deploying, schedule it once (step 3.4). New test class StrandedWorkSweeperTest: validate
+with **25 classes, 180 tests**.
+
 **Update 4b.7 (audit F-01, part B):** see section 21.2 of the build log. Fields the system sets are now read-only for
 reviewers and the integration user, a guard refuses hand changes made any other way, and field history is on. Users
 with Trade Import Admin can still fix data by hand (Trade Import Data Fix permission). Nothing changes in the app for a
@@ -66,11 +70,11 @@ What changes in Trade Review:
   cached, so repeat requests cost less.
 - The missing space in *Firm:Northgate…* is fixed.
 
-## 1. Validate (24 test classes, expect 175 tests)
+## 1. Validate (25 test classes, expect 180 tests)
 
 ```powershell
 cd C:\dev\trade-import-demo
-sf project deploy start --source-dir C:\dev\trade-import-demo\force-app --target-org tradeDemo --dry-run --verbose --test-level RunSpecifiedTests --tests AiSettingsTest --tests AnthropicApiClientTest --tests ClaudeServiceTest --tests ClaudeSuggestionTest --tests ClaudeValidationVectorTest --tests CsvParserTest --tests DemoScenarioTest --tests FileIntakeServiceTest --tests ImportBatchProcessorTest --tests MappingProposalTest --tests MappingServiceTest --tests MatchingRuleTest --tests NameMatcherTest --tests NameNormalizerTest --tests ProductDeleteGuardTest --tests ReviewControllerTest --tests ReviewDecisionTest --tests RosterApprovalTest --tests TradeIngestResourceTest --tests TradeMatcherTest --tests SystemWriterTest --tests SecurityModelTest --tests TradeRowNormalizerTest --tests TradeRowNormalizerVectorTest
+sf project deploy start --source-dir C:\dev\trade-import-demo\force-app --target-org tradeDemo --dry-run --verbose --test-level RunSpecifiedTests --tests AiSettingsTest --tests AnthropicApiClientTest --tests ClaudeServiceTest --tests ClaudeSuggestionTest --tests ClaudeValidationVectorTest --tests CsvParserTest --tests DemoScenarioTest --tests FileIntakeServiceTest --tests ImportBatchProcessorTest --tests MappingProposalTest --tests MappingServiceTest --tests MatchingRuleTest --tests NameMatcherTest --tests NameNormalizerTest --tests ProductDeleteGuardTest --tests ReviewControllerTest --tests ReviewDecisionTest --tests RosterApprovalTest --tests TradeIngestResourceTest --tests TradeMatcherTest --tests SystemWriterTest --tests SecurityModelTest --tests StrandedWorkSweeperTest --tests TradeRowNormalizerTest --tests TradeRowNormalizerVectorTest
 ```
 
 Continue only on `Status: Succeeded`. If anything fails, send the full output. The new tests most likely to need a
@@ -91,6 +95,9 @@ The same command without `--dry-run --verbose`.
 3. **AI Suggestion Table on the record pages.** Open any Import Staging Row → gear → **Edit Page** → drag **AI
    Suggestion Table** (Custom) into the right column → **Save** → **Activate** → *Assign as Org Default* → Save.
    Repeat on a Code Follow-Up record.
+4. **Schedule the sweeper** (once; it replaces any earlier schedule):
+   `sf apex run --file scripts/apex/schedule-sweeper.apex --target-org tradeDemo`. Setup → Scheduled Jobs then shows
+   four *Trade View stranded work sweeper* jobs (:00, :15, :30, :45).
 
 ## 4. Reset the demo and try it
 

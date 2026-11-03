@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Balance_Not_Negative</fullName>
+    <active>true</active>
+    <description>A firm reports the value held, which is never below zero.</description>
+    <errorConditionFormula>Balance__c &lt; 0</errorConditionFormula>
+    <errorDisplayField>Balance__c</errorDisplayField>
+    <errorMessage>Balance cannot be negative.</errorMessage>
+</ValidationRule>

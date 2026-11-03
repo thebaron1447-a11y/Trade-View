@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Source_Row__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The staging row this trade was loaded from, for tracing a trade back to the firm's file. Clears if the staging row is deleted.</description>
+    <inlineHelpText>The file row this trade came from.</inlineHelpText>
+    <label>Source Row</label>
+    <referenceTo>Import_Staging_Row__c</referenceTo>
+    <relationshipLabel>Source Trades</relationshipLabel>
+    <relationshipName>Source_Trades</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

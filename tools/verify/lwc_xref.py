@@ -20,7 +20,7 @@ for js in glob.glob(f"{ROOT}/lwc/*/*.js"):
         if target not in sigs:
             problems.append(f"{js}: {target} is not an @AuraEnabled method")
             continue
-        for call in re.finditer(local + r"\(\{([^}]*)\}\)", src, re.S):
+        for call in re.finditer(r"(?<![\w.])" + local + r"\(\{([^}]*)\}\)", src, re.S):
             calls_checked += 1
             # "name: value" pairs and shorthand properties ({ firmId })
             keys = [k.split(":")[0].strip() for k in call.group(1).split(",") if k.strip()]

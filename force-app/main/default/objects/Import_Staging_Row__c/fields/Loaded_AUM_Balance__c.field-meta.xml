@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Loaded_AUM_Balance__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The AUM Balance this row created or replaced. Set by the load for AUM rows. Several rows can point to the same balance when a firm sends it again; the balance's Source Row is the latest.</description>
+    <inlineHelpText>The AUM balance this row became.</inlineHelpText>
+    <label>Loaded AUM Balance</label>
+    <referenceTo>AUM_Balance__c</referenceTo>
+    <relationshipLabel>Loaded Staging Rows</relationshipLabel>
+    <relationshipName>Loaded_Staging_Rows</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

@@ -17,6 +17,37 @@ A **Mapping Profile**, recognised by a header fingerprint, maps the columns. Row
 Staging Rows**, then matched rule-first by **TradeMatcher**: firm, rep code, the advisor(s) on the trade date, and
 the fund. Each row ends as **Matched**, **Needs Review**, **Held** (behind a **Code Follow-Up**) or **Invalid**.
 
+**Loading.** When a reviewer clicks **Load file** (Recent Files), **TradeLoader** books the file's matched Trade
+and AUM rows in the background, 200 rows per queued job, each all or nothing. A Trade row becomes a **Trade** with
+one **Trade Allocation** per credited advisor; an AUM row becomes an **AUM Balance** with **AUM Allocations**.
+Credit follows matching: a Credited Advisor gets 100%, a team row splits by the shares active on the row's date
+(which must total 100%). **TradeAllocator** splits to the cent: each share is rounded towards zero and leftover cents
+go to the largest shares, so allocations always add up to the trade's signed amount (redemptions negative) or the
+balance. If a team's shares changed after matching so they no longer total 100%, or a trade lost its fund, the row
+is not booked: it goes back to Pending with a note and matching holds it or sends it to review, as for a new row.
+A trade's Load Key is its row Id (unique) and an AUM Balance's key is code, fund (or ALL) and as-of date (unique), so
+nothing is booked twice and a re-sent balance replaces the earlier one with a fresh split. Booked rows get Loaded At
+and a link to what they became, and a trigger lock stops their match changing afterwards (only a data fix can). When
+the last chunk is done the file is **Completed** if no row is waiting, else back to **Pending Review**, and Load file
+appears again once more rows are matched. Matching never touches a file while it is Loading; rows a decision sends
+back meanwhile are matched when the load finishes. A failed chunk saves nothing, puts the file back to Pending
+Review and shows the error on it.
+
+**Notifications (4e.2).** **TradeViewNotifier** publishes a **Trade View Update** platform event (published after
+commit; it carries only the kind of work and the batch Id) at the end of reading a file, matching, a Claude job, a
+mapping proposal and each load step. Trade Review subscribes with `lightning/empApi` and refreshes once per burst of
+updates (750 ms debounce). While it is listening it checks only every 30 seconds as a safety net; if it cannot listen,
+it falls back to checking every 5 seconds for up to 3 minutes. The person waiting on a file (Import Batch Notify User:
+set by an upload in the app or by Load file, never by the push job) gets a bell notification (custom notification type
+Trade View, opening the Trade Review tab) when it is read into Mapping Review or Failed, matched, booked, part loaded
+or stopped; Notify User is then cleared, so each wait is told once. Publishing and sending never stop the work.
+
+**Holder confirmation (4e.2).** On a Code Dormant review, **Confirm holder** records on each assignment active today
+that the firm confirmed the holder still uses the code (Holder Confirmed On and By, with field history). The
+dormancy check counts that date like a confirmed trade, so the review is resolved and its held rows match again and
+are credited as usual. It is refused while a roster change for the code is waiting, and when nobody holds the code
+today.
+
 **Claude** then suggests answers for the rows rules can't settle. It sees short keys only, and its answers are
 validated strictly. It also proposes mapping profiles for unknown file formats and drafts follow-up emails to firms.
 
@@ -32,7 +63,8 @@ system-owned fields made any other way (code or automation in system mode) unles
 holds the Trade Import Data Fix custom permission (Trade Import Admin) or Modify All Data. Field history tracks
 decisions, overrides, match results, amounts, holds and assignment on rows; status, assignment and code on code
 reviews; advisor, share and dates on rep code assignments; and status on batches, mapping profiles and matching
-rules. SecurityModelTest checks the reviewer permission set and the guard agree (audit F-01, F-28).
+rules. SecurityModelTest checks the reviewer permission set and the guard agree (audit F-01, F-28). Everything a
+load books (trades, AUM balances, allocations, load stamps) is saved by the writer and read-only for reviewers.
 
 A person decides everything in the **Trade Review** app (an LWC on its own tab). Two tiers:
 - **Enterprise** (the default): Models API and the Trust Layer.
@@ -40,11 +72,19 @@ A person decides everything in the **Trade Review** app (an LWC on its own tab).
 
 Enterprises will almost never use the direct route, because of compliance mandates.
 
+**Stranded work.** Each background step queues the next only when its transaction still has a queueable slot, and
+Developer Edition limits chain depth, so a step can end without starting the next. **StrandedWorkSweeper**, scheduled
+at :00, :15, :30 and :45 (`scripts/apex/schedule-sweeper.apex`), restarts files left Received, rows left Pending in
+staged files, rows and code reviews never sent to Claude (when Claude is on), and loads left part way (a file still
+Loading). It takes only work untouched for 10
+minutes and skips a kind of work while a job of that kind is queued or running, so it never races a job about to
+finish. Failures are never retried: a failed item is marked Failed, so nothing loops (audit F-08).
+
 ## 2. Data model
 
 Custom objects: Import_Batch__c (IB), Import_Staging_Row__c (SR), Mapping_Profile__c (MP), Code_Follow_Up__c (CF),
 Rep_Code__c, Rep_Code_Assignment__c, Firm_Alias__c, Fund_Alias__c, AI_Request_Log__c (AL), Matching_Rule__c (MR),
-Trade__c, Trade_Allocation__c. Custom metadata: Trade_AI_Setting__mdt (record `Default`).
+Trade__c, Trade_Allocation__c, AUM_Balance__c, AUM_Allocation__c. Custom metadata: Trade_AI_Setting__mdt (record `Default`).
 
 Standard objects:
 - **Account**: firms, with branches as child Accounts through ParentId. It has the custom field
@@ -58,7 +98,9 @@ Standard objects:
     Mapping_Profile__c.
   - Status__c: Received, Mapping Review, Processing, Staged, Pending Review, Approved, Loading, Completed, Rejected,
     Failed.
-  - Row, matched, review, held and error counts; Error_Message__c.
+  - Row, matched, review, held and error counts; Loaded_Row_Count__c (set by each load); Error_Message__c.
+  - Pending Review: matched, rows may wait on a person. Loading: Load file is booking matched rows. Completed: every
+    row is loaded, rejected or invalid.
 - **Import_Staging_Row__c, source and matching**
   - Source fields: Source_Firm_Name__c, Source_Rep_Code__c, Source_Advisor_Name__c, Source_Branch_Name__c,
     Source_Fund_Name__c, Trade_Date__c, Transaction_Type__c (Purchase or Redemption), Amount__c, Raw_Data__c.
@@ -86,9 +128,22 @@ Standard objects:
   - Held_Row_Count__c, Held_Amount__c, Last_Seen_Date__c, Follow_Up_Key__c, Suggested_Resolution__c,
     Resolution_Notes__c, Assigned_To__c, AI_* fields.
   - Added in 4b.2: AI_Homework__c, AI_Field_Suggestions__c, Asked_Firm_At__c.
+- **Import_Staging_Row__c, loading (4e)**
+  - Loaded_At__c, Loaded_Trade__c (Lookup Trade), Loaded_AUM_Balance__c (Lookup AUM Balance). A loaded row's match
+    is locked.
+- **Trade__c, Trade_Allocation__c**
+  - Trade: Rep_Code__c, Fund__c, Trade_Date__c, Transaction_Type__c, Amount__c (positive), Signed_Amount__c
+    (formula), Source_Row__c, Load_Key__c (the row Id, unique).
+  - Trade Allocation (master-detail to Trade): Advisor__c, Allocation_Percent__c, Allocated_Amount__c (signed).
+- **AUM_Balance__c, AUM_Allocation__c (4e)**
+  - AUM Balance: Rep_Code__c, Fund__c (blank for a total per code), As_Of_Date__c, Balance__c (not negative),
+    Balance_Key__c (code|fund or ALL|date, unique), Source_Row__c.
+  - AUM Allocation (master-detail to AUM Balance): Advisor__c, Allocation_Percent__c, Allocated_Balance__c.
 - **Rep_Code_Assignment__c**
   - Advisor__c, Allocation_Percent__c, Effective_Start_Date__c, Effective_End_Date__c, End_Date_Source__c,
-    Last_Confirmed_Trade_Date__c.
+    Last_Confirmed_Trade_Date__c, Holder_Confirmed_On__c and Holder_Confirmed_By__c (4e.2, set by Confirm holder).
+- **Import_Batch__c.Notify_User__c** (4e.2): who gets the bell when the file's background work finishes.
+- **Trade_View_Update__e** (4e.2): platform event, Kind__c and Record_Id__c. Reviewers read it; Apex publishes it.
   - Rep_Code__c has Active_Allocation_Total__c (a roll-up; a validation rule keeps it at 100 or below).
 - **Mapping_Profile__c**
   - Source_Firm__c, Firm__c, Single_Firm_Feed__c.
@@ -214,7 +269,7 @@ roster-is-authoritative rule.
 | **On Hold** | Rows put on hold, with their homework |
 | **Email Firms** | One line per firm with questions waiting; the detail lists each question, the contact, Email the firm and Mark as asked |
 | **New File Format** | Files waiting for a mapping; Activate mapping |
-| **Recent Files** | The last 10 files and their outcomes |
+| **Recent Files** | The last 10 files and their outcomes; **Load file** on a file with matched rows ready to book |
 
 **Shared table:** every queue uses `reviewQueueTable` with three columns:
 - Item: headline, origin, assignment or asked date.
@@ -332,18 +387,25 @@ copy of the repository before running them.
    - SOQL with both FOR UPDATE and ORDER BY.
 4. `xref.py` checks that every field and relationship used in Apex exists in the metadata.
 5. `lwc_xref.py` checks every LWC Apex import exists as @AuraEnabled, every call passes exactly the parameter names
-   (shorthand properties included), and every `@salesforce/schema` import exists.
-6. Jest (sfdx-lwc-jest) with ESLint and Prettier (double quotes, no trailing commas): 56 tests (47 tradeReview, 3 reviewQueueTable, 6 aiSuggestionTable).
+   (shorthand properties included), and every `@salesforce/schema` import exists. A call is matched by its whole
+   name, so `uploadFile(` is not read as `loadFile(`.
+6. Jest (sfdx-lwc-jest) with ESLint and Prettier (double quotes, no trailing commas): 62 tests (53 tradeReview, 3 reviewQueueTable, 6 aiSuggestionTable).
 7. Python ports and vectors: `check_vectors.py`, `check_claude_vectors.py`.
 8. Negative controls: break something on purpose and confirm the check fails.
 
-**Dry-run command** (24 test classes, 175 tests):
+**Dry-run command** (29 test classes, 206 tests; run `scripts/apex/unschedule-sweeper.apex` first):
 ```powershell
-sf project deploy start --source-dir force-app --target-org tradeDemo --dry-run --verbose --test-level RunSpecifiedTests --tests AiSettingsTest --tests AnthropicApiClientTest --tests ClaudeServiceTest --tests ClaudeSuggestionTest --tests ClaudeValidationVectorTest --tests CsvParserTest --tests DemoScenarioTest --tests FileIntakeServiceTest --tests ImportBatchProcessorTest --tests MappingProposalTest --tests MappingServiceTest --tests MatchingRuleTest --tests NameMatcherTest --tests NameNormalizerTest --tests ProductDeleteGuardTest --tests ReviewControllerTest --tests ReviewDecisionTest --tests RosterApprovalTest --tests TradeIngestResourceTest --tests TradeMatcherTest --tests SystemWriterTest --tests SecurityModelTest --tests TradeRowNormalizerTest --tests TradeRowNormalizerVectorTest
+sf project deploy start --source-dir force-app --target-org tradeDemo --dry-run --verbose --test-level RunSpecifiedTests --tests AiSettingsTest --tests AnthropicApiClientTest --tests ClaudeServiceTest --tests ClaudeSuggestionTest --tests ClaudeValidationVectorTest --tests CsvParserTest --tests DemoScenarioTest --tests FileIntakeServiceTest --tests ImportBatchProcessorTest --tests MappingProposalTest --tests MappingServiceTest --tests MatchingRuleTest --tests NameMatcherTest --tests NameNormalizerTest --tests ProductDeleteGuardTest --tests ReviewControllerTest --tests ReviewDecisionTest --tests RosterApprovalTest --tests TradeIngestResourceTest --tests TradeMatcherTest --tests SystemWriterTest --tests SecurityModelTest --tests StrandedWorkSweeperTest --tests TradeAllocatorTest --tests TradeLoaderTest --tests TradeViewNotifierTest --tests HolderConfirmationTest --tests TradeRowNormalizerTest --tests TradeRowNormalizerVectorTest
 ```
 To deploy for real, run the same command without `--dry-run --verbose`.
 
 ## 8. Platform lessons learned
+
+- **Scheduled jobs lock the code they reach.** A deploy fails with "This schedulable class has jobs pending or in
+  progress" for every class a scheduled job depends on (for the sweeper, nearly all of them). Run
+  `scripts/apex/unschedule-sweeper.apex` before deploying and `schedule-sweeper.apex` after;
+  `scripts/deploy.ps1` (with `-DryRun` to validate) does both around the deploy, with every test class in the folder. The Deployment
+  Settings bypass exists, but it lets a running job pick up half-deployed code, so it stays off.
 
 **Apex**
 - `system` (and other reserved words) can't name a variable. The local parser allows it; the org doesn't.

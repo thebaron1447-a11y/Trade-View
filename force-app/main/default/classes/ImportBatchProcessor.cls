@@ -52,6 +52,8 @@ public with sharing class ImportBatchProcessor implements Queueable {
             Database.rollback(sp);
             markFailed(batch.Id, e);
         }
+        TradeViewNotifier.changed(TradeViewNotifier.KIND_FILE, batch.Id);
+        TradeViewNotifier.fileSettled(new Set<Id>{ batch.Id }, TradeViewNotifier.MOMENT_READ);
     }
 
     private void process(Import_Batch__c batch) {

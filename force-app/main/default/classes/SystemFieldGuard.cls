@@ -71,8 +71,7 @@ public with sharing class SystemFieldGuard {
      * The custom permission is also read from the user's permission set assignments, because FeatureManagement does not
      * always see a permission deployed in the same deployment while its tests run.
      */
-    @TestVisible
-    private static Boolean mayFixData() {
+    public static Boolean mayFixData() {
         Id me = UserInfo.getUserId();
         if (!mayFixByUser.containsKey(me)) {
             Boolean allowed =

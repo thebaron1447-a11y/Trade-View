@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Assets under management a firm reported for one rep code (and fund, when the firm reports by fund) on one as-of date, loaded from an AUM row. A balance sent again for the same code, fund and date replaces the earlier one, so there is never more than one per key. Advisor credit lives on the AUM Allocation children.</description>
+    <enableActivities>false</enableActivities>
+    <enableBulkApi>true</enableBulkApi>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <enableSharing>true</enableSharing>
+    <enableStreamingApi>true</enableStreamingApi>
+    <externalSharingModel>ReadWrite</externalSharingModel>
+    <label>AUM Balance</label>
+    <nameField>
+        <displayFormat>AUM-{000000}</displayFormat>
+        <label>Balance Number</label>
+        <type>AutoNumber</type>
+    </nameField>
+    <pluralLabel>AUM Balances</pluralLabel>
+    <sharingModel>ReadWrite</sharingModel>
+    <visibility>Public</visibility>
+</CustomObject>

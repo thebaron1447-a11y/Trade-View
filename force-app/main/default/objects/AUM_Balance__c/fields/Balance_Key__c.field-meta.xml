@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Balance_Key__c</fullName>
+    <caseSensitive>false</caseSensitive>
+    <description>Rep code Id, fund Id (or ALL) and as-of date, set by the load. Unique, so a re-sent balance updates the existing record instead of adding a second one.</description>
+    <externalId>true</externalId>
+    <inlineHelpText>System-generated key that keeps one balance per code, fund and date. Do not edit.</inlineHelpText>
+    <label>Balance Key</label>
+    <length>80</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>true</unique>
+</CustomField>

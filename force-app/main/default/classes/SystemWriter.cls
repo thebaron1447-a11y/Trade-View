@@ -31,6 +31,20 @@ public with sharing class SystemWriter {
         save(new List<SObject>{ record }, false);
     }
 
+    /** Deletes what a save replaces (a re-sent AUM balance's allocations), in system mode, all or none. */
+    public static void deleteAll(List<SObject> records) {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        Boolean wasRunning = running;
+        running = true;
+        try {
+            Database.delete(records, true, AccessLevel.SYSTEM_MODE);
+        } finally {
+            running = wasRunning;
+        }
+    }
+
     /** All or none, like DML statements; a nested save (from a trigger) keeps the enclosing save's state when it ends. */
     private static void save(List<SObject> records, Boolean isInsert) {
         if (records == null || records.isEmpty()) {

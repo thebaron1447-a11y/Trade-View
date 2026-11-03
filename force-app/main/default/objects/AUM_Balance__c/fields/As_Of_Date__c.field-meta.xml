@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>As_Of_Date__c</fullName>
+    <description>The date the firm reported the balance for. Determines which Rep Code Assignments (and splits) apply, and is part of the Balance Key.</description>
+    <inlineHelpText>The date this balance was reported for.</inlineHelpText>
+    <label>As Of Date</label>
+    <required>true</required>
+    <type>Date</type>
+</CustomField>

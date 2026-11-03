@@ -11,6 +11,7 @@ public with sharing class MappingProposalJob implements Queueable, Database.Allo
 
     public void execute(QueueableContext context) {
         run(batchId);
+        TradeViewNotifier.changed(TradeViewNotifier.KIND_FILE, batchId);
     }
 
     /** Returns the Draft profile created, or null if nothing was proposed. */

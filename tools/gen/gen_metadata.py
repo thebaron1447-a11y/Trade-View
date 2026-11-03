@@ -352,7 +352,7 @@ field(MP, "AUM_Indicator_Values__c", "AUM Indicator Values", "text",
       "List the values this firm uses to mark AUM rows, separated by commas.", length=255)
 
 field(SR, "Row_Type__c", "Row Type", "picklist",
-      "Kind of row after normalization. Drives which validations apply, which matching rules run and what the row becomes when loaded (Trade, AUM Snapshot or Rep Code Assignment).",
+      "Kind of row after normalization. Drives which validations apply, which matching rules run and what the row becomes (a Trade or an AUM Balance when loaded, or Rep Code Assignments when a roster row is approved).",
       "Shows whether this row is a trade, an AUM balance or an advisor code entry.",
       values=["Trade", "AUM", "Code Roster"])
 field(SR, "Source_Branch_Name__c", "Source Branch Name", "text",
@@ -952,6 +952,124 @@ def listview_xml(cols):
 """
 
 
+# ================================================================ PHASE 4E: loading approved rows
+# A file's matched Trade and AUM rows become Trades with Trade Allocations, and AUM Balances with AUM Allocations,
+# when a reviewer clicks Load file (TradeLoader). Rows still waiting load later, with the next Load.
+AB, AA = "AUM_Balance__c", "AUM_Allocation__c"
+OBJECTS[AB] = dict(
+    label="AUM Balance", plural="AUM Balances", sharing="ReadWrite",
+    name=dict(type="AutoNumber", label="Balance Number", fmt="AUM-{000000}"),
+    desc="Assets under management a firm reported for one rep code (and fund, when the firm reports by fund) on one as-of date, loaded from an AUM row. A balance sent again for the same code, fund and date replaces the earlier one, so there is never more than one per key. Advisor credit lives on the AUM Allocation children.")
+OBJECTS[AA] = dict(
+    label="AUM Allocation", plural="AUM Allocations", sharing="ControlledByParent",
+    name=dict(type="AutoNumber", label="Allocation Number", fmt="AA-{000000}"),
+    desc="One advisor's share of an AUM Balance, snapshotted at load time from the Rep Code Assignments in effect on the as-of date. Advisor-level AUM reporting must use this object, not AUM Balance.")
+field(AB, "Rep_Code__c", "Rep Code", "lookup",
+      "The rep code the balance was reported for, as resolved by matching. The code belongs to one firm, so it also identifies the firm.",
+      "The dealer code this balance was reported under.",
+      ref="Rep_Code__c", rel="AUM_Balances", rel_label="AUM Balances", required=True)
+field(AB, "Fund__c", "Fund", "lookup",
+      "The fund the balance is held in, when the firm reports AUM by fund. Blank when the firm reports one total per code. Lookups to Product2 must be optional and clear on delete.",
+      "The fund this balance is held in. Blank means the total across all funds for the code.",
+      ref="Product2", rel="AUM_Balances", rel_label="AUM Balances", required=False)
+field(AB, "As_Of_Date__c", "As Of Date", "date",
+      "The date the firm reported the balance for. Determines which Rep Code Assignments (and splits) apply, and is part of the Balance Key.",
+      "The date this balance was reported for.", required=True)
+field(AB, "Balance__c", "Balance", "currency",
+      "Market value the firm reported for the code (and fund) on the as-of date. Replaced, not added to, when the firm sends the same balance again.",
+      "The value of the assets on the as-of date.", required=True)
+field(AB, "Balance_Key__c", "Balance Key", "text",
+      "Rep code Id, fund Id (or ALL) and as-of date, set by the load. Unique, so a re-sent balance updates the existing record instead of adding a second one.",
+      "System-generated key that keeps one balance per code, fund and date. Do not edit.",
+      length=80, unique=True, external_id=True)
+field(AB, "Source_Row__c", "Source Row", "lookup",
+      "The staging row this balance was last loaded from, for tracing a number back to the firm's file. Clears if the staging row is deleted.",
+      "The file row this balance came from.",
+      ref=SR, rel="Source_AUM_Balances", rel_label="Source AUM Balances", required=False)
+field(AA, "AUM_Balance__c", "AUM Balance", "md",
+      "The balance being allocated. Master-detail so allocations are deleted with the balance.",
+      "The balance this allocation belongs to.",
+      ref=AB, rel="AUM_Allocations", rel_label="AUM Allocations")
+field(AA, "Advisor__c", "Advisor", "lookup",
+      "The advisor credited with this portion of the balance.",
+      "The advisor credited with this share.",
+      ref="Contact", rel="AUM_Allocations", rel_label="AUM Allocations", required=True)
+field(AA, "Allocation_Percent__c", "Allocation Percent", "percent",
+      "Snapshot of the advisor's share on the as-of date, copied at load time. Deliberately not a formula, so later split changes do not rewrite history.",
+      "The advisor's share of this balance when it was loaded.", required=True)
+field(AA, "Allocated_Balance__c", "Allocated Balance", "currency",
+      "This advisor's share of the Balance, calculated by TradeAllocator at load. Allocations for a balance always sum exactly to the Balance.",
+      "The advisor's share of this balance.", required=True)
+field(T, "Source_Row__c", "Source Row", "lookup",
+      "The staging row this trade was loaded from, for tracing a trade back to the firm's file. Clears if the staging row is deleted.",
+      "The file row this trade came from.",
+      ref=SR, rel="Source_Trades", rel_label="Source Trades", required=False)
+field(T, "Load_Key__c", "Load Key", "text",
+      "Id of the staging row the trade was loaded from. Unique, so loading the same row twice can never create a second trade.",
+      "System-generated key that stops a row being loaded twice. Do not edit.",
+      length=18, unique=True, external_id=True)
+field(SR, "Loaded_At__c", "Loaded At", "datetime",
+      "When the load turned this matched row into a Trade or an AUM Balance. Blank means not loaded yet. A loaded row can no longer be re-matched or decided.",
+      "When this row was loaded. Set by the system.")
+field(SR, "Loaded_Trade__c", "Loaded Trade", "lookup",
+      "The Trade created from this row. Set by the load for Trade rows.",
+      "The trade this row became.",
+      ref=T, rel="Loaded_Staging_Rows", rel_label="Loaded Staging Rows", required=False)
+field(SR, "Loaded_AUM_Balance__c", "Loaded AUM Balance", "lookup",
+      "The AUM Balance this row created or replaced. Set by the load for AUM rows. Several rows can point to the same balance when a firm sends it again; the balance's Source Row is the latest.",
+      "The AUM balance this row became.",
+      ref=AB, rel="Loaded_Staging_Rows", rel_label="Loaded Staging Rows", required=False)
+field(IB, "Loaded_Row_Count__c", "Loaded Row Count", "number",
+      "Number of this file's rows loaded as Trades or AUM Balances, set by each load. With rejected and invalid rows, it reconciles to Row Count once the file is Completed.",
+      "How many rows in this file have been loaded.", precision=6, scale=0)
+for _f in F:
+    if _f["obj"] == IB and _f["api"] == "Status__c":
+        _f["desc"] = ("Lifecycle stage of an import batch. Received is set by the inbound endpoint. Mapping Review means no active mapping profile matched the file's headers, or the matching profile is incomplete. Staged means every row was normalized and the batch is ready for matching. Pending Review means matching ran and rows may be waiting on a person. "
+                      "Loading means a reviewer clicked Load file and matched rows are being booked. Completed means every row is loaded, rejected or invalid. Set by Apex only.")
+        _f["help"] = "Shows where this import is in the process. Mapping Review and Pending Review files are waiting on a reviewer; Completed files are fully booked."
+VRS_P4E = [
+    (AB, "Balance_Not_Negative", "Balance__c < 0", "Balance__c",
+     "Balance cannot be negative.", "A firm reports the value held, which is never below zero."),
+]
+LAYOUTS[T]["right"][3:3] = [("Source_Row__c", "Readonly"), ("Load_Key__c", "Readonly")]
+LAYOUTS["Rep_Code__c"]["related"].append(
+    ("AUM_Balance__c.Rep_Code__c", ["NAME", "As_Of_Date__c", "Fund__c", "Balance__c"]))
+LAYOUTS[AB] = dict(
+    left=[("Name", "Readonly"), ("Rep_Code__c", "Required"), ("Fund__c", "Edit"), ("As_Of_Date__c", "Required")],
+    right=[("Balance__c", "Required"), ("Source_Row__c", "Readonly"), ("Balance_Key__c", "Readonly"), ("OwnerId", "Edit")],
+    related=[("AUM_Allocation__c.AUM_Balance__c", ["NAME", "Advisor__c", "Allocation_Percent__c", "Allocated_Balance__c"])],
+    listcols=["NAME", "As_Of_Date__c", "Rep_Code__c", "Fund__c", "Balance__c"])
+LAYOUTS[AA] = dict(
+    left=[("Name", "Readonly"), ("AUM_Balance__c", "Required"), ("Advisor__c", "Required")],
+    right=[("Allocation_Percent__c", "Required"), ("Allocated_Balance__c", "Required")],
+    related=[],
+    listcols=["NAME", "AUM_Balance__c", "Advisor__c", "Allocation_Percent__c", "Allocated_Balance__c"])
+APEX_CLASSES += ["TradeAllocator", "TradeLoader"]
+EXTRA_P3B[SR].append(("Loaded", [("Loaded_At__c", "Readonly"), ("Loaded_Trade__c", "Readonly"),
+                                 ("Loaded_AUM_Balance__c", "Readonly")]))
+LAYOUTS_P2[IB]["right"].insert(5, ("Loaded_Row_Count__c", "Readonly"))
+LAYOUTS_P2[IB]["listcols"].insert(5, "Loaded_Row_Count__c")
+
+
+
+# ================================================================ PHASE 4E.2: notifications and holder confirmation
+field(IB, "Notify_User__c", "Notify User", "lookup",
+      "The person waiting on this file: whoever uploaded it in Trade Review or clicked Load file. When reading, matching or loading finishes, they get a Trade View bell notification and the field is cleared, so each wait is notified once. Blank for files the push job sends.",
+      "Who gets a notification when this file's background work finishes. Set by the system.",
+      ref="User", rel="Notified_Import_Batches", rel_label="Notified Import Batches", required=False)
+field(A, "Holder_Confirmed_On__c", "Holder Confirmed On", "date",
+      "The date the firm confirmed this advisor still holds the code, recorded by Confirm holder on a Code Dormant review. Matching counts it like a confirmed trade, so the code is not treated as dormant for rows up to 180 days after it.",
+      "When the firm last confirmed this advisor still uses the code. Set by Confirm holder in Trade Review.")
+field(A, "Holder_Confirmed_By__c", "Holder Confirmed By", "lookup",
+      "Who recorded the firm's confirmation that this advisor still holds the code (Confirm holder in Trade Review).",
+      "Who recorded the confirmation. Set by the system.",
+      ref="User", rel="Confirmed_Rep_Code_Holders", rel_label="Confirmed Rep Code Holders", required=False)
+APEX_CLASSES += ["TradeViewNotifier"]
+LAYOUTS[A]["right"] += [("Holder_Confirmed_On__c", "Readonly"), ("Holder_Confirmed_By__c", "Readonly")]
+LAYOUTS_P2[IB]["right"].insert(6, ("Notify_User__c", "Readonly"))
+EVENT = "Trade_View_Update__e"
+NOTIF_TYPE = "Trade_View"
+
 # ---------------------------------------------------------------- security model (audit F-01)
 # Fields only the system sets: background steps save them through SystemWriter (system mode), so the Reviewer and
 # Integration permission sets get them read-only, and a trigger guard (SystemFieldGuard) refuses hand changes made
@@ -964,7 +1082,8 @@ REVIEWER_FIELDS = {
 }
 LOCKED = {f"{f['obj']}.{f['api']}" for f in F if f["obj"] in REVIEWER_FIELDS and f["api"] not in REVIEWER_FIELDS[f["obj"]]}
 LOCKED |= {f"{MP}.AI_Rationale__c", f"{MP}.Proposed_From_Batch__c", f"{MP}.Header_Fingerprint__c",
-           f"{MR}.Approved_At__c", f"{MR}.Approved_By__c", f"{A}.Last_Confirmed_Trade_Date__c"}
+           f"{MR}.Approved_At__c", f"{MR}.Approved_By__c", f"{A}.Last_Confirmed_Trade_Date__c",
+           f"{A}.Holder_Confirmed_On__c", f"{A}.Holder_Confirmed_By__c"}
 DATA_FIX = "Trade_Import_Data_Fix"
 # Field history: who changed a decision, a match result, an assignment or a status, and when (20 fields per object).
 HISTORY = {
@@ -972,7 +1091,7 @@ HISTORY = {
          "Credited_Advisor__c", "Matched_Firm__c", "Matched_Fund__c", "Amount__c", "On_Hold__c", "Assigned_To__c",
          "Decided_By__c"},
     CF: {"Status__c", "Assigned_To__c", "Rep_Code__c"},
-    A: {"Advisor__c", "Allocation_Percent__c", "Effective_Start_Date__c", "Effective_End_Date__c"},
+    A: {"Advisor__c", "Allocation_Percent__c", "Effective_Start_Date__c", "Effective_End_Date__c", "Holder_Confirmed_On__c"},
     IB: {"Status__c"},
     MP: {"Status__c"},
     MR: {"Status__c"},
@@ -1065,6 +1184,7 @@ for obj_, secs in EXTRA_P3B.items():
 LAYOUTS[IB]["right"].append(("Header_Fingerprint__c", "Readonly"))
 VRS.extend(VRS_P2)
 VRS.extend(VRS_P3B)
+VRS.extend(VRS_P4E)
 for api, o in OBJECTS.items():
     w(f"objects/{api}/{api}.object-meta.xml", object_xml(dict(o, api=api)))
     w(f"objects/{api}/listViews/All.listView-meta.xml", listview_xml(LAYOUTS[api]["listcols"]))
@@ -1076,7 +1196,8 @@ for obj, name, formula, disp, msg, desc in VRS:
 
 # Object tabs (phase 3A: the follow-up to-do list must be reachable from the App Launcher for the demo).
 TABS = {"Code_Follow_Up__c": "Custom53: Bell", AL: "Custom63: Chip", MR: "Custom90: Scales",
-        IB: "Custom13: Box", SR: "Custom18: Form", MP: "Custom78: Map"}
+        IB: "Custom13: Box", SR: "Custom18: Form", MP: "Custom78: Map",
+        "Trade__c": "Custom17: Sack", "AUM_Balance__c": "Custom16: Bank"}
 # Phase 3B: the reviewer's work queue until the review LWC (phase 4) exists.
 w(f"objects/{SR}/listViews/Needs_Review.listView-meta.xml", f"""<?xml version="1.0" encoding="UTF-8"?>
 <ListView {NS}>
@@ -1166,6 +1287,44 @@ vals = "".join(f"""
         <field>{f_}</field>
         <value xsi:type="xsd:{t_}">{v_}</value>
     </values>""" for f_, t_, v_ in CMT_VALUES)
+w(f"objects/{EVENT}/{EVENT}.object-meta.xml", f"""<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject {NS}>
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Published when background work finishes (a file read, rows matched, Claude answered, a load step), after the transaction commits. An open Trade Review page listens for it and refreshes once. It names what changed and its record, nothing else.</description>
+    <eventType>HighVolume</eventType>
+    <label>Trade View Update</label>
+    <pluralLabel>Trade View Updates</pluralLabel>
+    <publishBehavior>PublishAfterCommit</publishBehavior>
+</CustomObject>
+""")
+for _api, _label, _len, _desc in [
+    ("Kind__c", "Kind", 40, "What finished: File (read or mapped), Rows (matched), Claude (suggestions) or Load (a load step)."),
+    ("Record_Id__c", "Record Id", 18, "The Import Batch the work was for, when there is one."),
+]:
+    w(f"objects/{EVENT}/fields/{_api}.field-meta.xml", f"""<?xml version="1.0" encoding="UTF-8"?>
+<CustomField {NS}>
+    <fullName>{_api}</fullName>
+    <description>{x(_desc)}</description>
+    <externalId>false</externalId>
+    <isFilteringDisabled>false</isFilteringDisabled>
+    <isNameField>false</isNameField>
+    <isSortingDisabled>false</isSortingDisabled>
+    <label>{_label}</label>
+    <length>{_len}</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>
+""")
+w(f"notificationtypes/{NOTIF_TYPE}.notiftype-meta.xml", f"""<?xml version="1.0" encoding="UTF-8"?>
+<CustomNotificationType {NS}>
+    <customNotifTypeName>Trade View</customNotifTypeName>
+    <description>Tells the person who uploaded a file or clicked Load file in Trade Review when that work is done or needs them.</description>
+    <desktop>true</desktop>
+    <masterLabel>Trade View</masterLabel>
+    <mobile>true</mobile>
+</CustomNotificationType>
+""")
 w("customMetadata/Trade_AI_Setting.Default.md-meta.xml", f"""<?xml version="1.0" encoding="UTF-8"?>
 <CustomMetadata {NS} xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
     <label>Default</label>
@@ -1179,7 +1338,7 @@ R_ = (False, True, False, False, False, False)
 w("permissionsets/Trade_Import_Admin.permissionset-meta.xml", permset_xml(
     "Trade Import Admin",
     "Full access to the trade import data model, ingestion objects and Apex. For admins and the demo user.",
-    {o: FULL for o in OBJECTS}, set(), APEX_CLASSES, tabs=list(TABS) + ["Trade_Review"], cmts=[CMT],
+    dict({o: FULL for o in OBJECTS}, **{EVENT: (True, True, False, False, False, False)}), set(), APEX_CLASSES, tabs=list(TABS) + ["Trade_Review"], cmts=[CMT],
     standard_edit_fields=["Account.Operations_Contact__c"], custom_perms=[DATA_FIX]))
 w(f"customPermissions/{DATA_FIX}.customPermission-meta.xml", f"""<?xml version="1.0" encoding="UTF-8"?>
 <CustomPermission {NS}>
@@ -1217,8 +1376,12 @@ w("permissionsets/Trade_Import_Reviewer.permissionset-meta.xml", permset_xml(
     {IB: R_, SR: RE, CF: RE, MP: RE, AL: R_, MR: CRE,
      "Rep_Code__c": CRE, "Rep_Code_Assignment__c": CRE,
      "Firm_Alias__c": R_, "Fund_Alias__c": R_,
-     "Account": R_, "Contact": R_, "Product2": R_},
-    {IB, AL, "Firm_Alias__c", "Fund_Alias__c", "Account", "Contact", "Product2"},
+     "Account": R_, "Contact": R_, "Product2": R_,
+     # What a load books, to look at: every field is set by the load (through SystemWriter).
+     T: R_, TA: R_, "AUM_Balance__c": R_, "AUM_Allocation__c": R_,
+     # The Trade Review page listens for this event to refresh when background work finishes.
+     EVENT: R_},
+    {IB, AL, "Firm_Alias__c", "Fund_Alias__c", "Account", "Contact", "Product2", T, TA, "AUM_Balance__c", "AUM_Allocation__c"},
     ["ReviewController"], standard_read_fields=["Account.ParentId", "Contact.Email", "Contact.AccountId"],
     tabs=list(TABS) + ["Trade_Review"], cmts=[CMT], locked=LOCKED))
 

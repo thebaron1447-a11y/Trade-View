@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>One advisor's share of an AUM Balance, snapshotted at load time from the Rep Code Assignments in effect on the as-of date. Advisor-level AUM reporting must use this object, not AUM Balance.</description>
+    <enableActivities>false</enableActivities>
+    <enableBulkApi>true</enableBulkApi>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <enableSharing>true</enableSharing>
+    <enableStreamingApi>true</enableStreamingApi>
+    <externalSharingModel>ControlledByParent</externalSharingModel>
+    <label>AUM Allocation</label>
+    <nameField>
+        <displayFormat>AA-{000000}</displayFormat>
+        <label>Allocation Number</label>
+        <type>AutoNumber</type>
+    </nameField>
+    <pluralLabel>AUM Allocations</pluralLabel>
+    <sharingModel>ControlledByParent</sharingModel>
+    <visibility>Public</visibility>
+</CustomObject>

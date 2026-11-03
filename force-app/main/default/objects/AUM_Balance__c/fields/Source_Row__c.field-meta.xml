@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Source_Row__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The staging row this balance was last loaded from, for tracing a number back to the firm's file. Clears if the staging row is deleted.</description>
+    <inlineHelpText>The file row this balance came from.</inlineHelpText>
+    <label>Source Row</label>
+    <referenceTo>Import_Staging_Row__c</referenceTo>
+    <relationshipLabel>Source AUM Balances</relationshipLabel>
+    <relationshipName>Source_AUM_Balances</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

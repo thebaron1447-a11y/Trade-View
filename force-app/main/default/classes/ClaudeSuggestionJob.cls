@@ -23,12 +23,13 @@ public with sharing class ClaudeSuggestionJob implements Queueable, Database.All
 
     public void execute(QueueableContext context) {
         Boolean moreWork = run(batchIds);
+        TradeViewNotifier.changed(TradeViewNotifier.KIND_CLAUDE, null);
         if (moreWork && !Test.isRunningTest()) {
             try {
                 System.enqueueJob(new ClaudeSuggestionJob(batchIds));
             } catch (System.AsyncException e) {
                 // Chain depth reached (Developer Edition allows 5). Nothing is lost: remaining items keep a blank
-                // AI Status and are picked up by the next matching run or by scripts/apex/request-suggestions.apex.
+                // AI Status and are picked up by StrandedWorkSweeper (every 15 minutes) or the next matching run.
                 return;
             }
         }

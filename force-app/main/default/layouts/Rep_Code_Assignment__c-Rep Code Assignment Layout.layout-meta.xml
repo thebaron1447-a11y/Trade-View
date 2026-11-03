@@ -40,6 +40,14 @@
                 <behavior>Edit</behavior>
                 <field>Last_Confirmed_Trade_Date__c</field>
             </layoutItems>
+            <layoutItems>
+                <behavior>Readonly</behavior>
+                <field>Holder_Confirmed_On__c</field>
+            </layoutItems>
+            <layoutItems>
+                <behavior>Readonly</behavior>
+                <field>Holder_Confirmed_By__c</field>
+            </layoutItems>
         </layoutColumns>
         <style>TwoColumnsTopToBottom</style>
     </layoutSections>

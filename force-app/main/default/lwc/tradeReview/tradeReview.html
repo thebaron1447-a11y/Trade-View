@@ -175,6 +175,22 @@
                           >{file.message}</span
                         >
                       </template>
+                      <template lwc:if={file.canLoad}>
+                        <lightning-button
+                          class="slds-m-top_x-small slds-show"
+                          variant="brand"
+                          label={file.loadLabel}
+                          data-id={file.id}
+                          disabled={busy}
+                          onclick={handleLoadFile}
+                        ></lightning-button>
+                        <template lwc:if={file.loadNote}>
+                          <span
+                            class="slds-text-body_small slds-text-color_weak slds-show"
+                            >{file.loadNote}</span
+                          >
+                        </template>
+                      </template>
                     </li>
                   </template>
                 </ul>
@@ -750,6 +766,22 @@
                   ></lightning-combobox>
                 </template>
                 <ul class="fix-options">
+                  <template lwc:if={selectedFollowUp.canConfirmHolder}>
+                    <li class="slds-grid slds-gutters_x-small fix-option">
+                      <div class="slds-col slds-no-flex fix-button">
+                        <lightning-button
+                          class="confirm-holder"
+                          variant="brand"
+                          label="Confirm holder"
+                          disabled={confirmHolderDisabled}
+                          onclick={handleConfirmHolder}
+                        ></lightning-button>
+                      </div>
+                      <p class="slds-col slds-text-body_small fix-help">
+                        {confirmHolderHelp}
+                      </p>
+                    </li>
+                  </template>
                   <template lwc:if={selectedFollowUp.canCredit}>
                     <li class="slds-grid slds-gutters_x-small fix-option">
                       <div class="slds-col slds-no-flex fix-button">

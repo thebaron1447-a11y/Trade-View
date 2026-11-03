@@ -1,6 +1,6 @@
 // Puts the demo's reference data back exactly as seeded, so every planted problem shows up again:
 // deletes all rep codes, assignments, firm and fund aliases (including spellings taught by reviewers), matching rules,
-// trades, and any advisor at the seeded firms who is not in the seed (for example Hannah Pierce or Priya Nair,
+// trades, AUM balances, and any advisor at the seeded firms who is not in the seed (for example Hannah Pierce or Priya Nair,
 // created by approving roster rows), then recreates the seeded codes, assignments and aliases.
 // Firms, branches, seeded advisors and funds keep their Ids. Run reset-imports.apex first (or use reset-demo-full.ps1).
 // Generated from data/*.json by tools: gen_reset_full.py. Do not edit by hand.
@@ -23,6 +23,8 @@ if (!missingAccounts.isEmpty()) {
 
 delete [SELECT Id FROM Trade_Allocation__c LIMIT 10000];
 delete [SELECT Id FROM Trade__c LIMIT 10000];
+delete [SELECT Id FROM AUM_Allocation__c LIMIT 10000];
+delete [SELECT Id FROM AUM_Balance__c LIMIT 10000];
 delete [SELECT Id FROM Matching_Rule__c LIMIT 10000];
 delete [SELECT Id FROM Rep_Code_Assignment__c LIMIT 10000];
 delete [SELECT Id FROM Rep_Code__c LIMIT 10000];

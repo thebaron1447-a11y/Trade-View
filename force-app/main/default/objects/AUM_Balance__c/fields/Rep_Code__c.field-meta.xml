@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Rep_Code__c</fullName>
+    <deleteConstraint>Restrict</deleteConstraint>
+    <description>The rep code the balance was reported for, as resolved by matching. The code belongs to one firm, so it also identifies the firm.</description>
+    <inlineHelpText>The dealer code this balance was reported under.</inlineHelpText>
+    <label>Rep Code</label>
+    <referenceTo>Rep_Code__c</referenceTo>
+    <relationshipLabel>AUM Balances</relationshipLabel>
+    <relationshipName>AUM_Balances</relationshipName>
+    <required>true</required>
+    <type>Lookup</type>
+</CustomField>

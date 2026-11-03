@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Published when background work finishes (a file read, rows matched, Claude answered, a load step), after the transaction commits. An open Trade Review page listens for it and refreshes once. It names what changed and its record, nothing else.</description>
+    <eventType>HighVolume</eventType>
+    <label>Trade View Update</label>
+    <pluralLabel>Trade View Updates</pluralLabel>
+    <publishBehavior>PublishAfterCommit</publishBehavior>
+</CustomObject>

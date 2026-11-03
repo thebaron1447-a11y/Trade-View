@@ -382,6 +382,11 @@ public with sharing class ReviewController {
         public Date rosterDate;
         @AuraEnabled
         public String rosterName;
+        /** For a dormant code: who holds it today, by name, and whether Confirm holder can settle the review. */
+        @AuraEnabled
+        public String holderNames;
+        @AuraEnabled
+        public Boolean canConfirmHolder = false;
         // Earliest and latest held row dates, for advisorOptions.
         private Date firstHeld;
         private Date lastHeld;
@@ -428,6 +433,14 @@ public with sharing class ReviewController {
         public Integer heldCount;
         @AuraEnabled
         public Integer errorCount;
+        @AuraEnabled
+        public Integer loadedCount;
+        /** Matched Trade and AUM rows not loaded yet. */
+        @AuraEnabled
+        public Integer loadableCount;
+        /** True when Load file can run now: matching has finished and rows are ready. */
+        @AuraEnabled
+        public Boolean canLoad;
         @AuraEnabled
         public String message;
         @AuraEnabled
@@ -1219,6 +1232,7 @@ public with sharing class ReviewController {
             }
             countHeldRows(byId);
             addAdvisorOptions(byId.values());
+            addHolders(byId.values());
         }
         for (Code_Follow_Up__c f : followUps) {
             FollowUpItem it = byId.get(f.Id);
@@ -1290,6 +1304,54 @@ public with sharing class ReviewController {
         }
     }
 
+    /** For each dormant code review, who holds the code today: the people Confirm holder records as still using it. */
+    private static void addHolders(List<FollowUpItem> items) {
+        Map<Id, List<FollowUpItem>> byCode = new Map<Id, List<FollowUpItem>>();
+        for (FollowUpItem it : items) {
+            if (it.repCodeId != null && it.reason == TradeMatcher.REASON_DORMANT) {
+                if (!byCode.containsKey(it.repCodeId)) {
+                    byCode.put(it.repCodeId, new List<FollowUpItem>());
+                }
+                byCode.get(it.repCodeId).add(it);
+            }
+        }
+        if (byCode.isEmpty()) {
+            return;
+        }
+        Map<Id, List<String>> namesByCode = new Map<Id, List<String>>();
+        for (Rep_Code_Assignment__c a : currentHolders(byCode.keySet())) {
+            if (!namesByCode.containsKey(a.Rep_Code__c)) {
+                namesByCode.put(a.Rep_Code__c, new List<String>());
+            }
+            namesByCode.get(a.Rep_Code__c).add(a.Advisor__r.Name);
+        }
+        for (Id codeId : byCode.keySet()) {
+            List<String> names = namesByCode.get(codeId);
+            for (FollowUpItem it : byCode.get(codeId)) {
+                it.holderNames = names == null ? null : String.join(names, ' and ');
+                it.canConfirmHolder = names != null;
+            }
+        }
+    }
+
+    /** Assignments active today on these codes, largest share first. */
+    private static List<Rep_Code_Assignment__c> currentHolders(Set<Id> codeIds) {
+        Date onDate = System.today();
+        return [
+            SELECT Id, Rep_Code__c, Advisor__c, Advisor__r.Name
+            FROM Rep_Code_Assignment__c
+            WHERE
+                Rep_Code__c IN :codeIds
+                AND Advisor__c != NULL
+                AND Effective_Start_Date__c <= :onDate
+                AND (Effective_End_Date__c = NULL
+                OR Effective_End_Date__c >= :onDate)
+            WITH USER_MODE
+            ORDER BY Allocation_Percent__c DESC, Advisor__r.LastName
+            LIMIT :MAX_OPTIONS
+        ];
+    }
+
     private static Boolean hasOption(List<Option> options, Id value) {
         for (Option o : options) {
             if (o.value == String.valueOf(value)) {
@@ -1354,6 +1416,7 @@ public with sharing class ReviewController {
                 Review_Row_Count__c,
                 Held_Row_Count__c,
                 Error_Row_Count__c,
+                Loaded_Row_Count__c,
                 Error_Message__c,
                 CreatedDate
             FROM Import_Batch__c
@@ -1372,9 +1435,32 @@ public with sharing class ReviewController {
             it.reviewCount = toInteger(b.Review_Row_Count__c);
             it.heldCount = toInteger(b.Held_Row_Count__c);
             it.errorCount = toInteger(b.Error_Row_Count__c);
+            it.loadedCount = toInteger(b.Loaded_Row_Count__c);
             it.message = b.Error_Message__c;
             it.receivedAt = b.CreatedDate;
             result.add(it);
+        }
+        Map<Id, FileItem> byId = new Map<Id, FileItem>();
+        for (FileItem it : result) {
+            byId.put(it.id, it);
+            it.loadableCount = 0;
+        }
+        for (AggregateResult ar : [
+            SELECT Import_Batch__c batchId, COUNT(Id) n
+            FROM Import_Staging_Row__c
+            WHERE
+                Import_Batch__c IN :byId.keySet()
+                AND Match_Status__c = :TradeMatcher.MATCHED
+                AND Row_Type__c IN :TradeLoader.LOADABLE_TYPES
+                AND Loaded_At__c = NULL
+                AND Has_Errors__c = FALSE
+            WITH USER_MODE
+            GROUP BY Import_Batch__c
+        ]) {
+            byId.get((Id) ar.get('batchId')).loadableCount = (Integer) ar.get('n');
+        }
+        for (FileItem it : result) {
+            it.canLoad = it.status == TradeMatcher.STATUS_PENDING_REVIEW && it.loadableCount > 0;
         }
         return result;
     }
@@ -1429,7 +1515,7 @@ public with sharing class ReviewController {
 
     private static Integer inFlight(Boolean claudeEnabled) {
         Integer count =
-            [SELECT COUNT() FROM Import_Batch__c WHERE Status__c IN ('Received', 'Processing') WITH USER_MODE] +
+            [SELECT COUNT() FROM Import_Batch__c WHERE Status__c IN ('Received', 'Processing', 'Loading') WITH USER_MODE] +
             [SELECT COUNT() FROM Import_Staging_Row__c WHERE Match_Status__c = :TradeMatcher.PENDING WITH USER_MODE];
         if (claudeEnabled) {
             count +=
@@ -1766,6 +1852,64 @@ public with sharing class ReviewController {
     }
 
     /**
+     * Confirm holder, for a Code Dormant review: the firm has confirmed the people holding the code today still use it.
+     * Their assignments record the confirmation (Holder Confirmed On and By, kept in field history), which matching
+     * counts like a confirmed trade, so the code is no longer dormant; the review is resolved and its held rows are
+     * matched again and credited as usual. Refused while a roster change for the code is waiting, since that is the fix.
+     * Returns how many held rows are re-matched.
+     */
+    @AuraEnabled
+    public static Integer confirmHolder(Id followUpId) {
+        Code_Follow_Up__c f = openCodeReview(followUpId);
+        if (f.Reason__c != TradeMatcher.REASON_DORMANT || f.Rep_Code__c == null) {
+            throw fail('Confirm holder settles a dormant code review only. Use the other options for this one.');
+        }
+        RosterLock lock = rosterLocks(new List<Code_Follow_Up__c>{ f }).get(f.Id);
+        if (lock != null && !lock.covered.isEmpty()) {
+            throw fail(waitMessage(f, lock));
+        }
+        List<Rep_Code_Assignment__c> holders = currentHolders(new Set<Id>{ f.Rep_Code__c });
+        if (holders.isEmpty()) {
+            throw fail(
+                'Nobody holds code ' +
+                    f.Rep_Code_Value__c +
+                    ' today, so there is no holder to confirm. Set up its assignment, then choose Code fixed: re-match.'
+            );
+        }
+        Id me = UserInfo.getUserId();
+        Date confirmedOn = System.today();
+        List<Rep_Code_Assignment__c> changes = new List<Rep_Code_Assignment__c>();
+        List<String> names = new List<String>();
+        for (Rep_Code_Assignment__c a : holders) {
+            changes.add(new Rep_Code_Assignment__c(Id = a.Id, Holder_Confirmed_On__c = confirmedOn, Holder_Confirmed_By__c = me));
+            names.add(a.Advisor__r.Name);
+        }
+        try {
+            SystemWriter.updateAll(changes);
+        } catch (DmlException e) {
+            throw fail(e.getDmlMessage(0));
+        }
+        Integer held = [
+            SELECT COUNT()
+            FROM Import_Staging_Row__c
+            WHERE Code_Follow_Up__c = :f.Id AND Match_Status__c = :TradeMatcher.HELD
+            WITH USER_MODE
+        ];
+        noteReview(
+            f,
+            CodeFollowUpService.STATUS_RESOLVED,
+            'The firm confirmed ' +
+                String.join(names, ' and ') +
+                (names.size() == 1 ? ' still holds' : ' still hold') +
+                ' code ' +
+                f.Rep_Code_Value__c +
+                '; re-matched ' +
+                heldRows(held)
+        );
+        return held;
+    }
+
+    /**
      * Closes a code review from the app. Fixed: the code was set up in Salesforce, so the held rows are re-matched
      * (Resolved); refused while rows wait for a roster change, which is the fix. Not fixed: the rows go to Needs
      * Decision to be settled one by one (Closed - No Action); with rows waiting for a roster change, only the others
@@ -1989,6 +2133,40 @@ public with sharing class ReviewController {
         }
     }
 
+    /**
+     * Load file: books the file's matched Trade and AUM rows as Trades and AUM Balances with each advisor's share
+     * (TradeLoader, in the background). Rows still in review or on hold stay in the file and load with a later Load.
+     * Returns how many rows will load.
+     */
+    @AuraEnabled
+    public static Integer loadFile(Id batchId) {
+        requireType(batchId, Import_Batch__c.SObjectType, 'Choose a file to load.');
+        List<Import_Batch__c> found = [SELECT Id, Status__c FROM Import_Batch__c WHERE Id = :batchId WITH USER_MODE LIMIT 1 FOR UPDATE];
+        if (found.isEmpty()) {
+            throw fail('This file no longer exists or is not visible to you.');
+        }
+        String status = found[0].Status__c;
+        if (status == TradeLoader.STATUS_LOADING) {
+            throw fail('This file is already loading. Refresh to see when it finishes.');
+        }
+        if (status != TradeMatcher.STATUS_PENDING_REVIEW) {
+            throw fail('A file can be loaded once matching has finished. This file is ' + status + '.');
+        }
+        Integer ready = TradeLoader.loadableCount(batchId);
+        if (ready == 0) {
+            throw fail('No matched rows are waiting to load in this file. Rows in review or on hold load once they are decided.');
+        }
+        if (Limits.getQueueableJobs() >= Limits.getLimitQueueableJobs()) {
+            throw fail('Salesforce is busy with other background work. Try Load file again in a minute.');
+        }
+        // Whoever clicks Load file gets the bell when it finishes (TradeViewNotifier).
+        SystemWriter.updateOne(
+            new Import_Batch__c(Id = batchId, Status__c = TradeLoader.STATUS_LOADING, Error_Message__c = null, Notify_User__c = UserInfo.getUserId())
+        );
+        System.enqueueJob(new TradeLoader(batchId));
+        return ready;
+    }
+
     /** Activates a Draft mapping profile; MappingProfileTrigger then processes the files waiting for it. */
     @AuraEnabled
     public static void activateMapping(Id profileId) {
@@ -2016,6 +2194,10 @@ public with sharing class ReviewController {
             FileIntakeService.Receipt r = FileIntakeService.receive(sourceFirm, fileName, file, null);
             if (r.hidden) {
                 throw fail(r.message);
+            }
+            if (!r.duplicate && r.batchId != null) {
+                // The person who uploaded the file gets the bell once it is read and matched (TradeViewNotifier).
+                SystemWriter.updateOne(new Import_Batch__c(Id = r.batchId, Notify_User__c = UserInfo.getUserId()));
             }
             return r;
         } catch (FileIntakeService.IntakeException e) {

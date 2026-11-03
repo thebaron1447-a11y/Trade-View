@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Fund__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The fund the balance is held in, when the firm reports AUM by fund. Blank when the firm reports one total per code. Lookups to Product2 must be optional and clear on delete.</description>
+    <inlineHelpText>The fund this balance is held in. Blank means the total across all funds for the code.</inlineHelpText>
+    <label>Fund</label>
+    <referenceTo>Product2</referenceTo>
+    <relationshipLabel>AUM Balances</relationshipLabel>
+    <relationshipName>AUM_Balances</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

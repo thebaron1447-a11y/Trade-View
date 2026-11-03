@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Holder_Confirmed_On__c</fullName>
+    <description>The date the firm confirmed this advisor still holds the code, recorded by Confirm holder on a Code Dormant review. Matching counts it like a confirmed trade, so the code is not treated as dormant for rows up to 180 days after it.</description>
+    <inlineHelpText>When the firm last confirmed this advisor still uses the code. Set by Confirm holder in Trade Review.</inlineHelpText>
+    <label>Holder Confirmed On</label>
+    <required>false</required>
+    <trackHistory>true</trackHistory>
+    <type>Date</type>
+</CustomField>
