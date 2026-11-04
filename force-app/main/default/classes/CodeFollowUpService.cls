@@ -153,6 +153,24 @@ public with sharing class CodeFollowUpService {
         SystemWriter.updateAll(updates.values());
     }
 
+    /**
+     * Before-update trigger handler (phase 4f): stamps who put a code review on hold and when, here rather than sent by
+     * the app, so nobody can set them by hand; and takes a review off hold when it is resolved or closed.
+     */
+    public static void beforeSave(List<Code_Follow_Up__c> updated, Map<Id, Code_Follow_Up__c> previous) {
+        Id me = UserInfo.getUserId();
+        Datetime now = System.now();
+        for (Code_Follow_Up__c f : updated) {
+            Code_Follow_Up__c before = previous.get(f.Id);
+            if (f.Status__c == STATUS_RESOLVED || f.Status__c == STATUS_CLOSED) {
+                f.On_Hold__c = false;
+            } else if (f.On_Hold__c == true && (before == null || before.On_Hold__c != true)) {
+                f.On_Hold_By__c = me;
+                f.On_Hold_Since__c = now;
+            }
+        }
+    }
+
     /** After-update trigger handler: release or close held rows when a follow-up is resolved or closed. */
     public static void handleStatusChanges(List<Code_Follow_Up__c> updated, Map<Id, Code_Follow_Up__c> previous) {
         Set<Id> released = new Set<Id>();

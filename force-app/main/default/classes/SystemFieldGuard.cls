@@ -25,7 +25,14 @@ public with sharing class SystemFieldGuard {
             'assigned_to__c',
             'asked_firm_at__c'
         },
-        Code_Follow_Up__c.SObjectType => new Set<String>{ 'status__c', 'resolution_notes__c', 'assigned_to__c', 'asked_firm_at__c' }
+        Code_Follow_Up__c.SObjectType => new Set<String>{
+            'status__c',
+            'resolution_notes__c',
+            'assigned_to__c',
+            'asked_firm_at__c',
+            'on_hold__c',
+            'on_hold_reason__c'
+        }
     };
 
     private static Map<SObjectType, Map<String, String>> guardedByType = new Map<SObjectType, Map<String, String>>();

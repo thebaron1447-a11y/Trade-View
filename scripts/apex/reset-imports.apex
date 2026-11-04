@@ -1,6 +1,7 @@
 // Deletes all import batches (with their staging rows and attached files), everything a load booked from them (trades,
-// AUM balances and their allocations), all code follow-ups, all AI request logs and every mapping profile Claude
-// proposed, so the sample files can be pushed, loaded and sent to Claude again.
+// AUM balances and their allocations), the record of files taken from cloud folders, all code follow-ups, all AI
+// request logs and every mapping profile Claude proposed, so the sample files can be pushed (or pulled), loaded and
+// sent to Claude again.
 // Reference data (firms, advisors, codes, aliases, seeded profiles, matching rules) is kept.
 // Changes made by approving roster rows or by hand (new advisors, codes, assignments, taught aliases) are NOT undone.
 // Run: sf apex run --file scripts/apex/reset-imports.apex --target-org tradeDemo
@@ -11,6 +12,11 @@ if (!batches.isEmpty()) {
     for (ContentDocumentLink link : [SELECT ContentDocumentId FROM ContentDocumentLink WHERE LinkedEntityId IN :batches.keySet()]) {
         documentIds.add(link.ContentDocumentId);
     }
+}
+// Forget which cloud files were taken, so a pull takes the sample files again (the Cloud Sources are kept).
+// Queried by name so this script also runs in an org where phase 4c (Cloud_File__c) is not deployed yet.
+if (Schema.getGlobalDescribe().containsKey('cloud_file__c')) {
+    delete Database.query('SELECT Id FROM Cloud_File__c LIMIT 10000');
 }
 // Bookings first: they point back to the rows they came from.
 delete [SELECT Id FROM Trade_Allocation__c LIMIT 10000];

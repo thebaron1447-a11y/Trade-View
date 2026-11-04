@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>On_Hold__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>Checked when a reviewer has parked this code review until the dealer answers. On-hold reviews show on the On Hold tab with on-hold rows instead of under Dealer Code Reviews. Cleared when the review is settled (confirm holder, credit, re-match, decide rows one by one) or released. The held rows stay held either way, because the code itself holds them.</description>
+    <inlineHelpText>Checked while this code review waits for an answer from the dealer.</inlineHelpText>
+    <label>On Hold</label>
+    <trackHistory>true</trackHistory>
+    <type>Checkbox</type>
+</CustomField>

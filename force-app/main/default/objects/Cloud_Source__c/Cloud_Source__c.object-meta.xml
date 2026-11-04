@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>A cloud storage folder Trade View pulls dealer files from (Amazon S3 first; Azure Blob and Google Cloud Storage later), reached through a Named Credential that holds the read-only access key. Each dealer's files sit in their own subfolder named with the dealer code, as in the data lake. Pulled on a schedule people choose, or with Pull now in Trade Review.</description>
+    <enableActivities>false</enableActivities>
+    <enableBulkApi>true</enableBulkApi>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <enableSharing>true</enableSharing>
+    <enableStreamingApi>true</enableStreamingApi>
+    <externalSharingModel>ReadWrite</externalSharingModel>
+    <label>Cloud Source</label>
+    <nameField>
+        <label>Source Name</label>
+        <type>Text</type>
+    </nameField>
+    <pluralLabel>Cloud Sources</pluralLabel>
+    <sharingModel>ReadWrite</sharingModel>
+    <visibility>Public</visibility>
+</CustomObject>

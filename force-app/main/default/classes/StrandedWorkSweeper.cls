@@ -9,6 +9,8 @@
  *   - rows Pending in a staged file (TradeMatcher, one job for those files);
  *   - rows and code reviews Claude was never asked about, when Claude is on (ClaudeSuggestionJob);
  *   - files left Loading part way (TradeLoader, one job per file).
+ * It also starts the cloud pulls that are due (CloudPullJob, one job per source; phase 4c), so the 15-minute rhythm
+ * that keeps work moving is the one clock for scheduled pulls too.
  * Only work untouched for QUIET_MINUTES is taken, and a kind of work is skipped while a job of that kind is queued or
  * running, so the sweeper never races a job that is about to finish. Work that failed is never retried: a failure
  * marks the item (Failed status), so nothing loops.
@@ -28,6 +30,7 @@ public with sharing class StrandedWorkSweeper implements Schedulable {
         public Integer batchesRematched = 0;
         public Boolean claudeRestarted = false;
         public Integer loadsRestarted = 0;
+        public Integer pullsStarted = 0;
     }
 
     public void execute(SchedulableContext context) {
@@ -100,6 +103,19 @@ public with sharing class StrandedWorkSweeper implements Schedulable {
                 result.loadsRestarted++;
             }
         }
+
+        if (!busy.contains('CloudPullJob')) {
+            List<Cloud_Source__c> starting = new List<Cloud_Source__c>();
+            for (Cloud_Source__c src : CloudPullService.dueSources(System.now(), MAX_FILES)) {
+                if (!canQueue()) {
+                    break;
+                }
+                System.enqueueJob(new CloudPullJob(src.Id));
+                starting.add(new Cloud_Source__c(Id = src.Id, Last_Pull_Status__c = CloudPullService.PULLING));
+                result.pullsStarted++;
+            }
+            SystemWriter.updateAll(starting);
+        }
         return result;
     }
 
@@ -133,7 +149,7 @@ public with sharing class StrandedWorkSweeper implements Schedulable {
             WHERE
                 JobType = 'Queueable'
                 AND Status IN ('Holding', 'Queued', 'Preparing', 'Processing')
-                AND ApexClass.Name IN ('ImportBatchProcessor', 'TradeMatcher', 'ClaudeSuggestionJob', 'TradeLoader')
+                AND ApexClass.Name IN ('ImportBatchProcessor', 'TradeMatcher', 'ClaudeSuggestionJob', 'TradeLoader', 'CloudPullJob')
             WITH SYSTEM_MODE
         ]) {
             result.add(j.ApexClass.Name);

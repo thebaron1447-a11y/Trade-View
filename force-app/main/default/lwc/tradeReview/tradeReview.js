@@ -16,6 +16,10 @@ import creditCodeReview from "@salesforce/apex/ReviewController.creditCodeReview
 import closeCodeReview from "@salesforce/apex/ReviewController.closeCodeReview";
 import loadFile from "@salesforce/apex/ReviewController.loadFile";
 import confirmHolder from "@salesforce/apex/ReviewController.confirmHolder";
+import pullNow from "@salesforce/apex/ReviewController.pullNow";
+import setPullSchedule from "@salesforce/apex/ReviewController.setPullSchedule";
+import holdCodeReview from "@salesforce/apex/ReviewController.holdCodeReview";
+import releaseCodeReviewHold from "@salesforce/apex/ReviewController.releaseCodeReviewHold";
 import { subscribe, unsubscribe, onError } from "lightning/empApi";
 
 // Background work announces itself when it finishes (Trade View Update platform event), and the page refreshes
@@ -31,10 +35,48 @@ export const MAX_UPLOAD_BYTES = 1024 * 1024;
 export const NUDGE_DAYS = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ACTION_LABELS = {
-  Accept: "Claude recommends: Accept",
-  Reject: "Claude recommends: Reject",
-  Hold: "Claude recommends: Put on hold"
+  Accept: "Recommended: accept.",
+  Reject: "Recommended: reject.",
+  Hold: "Recommended: put on hold and ask the firm."
 };
+// The confidence badge in the detail pane (soft colours that differ in lightness, with the level written out).
+const CONFIDENCE_BADGE = {
+  High: "tv-chip conf-high",
+  Medium: "tv-chip conf-medium",
+  Low: "tv-chip conf-low"
+};
+// Which cell of a row each match flag is about, and the short note shown under it.
+const CELL_FLAGS = {
+  FIRM_MISSING: ["firm", "Missing"],
+  FIRM_UNRESOLVED: ["firm", "Not recognised"],
+  FIRM_AMBIGUOUS: ["firm", "Fits more than one"],
+  FUND_UNRESOLVED: ["fund", "Not recognised"],
+  FUND_AMBIGUOUS: ["fund", "Fits more than one"],
+  UNKNOWN_CODE: ["code", "Not set up"],
+  CODE_ENDED: ["code", "Ended"],
+  DATE_BEFORE_CODE_START: ["date", "Before the code started"],
+  DORMANT_CODE_NO_NAME: ["code", "Dormant"],
+  DORMANT_CODE_REACTIVATED: ["code", "Dormant"],
+  ALLOCATION_INCOMPLETE: ["code", "Shares under 100%"],
+  ROSTER_NEW_CODE: ["code", "New code"],
+  ROSTER_NEW_HOLDER: ["advisor", "New holder"],
+  REASSIGNMENT_SUSPECTED: ["advisor", "Not the holder"],
+  TEAM_CHANGE_SUSPECTED: ["advisor", "Not on the team"],
+  NEW_ADVISOR: ["advisor", "Not in Salesforce"],
+  ADVISOR_AMBIGUOUS: ["advisor", "Fits more than one"]
+};
+// What a code review's reason says about the code cell of each held row.
+const REASON_CODE_NOTES = {
+  "Unknown Code": "Not set up",
+  "Code Ended": "Ended",
+  "Code Dormant": "Dormant",
+  "Allocation Incomplete": "Shares under 100%"
+};
+// The ways to settle a code review, in the order offered.
+export const FIX_CONFIRM = "confirm";
+export const FIX_CREDIT = "credit";
+export const FIX_REMATCH = "rematch";
+export const FIX_SEND = "send";
 const OTHER_FIRM = "__other__";
 const SCOPES = [
   { label: "All", value: "all" },
@@ -44,7 +86,7 @@ const SCOPES = [
 const CONFIDENCE_CLASS = {
   High: "slds-theme_success",
   Medium: "slds-theme_warning",
-  Low: ""
+  Low: "slds-theme_error"
 };
 
 /** The message to show for an Apex or JavaScript error. */
@@ -153,6 +195,19 @@ export function claudeCredit(f) {
     : undefined;
 }
 
+/**
+ * The fix pre-chosen for a code review: Claude's when it points to one (its advisor holds a dormant code, or can be
+ * credited), otherwise the first one available. options are fixOptions() entries.
+ */
+export function defaultFix(f, options) {
+  const open = (options || []).filter((o) => !o.disabled);
+  const claude = open.find((o) => o.fromClaude);
+  if (claude) {
+    return claude.value;
+  }
+  return open.length ? open[0].value : undefined;
+}
+
 export function bulkMessage(count, one, many) {
   const n = Number(count) || 1;
   return n > 1 ? many.replace("{n}", n) : one;
@@ -168,6 +223,56 @@ export function askedText(askedAt, now = Date.now()) {
   return days >= NUDGE_DAYS
     ? `${asked} · no answer after ${days} days, send a reminder`
     : asked;
+}
+
+/** "Waiting on Northgate since Nov 3 · put on hold by Greg Baronian". */
+export function holdTitle(firmName, heldSince, heldByName) {
+  const since = heldSince ? ` since ${shortDate(heldSince)}` : "";
+  const by = heldByName ? ` · put on hold by ${heldByName}` : "";
+  return `Waiting on ${firmName || "the firm"}${since}${by}`;
+}
+
+// How often a cloud folder is checked (Cloud Source Pull Frequency).
+export const PULL_FREQUENCIES = [
+  "Manual only",
+  "Every 15 minutes",
+  "Hourly",
+  "Every 4 hours",
+  "Daily"
+].map((v) => ({ label: v, value: v }));
+export const PULL_HOURS = Array.from({ length: 24 }, (_, h) => ({
+  label: `${h % 12 === 0 ? 12 : h % 12}:00 ${h < 12 ? "am" : "pm"}`,
+  value: String(h)
+}));
+
+/** "Nov 3, 9:40 a.m." in the viewer's time zone. */
+export function whenText(value) {
+  if (!value) {
+    return "";
+  }
+  return new Date(value).toLocaleString("en-CA", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+/** What a cloud folder is doing, in one line. */
+export function pullText(s) {
+  if (!s.active) {
+    return "Not active. An admin turns it on in its Cloud Source record.";
+  }
+  if (s.lastStatus === "Pulling") {
+    return "Checking for new files now…";
+  }
+  const last = s.lastPullAt
+    ? `Last checked ${whenText(s.lastPullAt)}${s.lastStatus === "Failed" ? " (failed)" : ""}: ${s.lastMessage || ""}`
+    : "Not checked yet.";
+  const next = s.nextPullAt
+    ? ` Next check ${whenText(s.nextPullAt)}.`
+    : " Checked only when you click Pull now.";
+  return last + next;
 }
 
 /** The base64 part of a data URL (data:text/csv;base64,XXXX). */
@@ -191,6 +296,8 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
   fundChoice;
   advisorChoice;
   creditChoice;
+  // How the selected code review is to be settled (FIX_*), pre-chosen from Claude's answer.
+  fixChoice;
   remember = false;
 
   // Upload dialog.
@@ -363,6 +470,7 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
     this.fundChoice = row ? row.aiFundId || undefined : undefined;
     this.advisorChoice = row ? row.aiAdvisorId || undefined : undefined;
     this.creditChoice = claudeCredit(row ? undefined : this.selectedFollowUp);
+    this.fixChoice = defaultFix(this.selectedFollowUp, this.fixOptions);
     this.remember = false;
     this.loadIssueRows(row);
   }
@@ -450,7 +558,7 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
   }
 
   get releaseLabel() {
-    return this.groupLabel("Release");
+    return this.selectedRow ? this.groupLabel("Release") : "Release hold";
   }
 
   /** When Claude's suggestion arrives after the row was opened, fill in any choice the reviewer has not made. */
@@ -459,6 +567,11 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
     if (!row) {
       this.creditChoice =
         this.creditChoice || claudeCredit(this.selectedFollowUp);
+      // Keep the reviewer's pick while it is still available (a refresh can lock options).
+      const options = this.fixOptions;
+      if (!options.some((o) => o.value === this.fixChoice && !o.disabled)) {
+        this.fixChoice = defaultFix(this.selectedFollowUp, options);
+      }
       return;
     }
     this.firmChoice = this.firmChoice || row.aiFirmId || undefined;
@@ -490,6 +603,11 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
         assignedLabel: this.assignedLabel(r),
         actionLabel: ACTION_LABELS[r.aiAction] || "",
         heldSinceText: shortDate(r.heldSince),
+        holdTitle: holdTitle(
+          r.followUpFirmName || r.sourceFirm,
+          r.heldSince,
+          r.heldByName
+        ),
         askedLabel: askedText(r.askedAt),
         hasPlan: !!(r.isRoster && r.approvalPlan && r.approvalPlan.length),
         settlesKey: r.settlesFollowUpId ? "fu:" + r.settlesFollowUpId : "",
@@ -520,8 +638,18 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
       hasConfidence: !!f.aiConfidence,
       confidenceClass: CONFIDENCE_CLASS[f.aiConfidence] || "",
       assignedLabel: this.assignedLabel(f),
-      askedLabel: askedText(f.askedAt)
+      askedLabel: askedText(f.askedAt),
+      holdTitle: holdTitle(f.firmName, f.heldSince, f.heldByName)
     }));
+  }
+
+  /** Code reviews still being worked (on hold ones are on the On Hold tab). */
+  get openFollowUpViews() {
+    return this.followUpViews.filter((f) => !f.onHold);
+  }
+
+  get heldFollowUpViews() {
+    return this.followUpViews.filter((f) => f.onHold);
   }
 
   /** Firms with questions waiting for their answer, one email each. */
@@ -654,7 +782,20 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
 
   /** Dealer Code Review: codes to fix (with their held trades), then roster and other code decisions. */
   get codeTableItems() {
-    const codes = this.followUpViews.map((f) => ({
+    const codes = this.openFollowUpViews.map((f) => this.codeLine(f));
+    const rows = this.codeRowViews.map((r) => ({
+      ...this.rowLine(
+        r,
+        r.settlesCode ? `Settles the code ${r.settlesCode} review` : ""
+      ),
+      group: "Roster and code decisions"
+    }));
+    return this.grouped([...codes, ...rows], (l) => l.group);
+  }
+
+  /** A code review as a table line. */
+  codeLine(f) {
+    return {
       key: f.key,
       title: `Code ${f.repCode}`,
       subtitle: f.firmName || "Unknown firm",
@@ -677,18 +818,10 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
         : [],
       lastText: f.heldSummary,
       group: "Codes to fix"
-    }));
-    const rows = this.codeRowViews.map((r) => ({
-      ...this.rowLine(
-        r,
-        r.settlesCode ? `Settles the code ${r.settlesCode} review` : ""
-      ),
-      group: "Roster and code decisions"
-    }));
-    return this.grouped([...codes, ...rows], (l) => l.group);
+    };
   }
 
-  /** Needs Decision: everything else (firm, fund and other data questions), grouped by file. */
+  /** Data Review: everything else (firm, fund and other data questions), grouped by file. */
   get decisionTableItems() {
     return this.grouped(
       this.decisionRowViews.map((r) => ({
@@ -699,11 +832,19 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
     );
   }
 
+  /** On Hold: code reviews and rows waiting for a firm's answer, together. */
   get holdTableItems() {
-    return this.holdViews.map((r) => ({
+    const codes = this.heldFollowUpViews.map((f) => ({
+      ...this.codeLine(f),
+      note: f.askedLabel,
+      issueDetail: f.holdReason,
+      group: undefined
+    }));
+    const rows = this.holdViews.map((r) => ({
       ...this.rowLine(r, r.askedLabel),
       issueDetail: r.holdReason
     }));
+    return [...codes, ...rows];
   }
 
   get firmTableItems() {
@@ -748,11 +889,11 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
   }
 
   get rowsLabel() {
-    return `Needs Decision (${this.decisionRowViews.length}${this.queue && this.queue.rowsTruncated ? "+" : ""})`;
+    return `Data Review (${this.decisionRowViews.length}${this.queue && this.queue.rowsTruncated ? "+" : ""})`;
   }
 
   get holdLabel() {
-    return `On Hold (${this.holdViews.length})`;
+    return `On Hold (${this.holdViews.length + this.heldFollowUpViews.length})`;
   }
 
   get firmsLabel() {
@@ -765,7 +906,7 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
 
   /** Trades waiting behind codes, shown at the top of Dealer Code Review. */
   get heldNote() {
-    const items = (this.queue && this.queue.followUps) || [];
+    const items = this.openFollowUpViews;
     const rows = items.reduce((n, f) => n + (f.heldRowCount || 0), 0);
     if (!rows) {
       return "";
@@ -776,6 +917,65 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
 
   get hasFiles() {
     return this.fileViews.length > 0;
+  }
+
+  // ------------------------------------------------------------------ cloud folders
+
+  get cloudViews() {
+    const items = (this.queue && this.queue.cloudSources) || [];
+    return items.map((s) => ({
+      ...s,
+      key: "cloud:" + s.id,
+      title: `${s.name}${s.folder ? " · " + s.folder : ""}`,
+      statusText: pullText(s),
+      failed: s.lastStatus === "Failed",
+      isDaily: s.frequency === "Daily",
+      hourValue:
+        s.pullHour === null || s.pullHour === undefined
+          ? undefined
+          : String(s.pullHour),
+      pullDisabled: this.busy || !s.active || s.lastStatus === "Pulling"
+    }));
+  }
+
+  get hasCloudSources() {
+    return this.cloudViews.length > 0;
+  }
+
+  get pullFrequencies() {
+    return PULL_FREQUENCIES;
+  }
+
+  get pullHours() {
+    return PULL_HOURS;
+  }
+
+  handlePullNow(event) {
+    const sourceId = event.currentTarget.dataset.id;
+    this.run(
+      () => pullNow({ sourceId }),
+      "Checking the folder for new files. The page updates when it is done."
+    );
+  }
+
+  handlePullFrequency(event) {
+    const sourceId = event.currentTarget.dataset.id;
+    const frequency = event.detail.value;
+    this.run(
+      () => setPullSchedule({ sourceId, frequency, pullHour: null }),
+      frequency === "Manual only"
+        ? "This folder is now checked only when you click Pull now."
+        : `This folder is now checked ${frequency.toLowerCase()}.`
+    );
+  }
+
+  handlePullHour(event) {
+    const sourceId = event.currentTarget.dataset.id;
+    const pullHour = Number(event.detail.value);
+    this.run(
+      () => setPullSchedule({ sourceId, frequency: "Daily", pullHour }),
+      `This folder is now checked daily at ${PULL_HOURS[pullHour].label}.`
+    );
   }
 
   get working() {
@@ -807,13 +1007,13 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
   }
 
   get selectedIsOnHold() {
-    const r = this.selectedRow;
-    return !!(r && r.onHold);
+    const item = this.selectedItem;
+    return !!(item && item.onHold);
   }
 
   get selectedIsOpen() {
-    const r = this.selectedRow;
-    return !!(r && !r.onHold);
+    const item = this.selectedItem;
+    return !!(item && !item.onHold);
   }
 
   get selectedFollowUp() {
@@ -847,33 +1047,133 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
     return this.selectedRow || this.selectedFollowUp;
   }
 
-  get fileFields() {
+  /** What the detail pane shows the same way for a row and a code review. */
+  get detail() {
+    const r = this.selectedRow;
+    const f = r ? undefined : this.selectedFollowUp;
+    const item = r || f;
+    if (!item) {
+      return undefined;
+    }
+    const base = {
+      onHold: !!item.onHold,
+      holdTitle: item.holdTitle,
+      holdReason: item.holdReason,
+      askedLabel: item.askedLabel,
+      assignedToName: item.assignedToName,
+      hasConfidence: !!item.aiConfidence,
+      aiConfidence: item.aiConfidence,
+      confidenceBadge: CONFIDENCE_BADGE[item.aiConfidence] || "tv-chip",
+      aiRequestId: item.aiRequestId,
+      aiRequestName: item.aiRequestName,
+      statusClass: item.onHold ? "tv-chip chip-hold" : "tv-chip chip-open"
+    };
+    if (r) {
+      return {
+        ...base,
+        cssClass: "item-detail row-detail",
+        kindLabel: r.isRoster ? "Roster change" : "Row decision",
+        statusLabel: r.onHold ? "On hold" : r.issueType || "Data review",
+        title: r.title,
+        origin: `${r.rowType} · ${r.subtitle} · ${r.name}`,
+        actionLabel: r.actionLabel
+      };
+    }
+    return {
+      ...base,
+      cssClass: "item-detail followup-detail",
+      kindLabel: "Code review",
+      statusLabel: f.onHold ? "On hold" : f.reason,
+      title: f.title,
+      origin: `${f.firmName || "Unknown firm"} · code ${f.repCode} · ${f.heldSummary} · ${f.name}`,
+      actionLabel: ""
+    };
+  }
+
+  /** The selected row as one table line, with the cell that needs a person marked and labelled. */
+  get rowCells() {
     const r = this.selectedRow;
     if (!r) {
       return [];
     }
-    return [
-      { label: "Firm", value: r.firmName },
-      { label: "Rep code", value: r.repCode },
-      { label: "Advisor", value: r.advisorName },
-      { label: "Branch", value: r.branchName },
-      { label: "Fund", value: r.fundName },
-      { label: "Date", value: r.tradeDate },
-      { label: "Type", value: r.transactionType },
-      {
-        label: "Amount",
-        value:
-          r.amount === null || r.amount === undefined ? "" : money(r.amount)
+    const notes = {};
+    (r.flags || []).forEach((flag) => {
+      const hit = CELL_FLAGS[flag];
+      if (hit && !notes[hit[0]]) {
+        notes[hit[0]] = hit[1];
       }
+    });
+    const amount =
+      r.amount === null || r.amount === undefined ? "" : money(r.amount);
+    return [
+      { key: "date", label: "Date", value: dayText(r.tradeDate) },
+      { key: "code", label: "Code", value: r.repCode },
+      { key: "advisor", label: "Advisor", value: r.advisorName },
+      { key: "firm", label: "Firm", value: r.firmName },
+      { key: "fund", label: "Fund", value: r.fundName },
+      { key: "amount", label: "Amount", value: amount }
     ]
-      .filter(
-        (f) => f.value !== null && f.value !== undefined && f.value !== ""
-      )
-      .map((f) => ({
-        ...f,
-        labelKey: "l-" + f.label,
-        valueKey: "v-" + f.label
+      .filter((c) => c.value || notes[c.key])
+      .map((c) => ({
+        ...c,
+        value: c.value || "(none)",
+        note: notes[c.key] || "",
+        cellClass:
+          (notes[c.key] ? "slds-cell-wrap problem-cell" : "slds-cell-wrap") +
+          (c.key === "amount" ? " amount-cell" : ""),
+        headClass: c.key === "amount" ? "amount-cell" : ""
       }));
+  }
+
+  /** Branch and type, when the file gives them. */
+  get rowExtra() {
+    const r = this.selectedRow;
+    if (!r) {
+      return "";
+    }
+    return [
+      r.branchName ? `Branch: ${r.branchName}` : "",
+      r.transactionType ? `Type: ${r.transactionType}` : ""
+    ]
+      .filter((t) => t)
+      .join(" · ");
+  }
+
+  /** "Firm · filled in from Claude" while the choice is still Claude's. */
+  choiceLabel(base, choice, claude) {
+    return claude && choice === claude
+      ? `${base} · filled in from Claude`
+      : base;
+  }
+
+  get firmChoiceLabel() {
+    const r = this.selectedRow;
+    return this.choiceLabel("Firm", this.firmChoice, r && r.aiFirmId);
+  }
+
+  get fundChoiceLabel() {
+    const r = this.selectedRow;
+    return this.choiceLabel("Fund", this.fundChoice, r && r.aiFundId);
+  }
+
+  get advisorChoiceLabel() {
+    const r = this.selectedRow;
+    return this.choiceLabel("Advisor", this.advisorChoice, r && r.aiAdvisorId);
+  }
+
+  /** What to ask the firm: Claude's homework for a row; Claude's (or the standard) question for a code review. */
+  get claudeQuestion() {
+    const r = this.selectedRow;
+    if (r) {
+      return this.hasSuggestion ? r.aiHomework || "" : "";
+    }
+    const f = this.selectedFollowUp;
+    return f && !f.onHold ? f.question || "" : "";
+  }
+
+  get questionAskedLabel() {
+    const f = this.selectedFollowUp;
+    return f ? f.askedLabel : "";
   }
 
   get claudeState() {
@@ -916,7 +1216,7 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
       ...l,
       key: String(i),
       valueClass: l.openQuestion ? "slds-text-color_weak open-question" : "",
-      confidenceClass: "slds-badge " + (CONFIDENCE_CLASS[l.confidence] || "")
+      confidenceClass: CONFIDENCE_BADGE[l.confidence] || "tv-chip"
     }));
   }
 
@@ -937,11 +1237,6 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
       { label: "Fund", value: r.aiFundName },
       { label: "Advisor", value: r.aiAdvisorName }
     ].filter((c) => !!c.value);
-  }
-
-  get confidenceClass() {
-    const item = this.selectedItem;
-    return item ? CONFIDENCE_CLASS[item.aiConfidence] || "" : "";
   }
 
   get firmOptions() {
@@ -1011,17 +1306,36 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
 
   get heldRowViews() {
     const f = this.selectedFollowUp;
-    return f
-      ? f.heldRows.map((h, i) => ({
-          ...h,
-          key: String(i),
-          typeText: h.rowType === "AUM" ? "AUM balance" : "Trade",
-          waitText: h.waitsOnRoster ? "Waits for the roster change" : "",
-          advisorText: h.advisorName || "None named",
-          fundText: h.fundName || "None given",
-          amountText: money(h.amount)
-        }))
-      : [];
+    if (!f) {
+      return [];
+    }
+    const codeNote = REASON_CODE_NOTES[f.reason] || "";
+    return f.heldRows.map((h, i) => {
+      // The advisor cell is the problem when the advisor named is not the holder, or a dormant code names no one.
+      const advisorNote =
+        f.reason === "Reassignment Suspected" && h.advisorName
+          ? "Not the holder"
+          : f.reason === "Code Dormant" && !h.advisorName
+            ? "Not named"
+            : "";
+      return {
+        ...h,
+        key: String(i),
+        tradeDate: dayText(h.tradeDate),
+        typeText: h.rowType === "AUM" ? "AUM balance" : "Trade",
+        waitText: h.waitsOnRoster ? "Waits for the roster change" : "",
+        codeText: f.repCode,
+        codeNote,
+        codeClass: codeNote ? "problem-cell" : "",
+        advisorText: h.advisorName || "None named",
+        advisorNote,
+        advisorClass:
+          (advisorNote ? "slds-cell-wrap problem-cell" : "slds-cell-wrap") +
+          (h.advisorName ? "" : " slds-text-color_weak"),
+        fundText: h.fundName || "None given",
+        amountText: money(h.amount)
+      };
+    });
   }
 
   /** Rows beyond the few listed. */
@@ -1076,10 +1390,6 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
     return `The firm's roster gives code ${f.repCode} to ${f.rosterName} from ${f.rosterDateText} (${f.rosterText}). ${plural(f.rosterCovered, "row")} dated from then that name ${f.rosterName} or no one wait for it. The other ${plural(f.workableCount, "row")} fall outside it, so you can settle them now.`;
   }
 
-  get rematchDisabled() {
-    return this.busy || this.rosterFirst || this.rosterPartial;
-  }
-
   /** A roster change for this code is waiting: it is decided first, and the review's own options are locked. */
   get rosterFirst() {
     const f = this.selectedFollowUp;
@@ -1095,10 +1405,6 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
   get rosterVisible() {
     const key = this.rosterKey;
     return !!key && this.allRowViews.some((r) => r.key === key);
-  }
-
-  get codeActionDisabled() {
-    return this.busy || this.rosterFirst;
   }
 
   get creditHelp() {
@@ -1122,8 +1428,8 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
     const f = this.selectedFollowUp;
     return f
       ? f.rosterPartial
-        ? `The ${plural(f.workableCount, "row")} not waiting for the roster change move to Needs Decision to be accepted or rejected one at a time. This review stays open for the rest.`
-        : `Closes this review without fixing the code. The ${plural(f.heldRowCount, "row")} move to Needs Decision to be accepted or rejected one at a time.`
+        ? `The ${plural(f.workableCount, "row")} not waiting for the roster change move to Data Review to be accepted or rejected one at a time. This review stays open for the rest.`
+        : `Closes this review without fixing the code. The ${plural(f.heldRowCount, "row")} move to Data Review to be accepted or rejected one at a time.`
       : "";
   }
 
@@ -1139,10 +1445,6 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
       return n > 1 ? `Credit the other ${n} rows` : "Credit the other row";
     }
     return n > 1 ? `Credit all ${n} rows` : "Credit the row";
-  }
-
-  get creditDisabled() {
-    return this.busy || this.rosterFirst || !this.creditChoice;
   }
 
   handleCreditChoice(event) {
@@ -1161,10 +1463,6 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
           "Credited {n} rows. They are being re-matched."
         )
     );
-  }
-
-  get confirmHolderDisabled() {
-    return this.busy || this.rosterFirst || this.rosterPartial;
   }
 
   get confirmHolderHelp() {
@@ -1202,10 +1500,123 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
       (n) =>
         bulkMessage(
           n,
-          "The row is now in Needs Decision.",
-          "{n} rows are now in Needs Decision."
+          "The row is now in Data Review.",
+          "{n} rows are now in Data Review."
         )
     );
+  }
+
+  /** The ways to settle the selected code review, one to choose; Claude's is marked and pre-chosen. */
+  get fixOptions() {
+    const f = this.selectedFollowUp;
+    if (!f) {
+      return [];
+    }
+    const options = [];
+    const uses =
+      f.holderNames && f.holderNames.includes(" and ") ? "use" : "uses";
+    if (f.canConfirmHolder) {
+      options.push({
+        value: FIX_CONFIRM,
+        title: `Confirm ${f.holderNames} still ${uses} code ${f.repCode}`,
+        help: this.confirmHolderHelp,
+        disabled: this.rosterFirst || this.rosterPartial,
+        fromClaude:
+          !!f.aiAdvisorName &&
+          (f.holderNames || "").split(" and ").includes(f.aiAdvisorName)
+      });
+    }
+    if (f.canCredit) {
+      const fromClaude = !!claudeCredit(f);
+      options.push({
+        value: FIX_CREDIT,
+        title: "Credit an advisor for these rows",
+        help: this.creditHelp,
+        disabled: this.rosterFirst,
+        // With Confirm holder on offer, Claude's advisor is the holder to confirm, not a one-off credit.
+        fromClaude: fromClaude && !f.canConfirmHolder,
+        isCredit: true
+      });
+    }
+    options.push({
+      value: FIX_REMATCH,
+      title: `I fixed code ${f.repCode} in Salesforce: re-match`,
+      help: this.rematchHelp,
+      disabled: this.rosterFirst || this.rosterPartial,
+      fromClaude: false
+    });
+    options.push({
+      value: FIX_SEND,
+      title: "Decide rows one by one",
+      help: this.sendHelp,
+      disabled: this.rosterFirst,
+      fromClaude: false
+    });
+    return options.map((o) => {
+      const checked = o.value === this.fixChoice;
+      return {
+        ...o,
+        isCredit: !!o.isCredit,
+        // Written out with its leading space, so the title and the tag never run together.
+        claudeTag: o.fromClaude ? " · Claude's answer" : "",
+        checked,
+        cardClass:
+          "fix-option" +
+          (checked ? " fix-option_selected" : "") +
+          (o.disabled ? " fix-option_disabled" : "")
+      };
+    });
+  }
+
+  get selectedFix() {
+    return this.fixOptions.find((o) => o.value === this.fixChoice);
+  }
+
+  get fixApplyLabel() {
+    const f = this.selectedFollowUp;
+    switch (this.fixChoice) {
+      case FIX_CONFIRM:
+        return `Confirm ${f ? f.holderNames : "holder"}`;
+      case FIX_CREDIT:
+        return this.creditLabel;
+      case FIX_REMATCH:
+        return "Re-match";
+      case FIX_SEND:
+        return "Send to Data Review";
+      default:
+        return "Choose a fix";
+    }
+  }
+
+  get fixApplyDisabled() {
+    const o = this.selectedFix;
+    if (this.busy || !o || o.disabled) {
+      return true;
+    }
+    return o.value === FIX_CREDIT && !this.creditChoice;
+  }
+
+  handleFixChoice(event) {
+    this.fixChoice = event.target.value;
+  }
+
+  handleApplyFix() {
+    switch (this.fixChoice) {
+      case FIX_CONFIRM:
+        this.handleConfirmHolder();
+        break;
+      case FIX_CREDIT:
+        this.handleCredit();
+        break;
+      case FIX_REMATCH:
+        this.handleRematch();
+        break;
+      case FIX_SEND:
+        this.handleSendToReview();
+        break;
+      default:
+        break;
+    }
   }
 
   // ------------------------------------------------------------------ decision inputs
@@ -1293,9 +1704,33 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
   // ------------------------------------------------------------------ on hold
 
   handleOpenHold() {
-    const r = this.selectedRow;
-    this.holdText = (r && r.aiHomework) || "";
+    this.holdText = this.holdPrefill;
     this.showHold = true;
+  }
+
+  /** The question the dialog starts with: Claude's (or, for a code review, the standard one). */
+  get holdPrefill() {
+    const r = this.selectedRow;
+    if (r) {
+      return r.aiHomework || "";
+    }
+    const f = this.selectedFollowUp;
+    return f ? f.holdReason || f.question || "" : "";
+  }
+
+  get holdIntro() {
+    const f = this.selectedRow ? undefined : this.selectedFollowUp;
+    if (f) {
+      return `Code ${f.repCode} moves to the On Hold tab until ${f.firmName || "the firm"} answers. Its rows stay held, and you can still settle it from there at any time. The question goes in the firm's next follow-up email.`;
+    }
+    return "The row waits on the On Hold tab until you accept, reject or release it. Say what needs to be found out; it becomes the question in the firm's follow-up email.";
+  }
+
+  get holdPrefillText() {
+    const r = this.selectedRow;
+    return r || (this.selectedFollowUp && this.selectedFollowUp.aiHomework)
+      ? "Filled in from Claude's suggestion. Edit it as needed."
+      : "Filled in with the standard question for this code. Edit it as needed.";
   }
 
   handleCloseHold() {
@@ -1311,13 +1746,20 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
   }
 
   get holdPrefilled() {
-    const r = this.selectedRow;
-    return !!(r && r.aiHomework);
+    return !!this.holdPrefill;
   }
 
   async handleConfirmHold() {
     const r = this.selectedRow;
     this.showHold = false;
+    if (!r) {
+      const f = this.selectedFollowUp;
+      await this.run(
+        () => holdCodeReview({ followUpId: f.id, homework: this.holdText }),
+        `Code ${f.repCode} is on hold. Find it on the On Hold tab.`
+      );
+      return;
+    }
     await this.run(
       () => holdRow({ rowId: r.id, homework: this.holdText }),
       (n) =>
@@ -1331,13 +1773,21 @@ export default class TradeReview extends NavigationMixin(LightningElement) {
 
   handleRelease() {
     const r = this.selectedRow;
+    if (!r) {
+      const f = this.selectedFollowUp;
+      this.run(
+        () => releaseCodeReviewHold({ followUpId: f.id }),
+        `Released. Code ${f.repCode} is back in Dealer Code Review.`
+      );
+      return;
+    }
     this.run(
       () => releaseHold({ rowId: r.id }),
       (n) =>
         bulkMessage(
           n,
-          "Released. The row is back in Needs Decision.",
-          "Released {n} rows. They are back in Needs Decision."
+          "Released. The row is back in Data Review.",
+          "Released {n} rows. They are back in Data Review."
         )
     );
   }

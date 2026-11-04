@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>File_Key__c</fullName>
+    <caseSensitive>false</caseSensitive>
+    <description>Source Id plus a SHA-256 of the path and version tag. Unique, so each version of each file is taken once.</description>
+    <externalId>true</externalId>
+    <inlineHelpText>System-generated key that stops a file being taken twice. Do not edit.</inlineHelpText>
+    <label>File Key</label>
+    <length>100</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>true</unique>
+</CustomField>

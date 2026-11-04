@@ -641,7 +641,7 @@ field(SR, "AI_Field_Suggestions__c", "AI Field Suggestions", "longtext",
       "Claude's per-field answer as JSON: a list of {field, value, confidence, reason}, using record names, never IDs. Written by the system only; the Trade Review app and the AI Suggestion Table component render it as a table.",
       "Claude's suggestion for each field, shown as a table on the page.", length=5000, lines=3)
 field(SR, "On_Hold__c", "On Hold", "checkbox",
-      "Checked when a reviewer has parked the row until the dealer answers. On-hold rows show on the On Hold tab instead of Needs Decision. Cleared when the row is accepted, rejected or released.",
+      "Checked when a reviewer has parked the row until the dealer answers. On-hold rows show on the On Hold tab instead of Data Review. Cleared when the row is accepted, rejected or released.",
       "Checked while this row waits for information from the dealer.")
 field(SR, "On_Hold_Reason__c", "On Hold Reason", "longtext",
       "The reviewer's homework: what must be found out before the row can be decided. Required to put a row on hold; used as the question in the firm follow-up email. Kept after release for the record.",
@@ -1070,6 +1070,121 @@ LAYOUTS_P2[IB]["right"].insert(6, ("Notify_User__c", "Readonly"))
 EVENT = "Trade_View_Update__e"
 NOTIF_TYPE = "Trade_View"
 
+
+# ================================================================ PHASE 4C: cloud storage pull (S3 first)
+CS, CFL = "Cloud_Source__c", "Cloud_File__c"
+OBJECTS[CS] = dict(
+    label="Cloud Source", plural="Cloud Sources", sharing="ReadWrite",
+    name=dict(type="Text", label="Source Name"),
+    desc="A cloud storage folder Trade View pulls dealer files from (Amazon S3 first; Azure Blob and Google Cloud Storage later), reached through a Named Credential that holds the read-only access key. Each dealer's files sit in their own subfolder named with the dealer code, as in the data lake. Pulled on a schedule people choose, or with Pull now in Trade Review.")
+OBJECTS[CFL] = dict(
+    label="Cloud File", plural="Cloud Files", sharing="ControlledByParent",
+    name=dict(type="AutoNumber", label="Cloud File Number", fmt="CLD-{000000}"),
+    desc="One file version Trade View has taken from a Cloud Source: its path, version tag (ETag) and what became of it. Files already taken are remembered and skipped, so the bucket is only ever read, never changed. A failed download is tried again on the next pull.")
+field(CS, "Provider__c", "Provider", "picklist",
+      "Which cloud storage the source is. Chooses the code that lists and reads files (CloudStorage implementations). Only Amazon S3 is built so far.",
+      "The kind of cloud storage this folder is in.",
+      values=["Amazon S3"], default="Amazon S3", required=True)
+field(CS, "Named_Credential__c", "Named Credential", "text",
+      "API name of the Named Credential for the bucket (for S3: URL https://BUCKET.s3.REGION.amazonaws.com, AWS Signature Version 4 external credential with a read-only access key). The key itself is entered in Setup and never stored on this record or in code.",
+      "The API name of the Named Credential that connects to the bucket, for example Trade_View_S3.", length=80)
+field(CS, "Folder__c", "Folder", "text",
+      "Folder (key prefix) in the bucket to read, for example inbox/. Blank reads the whole bucket. Under it, each dealer's files are in a subfolder named with the dealer code (BARDER/barder_trades.csv), unless Source Firm is set.",
+      "The folder in the bucket to read, for example inbox/. Leave blank for the whole bucket.", length=255)
+field(CS, "Source_Firm__c", "Source Firm", "text",
+      "Dealer code for a folder that holds a single dealer's files directly. Blank means each dealer has its own subfolder, named with its code.",
+      "Fill in only if this folder holds one dealer's files directly. Otherwise leave blank and use one subfolder per dealer.", length=80)
+field(CS, "Active__c", "Active", "checkbox",
+      "Only active sources are pulled, on schedule or with Pull now.",
+      "Turn on to start pulling files from this folder.")
+field(CS, "Pull_Frequency__c", "Pull Frequency", "picklist",
+      "How often the source is checked for new files. The stranded work sweeper runs every 15 minutes and starts each active source whose Next Pull At has passed, so times are accurate to about 15 minutes. Manual only means Pull now in Trade Review.",
+      "How often to check this folder for new files. Choose Manual only to pull only when you click Pull now.",
+      values=["Manual only", "Every 15 minutes", "Hourly", "Every 4 hours", "Daily"], default="Manual only", required=True)
+field(CS, "Pull_Hour__c", "Pull Hour", "number",
+      "For a Daily pull: the hour of day (0 to 23, in the time zone of the user who scheduled the sweeper) to pull at.",
+      "For a daily pull, the hour to pull at, from 0 (midnight) to 23 (11 pm).", precision=2, scale=0)
+field(CS, "Next_Pull_At__c", "Next Pull At", "datetime",
+      "When the source is next due, worked out from Pull Frequency and Pull Hour whenever they change and after every pull. Blank for Manual only or inactive sources.",
+      "When this folder will next be checked. Set by the system.")
+field(CS, "Last_Pull_At__c", "Last Pull At", "datetime",
+      "When the last pull finished.", "When this folder was last checked. Set by the system.")
+field(CS, "Last_Pull_Status__c", "Last Pull Status", "picklist",
+      "Pulling while a pull is running, then Succeeded or Failed. Failed keeps the source scheduled; the reason is in Last Pull Message.",
+      "How the last check of this folder went. Set by the system.",
+      values=["Pulling", "Succeeded", "Failed"])
+field(CS, "Last_Pull_Message__c", "Last Pull Message", "longtext",
+      "What the last pull did, in plain words: files taken, skipped or refused, or why it failed.",
+      "What happened the last time this folder was checked. Set by the system.", length=2000, lines=3)
+field(CS, "Notify_User__c", "Notify User", "lookup",
+      "Who clicked Pull now. Each file the pull takes is marked for them, so they get a bell when it is read and matched. Cleared when the pull finishes. Scheduled pulls notify nobody.",
+      "Who is waiting on the current pull. Set by the system.",
+      ref="User", rel="Notified_Cloud_Sources", rel_label="Notified Cloud Sources", required=False)
+field(CFL, "Cloud_Source__c", "Cloud Source", "md",
+      "The source the file was taken from. Master-detail so the record of taken files goes with the source.",
+      "The cloud folder this file came from.",
+      ref=CS, rel="Cloud_Files", rel_label="Cloud Files")
+field(CFL, "Object_Key__c", "Path", "text",
+      "The file's full path (object key) in the bucket, shortened to 255 characters if longer.",
+      "Where the file is in the bucket.", length=255)
+field(CFL, "ETag__c", "Version Tag", "text",
+      "The storage provider's version tag (ETag) for the file when it was taken. A file replaced in the bucket gets a new tag and is taken again.",
+      "Identifies this version of the file. Set by the system.", length=100)
+field(CFL, "File_Key__c", "File Key", "text",
+      "Source Id plus a SHA-256 of the path and version tag. Unique, so each version of each file is taken once.",
+      "System-generated key that stops a file being taken twice. Do not edit.", length=100, unique=True, external_id=True)
+field(CFL, "Size_Bytes__c", "Size (Bytes)", "number",
+      "The file's size as listed by the provider. Files over the 1 MB intake limit are refused without downloading.",
+      "How big the file is.", precision=12, scale=0)
+field(CFL, "Status__c", "Status", "picklist",
+      "Received: a new Import Batch was made. Duplicate: the same contents were received before. Refused: not taken (too large, no dealer folder, not a CSV or text file). Failed: the download or intake failed and it is tried again on the next pull.",
+      "What happened to this file.",
+      values=["Received", "Duplicate", "Refused", "Failed"], required=True)
+field(CFL, "Message__c", "Message", "longtext",
+      "Why a file was refused or failed, or the intake's reply.", "Details about what happened to this file.", length=2000, lines=2)
+field(CFL, "Import_Batch__c", "Import Batch", "lookup",
+      "The batch the file became (or the earlier batch with the same contents, for a duplicate).",
+      "The import this file became.",
+      ref=IB, rel="Cloud_Files", rel_label="Cloud Files", required=False)
+VRS_P4C = [
+    (CS, "Named_Credential_Required", "ISBLANK(Named_Credential__c)", "Named_Credential__c",
+     "Enter the API name of the Named Credential for the bucket.", "Without it the source cannot be reached."),
+    (CS, "Pull_Hour_Range", "AND(ISPICKVAL(Pull_Frequency__c, \"Daily\"), OR(ISBLANK(Pull_Hour__c), Pull_Hour__c < 0, Pull_Hour__c > 23))",
+     "Pull_Hour__c", "For a daily pull, enter the hour to pull at, from 0 to 23.", "A daily pull needs a valid hour."),
+]
+LAYOUTS[CS] = dict(
+    left=[("Name", "Required"), ("Provider__c", "Required"), ("Named_Credential__c", "Edit"), ("Folder__c", "Edit"),
+          ("Source_Firm__c", "Edit"), ("Active__c", "Edit")],
+    right=[("Pull_Frequency__c", "Required"), ("Pull_Hour__c", "Edit"), ("Next_Pull_At__c", "Readonly"),
+           ("Last_Pull_At__c", "Readonly"), ("Last_Pull_Status__c", "Readonly"), ("OwnerId", "Edit")],
+    related=[("Cloud_File__c.Cloud_Source__c", ["NAME", "Object_Key__c", "Status__c", "Import_Batch__c", "CREATED_DATE"])],
+    listcols=["NAME", "Provider__c", "Folder__c", "Active__c", "Pull_Frequency__c", "Next_Pull_At__c", "Last_Pull_Status__c"])
+EXTRA_P3B[CS] = [("Last Pull", [("Last_Pull_Message__c", "Readonly"), ("Notify_User__c", "Readonly")])]
+LAYOUTS[CFL] = dict(
+    left=[("Name", "Readonly"), ("Cloud_Source__c", "Required"), ("Object_Key__c", "Readonly"), ("ETag__c", "Readonly")],
+    right=[("Status__c", "Required"), ("Size_Bytes__c", "Readonly"), ("Import_Batch__c", "Readonly"), ("File_Key__c", "Readonly")],
+    related=[],
+    listcols=["NAME", "Cloud_Source__c", "Object_Key__c", "Status__c", "Import_Batch__c", "CREATED_DATE"])
+EXTRA_P3B[CFL] = [("Details", [("Message__c", "Readonly")])]
+LAYOUTS_P2[IB]["related"].append(("Cloud_File__c.Import_Batch__c", ["NAME", "Cloud_Source__c", "Object_Key__c", "Status__c"]))
+APEX_CLASSES += ["CloudPullService", "CloudPullJob", "S3Storage"]
+
+# ================================================================ PHASE 4F: one review layout; code reviews can be put on hold
+field(CF, "On_Hold__c", "On Hold", "checkbox",
+      "Checked when a reviewer has parked this code review until the dealer answers. On-hold reviews show on the On Hold tab with on-hold rows instead of under Dealer Code Reviews. Cleared when the review is settled (confirm holder, credit, re-match, decide rows one by one) or released. The held rows stay held either way, because the code itself holds them.",
+      "Checked while this code review waits for an answer from the dealer.")
+field(CF, "On_Hold_Reason__c", "On Hold Reason", "longtext",
+      "What must be found out from the dealer before the code can be settled. Pre-filled from AI Homework in the Put on hold dialog and required to put a review on hold. Used as this code's question in the firm follow-up email. Kept after release for the record.",
+      "What needs to be found out from the dealer before this code can be settled.", length=2000, lines=3)
+field(CF, "On_Hold_By__c", "On Hold By", "lookup",
+      "The reviewer who put the code review on hold. Set by the system and shown in the \"Waiting on [firm] since … by …\" banner.",
+      "Who put this code review on hold.", ref="User", rel="Held_Code_Follow_Ups", rel_label="Held Code Follow-Ups", required=False)
+field(CF, "On_Hold_Since__c", "On Hold Since", "datetime",
+      "When the code review was put on hold. Set by the system; orders the On Hold tab and is shown in the banner.",
+      "When this code review was put on hold.")
+EXTRA_P3B[CF].append(("On Hold", [("On_Hold__c", "Readonly"), ("On_Hold_Reason__c", "Edit"), ("On_Hold_By__c", "Readonly"),
+                                  ("On_Hold_Since__c", "Readonly")]))
+
 # ---------------------------------------------------------------- security model (audit F-01)
 # Fields only the system sets: background steps save them through SystemWriter (system mode), so the Reviewer and
 # Integration permission sets get them read-only, and a trigger guard (SystemFieldGuard) refuses hand changes made
@@ -1078,7 +1193,9 @@ NOTIF_TYPE = "Trade_View"
 REVIEWER_FIELDS = {
     SR: {"Advisor_Override__c", "Firm_Override__c", "Fund_Override__c", "Reviewer_Decision__c", "Remember_Choice__c",
          "On_Hold__c", "On_Hold_Reason__c", "Assigned_To__c", "Asked_Firm_At__c"},
-    CF: {"Status__c", "Resolution_Notes__c", "Assigned_To__c", "Asked_Firm_At__c"},
+    CF: {"Status__c", "Resolution_Notes__c", "Assigned_To__c", "Asked_Firm_At__c", "On_Hold__c", "On_Hold_Reason__c"},
+    # A reviewer may choose how often a cloud folder is pulled; connecting it (credential, folder, active) is for admins.
+    CS: {"Pull_Frequency__c", "Pull_Hour__c"},
 }
 LOCKED = {f"{f['obj']}.{f['api']}" for f in F if f["obj"] in REVIEWER_FIELDS and f["api"] not in REVIEWER_FIELDS[f["obj"]]}
 LOCKED |= {f"{MP}.AI_Rationale__c", f"{MP}.Proposed_From_Batch__c", f"{MP}.Header_Fingerprint__c",
@@ -1090,7 +1207,7 @@ HISTORY = {
     SR: {"Match_Status__c", "Reviewer_Decision__c", "Firm_Override__c", "Fund_Override__c", "Advisor_Override__c",
          "Credited_Advisor__c", "Matched_Firm__c", "Matched_Fund__c", "Amount__c", "On_Hold__c", "Assigned_To__c",
          "Decided_By__c"},
-    CF: {"Status__c", "Assigned_To__c", "Rep_Code__c"},
+    CF: {"Status__c", "Assigned_To__c", "Rep_Code__c", "On_Hold__c"},
     A: {"Advisor__c", "Allocation_Percent__c", "Effective_Start_Date__c", "Effective_End_Date__c", "Holder_Confirmed_On__c"},
     IB: {"Status__c"},
     MP: {"Status__c"},
@@ -1185,6 +1302,7 @@ LAYOUTS[IB]["right"].append(("Header_Fingerprint__c", "Readonly"))
 VRS.extend(VRS_P2)
 VRS.extend(VRS_P3B)
 VRS.extend(VRS_P4E)
+VRS.extend(VRS_P4C)
 for api, o in OBJECTS.items():
     w(f"objects/{api}/{api}.object-meta.xml", object_xml(dict(o, api=api)))
     w(f"objects/{api}/listViews/All.listView-meta.xml", listview_xml(LAYOUTS[api]["listcols"]))
@@ -1197,7 +1315,7 @@ for obj, name, formula, disp, msg, desc in VRS:
 # Object tabs (phase 3A: the follow-up to-do list must be reachable from the App Launcher for the demo).
 TABS = {"Code_Follow_Up__c": "Custom53: Bell", AL: "Custom63: Chip", MR: "Custom90: Scales",
         IB: "Custom13: Box", SR: "Custom18: Form", MP: "Custom78: Map",
-        "Trade__c": "Custom17: Sack", "AUM_Balance__c": "Custom16: Bank"}
+        "Trade__c": "Custom17: Sack", "AUM_Balance__c": "Custom16: Bank", "Cloud_Source__c": "Custom13: Box"}
 # Phase 3B: the reviewer's work queue until the review LWC (phase 4) exists.
 w(f"objects/{SR}/listViews/Needs_Review.listView-meta.xml", f"""<?xml version="1.0" encoding="UTF-8"?>
 <ListView {NS}>
@@ -1380,8 +1498,10 @@ w("permissionsets/Trade_Import_Reviewer.permissionset-meta.xml", permset_xml(
      # What a load books, to look at: every field is set by the load (through SystemWriter).
      T: R_, TA: R_, "AUM_Balance__c": R_, "AUM_Allocation__c": R_,
      # The Trade Review page listens for this event to refresh when background work finishes.
-     EVENT: R_},
-    {IB, AL, "Firm_Alias__c", "Fund_Alias__c", "Account", "Contact", "Product2", T, TA, "AUM_Balance__c", "AUM_Allocation__c"},
+     EVENT: R_,
+     # Cloud folders: a reviewer sees them, pulls them and chooses how often; admins connect them.
+     CS: RE, CFL: R_},
+    {IB, AL, "Firm_Alias__c", "Fund_Alias__c", "Account", "Contact", "Product2", T, TA, "AUM_Balance__c", "AUM_Allocation__c", CFL},
     ["ReviewController"], standard_read_fields=["Account.ParentId", "Contact.Email", "Contact.AccountId"],
     tabs=list(TABS) + ["Trade_Review"], cmts=[CMT], locked=LOCKED))
 

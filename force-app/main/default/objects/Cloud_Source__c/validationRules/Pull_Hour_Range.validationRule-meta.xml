@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Pull_Hour_Range</fullName>
+    <active>true</active>
+    <description>A daily pull needs a valid hour.</description>
+    <errorConditionFormula>AND(ISPICKVAL(Pull_Frequency__c, "Daily"), OR(ISBLANK(Pull_Hour__c), Pull_Hour__c &lt; 0, Pull_Hour__c &gt; 23))</errorConditionFormula>
+    <errorDisplayField>Pull_Hour__c</errorDisplayField>
+    <errorMessage>For a daily pull, enter the hour to pull at, from 0 to 23.</errorMessage>
+</ValidationRule>

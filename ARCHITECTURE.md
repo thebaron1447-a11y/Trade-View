@@ -8,7 +8,7 @@ the demo data and how the code is checked. For an overview and setup steps see [
 Dealers (other investment firms) send CSV files of trades, AUM and advisor rep-code rosters. Files arrive through:
 - a **push job** (Python, REST endpoint `/services/apexrest/trade-import/v1/files`);
 - an **upload** in the app;
-- later, a **cloud storage pull** (phase 4c).
+- a **cloud storage pull** (phase 4c): Amazon S3 now, Azure Blob and Google Cloud Storage next.
 
 Every route goes through **FileIntakeService**, which runs a SHA-256 duplicate check and a 1 MB limit, then saves
 the file to an **Import Batch** with a ContentVersion.
@@ -32,6 +32,21 @@ the last chunk is done the file is **Completed** if no row is waiting, else back
 appears again once more rows are matched. Matching never touches a file while it is Loading; rows a decision sends
 back meanwhile are matched when the load finishes. A failed chunk saves nothing, puts the file back to Pending
 Review and shows the error on it.
+
+**Cloud storage pull (4c).** A **Cloud Source** names a bucket folder and the Named Credential that reaches it (for
+S3, an AWS Signature Version 4 External Credential holding a read-only access key, created in Setup; the key is never
+in code, metadata or a record). Each dealer's files sit in a subfolder named with the dealer code. **CloudPullService**
+lists the folder through the **CloudStorage** interface (**S3Storage**: ListObjectsV2 and GetObject, read only),
+skips files already taken (a **Cloud File** per file version, keyed by source, path and ETag), refuses without
+downloading files outside a dealer folder, not CSV or text, or over 1 MB, reads up to 10 new files (the rest wait for
+the next pull), then hands each to FileIntakeService (duplicates and limits as for any route) without queueing, and
+queues one **ImportBatchProcessor** for them all. The processor now reads several files in one job while limits
+allow and matches the staged ones together in one TradeMatcher job, because an asynchronous job may queue only one
+more. All callouts come before any save. A failed listing marks the source Failed with the reason and keeps its
+schedule; a failed file is retried next time. Pull Frequency (Manual only, every 15 minutes, hourly, every 4 hours,
+daily at an hour) sets Next Pull At (CloudSourceTrigger and after each pull); the sweeper starts due sources every 15
+minutes, and **Pull now** in Recent Files starts one at once, with a bell per file for whoever clicked it. Reviewers
+may change how often a folder is checked; connecting one is for admins.
 
 **Notifications (4e.2).** **TradeViewNotifier** publishes a **Trade View Update** platform event (published after
 commit; it carries only the kind of work and the batch Id) at the end of reading a file, matching, a Claude job, a
@@ -84,7 +99,7 @@ finish. Failures are never retried: a failed item is marked Failed, so nothing l
 
 Custom objects: Import_Batch__c (IB), Import_Staging_Row__c (SR), Mapping_Profile__c (MP), Code_Follow_Up__c (CF),
 Rep_Code__c, Rep_Code_Assignment__c, Firm_Alias__c, Fund_Alias__c, AI_Request_Log__c (AL), Matching_Rule__c (MR),
-Trade__c, Trade_Allocation__c, AUM_Balance__c, AUM_Allocation__c. Custom metadata: Trade_AI_Setting__mdt (record `Default`).
+Trade__c, Trade_Allocation__c, AUM_Balance__c, AUM_Allocation__c, Cloud_Source__c, Cloud_File__c. Custom metadata: Trade_AI_Setting__mdt (record `Default`).
 
 Standard objects:
 - **Account**: firms, with branches as child Accounts through ParentId. It has the custom field
@@ -144,6 +159,10 @@ Standard objects:
     Last_Confirmed_Trade_Date__c, Holder_Confirmed_On__c and Holder_Confirmed_By__c (4e.2, set by Confirm holder).
 - **Import_Batch__c.Notify_User__c** (4e.2): who gets the bell when the file's background work finishes.
 - **Trade_View_Update__e** (4e.2): platform event, Kind__c and Record_Id__c. Reviewers read it; Apex publishes it.
+- **Cloud_Source__c** (4c): Provider__c, Named_Credential__c, Folder__c, Source_Firm__c, Active__c, Pull_Frequency__c,
+  Pull_Hour__c, Next_Pull_At__c, Last_Pull_At__c, Last_Pull_Status__c, Last_Pull_Message__c, Notify_User__c.
+- **Cloud_File__c** (4c, master-detail to Cloud Source): Object_Key__c, ETag__c, File_Key__c (unique), Size_Bytes__c,
+  Status__c (Received, Duplicate, Refused, Failed), Message__c, Import_Batch__c.
   - Rep_Code__c has Active_Allocation_Total__c (a roll-up; a validation rule keeps it at 100 or below).
 - **Mapping_Profile__c**
   - Source_Firm__c, Firm__c, Single_Firm_Feed__c.
@@ -204,7 +223,7 @@ points to https://api.anthropic.com. No Apex depends on either at compile time.
   follow-up re-matches its rows. From the app, `creditCodeReview` settles an Allocation Incomplete, Reassignment
   Suspected or Code Dormant review by setting Advisor Override on every held row (only someone holding the code on
   each row's date) and resolving it; `closeCodeReview` resolves it after the code is fixed, or closes it so the rows
-  go to Needs Decision. Each adds a dated line to Resolution Notes.
+  go to Data Review. Each adds a dated line to Resolution Notes.
 - **Roster change first, row by row:** when a roster row for the same firm and code waits for a decision and the
   review's reason is one a roster change settles, held rows it covers wait for it. Rules decide coverage, not Claude:
   the roster change must be approvable as it stands (same rule as the Approve button), and a held row must be dated on
@@ -265,7 +284,7 @@ roster-is-authoritative rule.
 | Tab | What's in it |
 |---|---|
 | **Dealer Code Review** | Codes to fix, with held trades; then roster and code decision rows (`isCodeIssue`: a roster row or any code flag) |
-| **Needs Decision** | Firm, fund and other data rows, grouped by file |
+| **Data Review** | Firm, fund and other data rows, grouped by file |
 | **On Hold** | Rows put on hold, with their homework |
 | **Email Firms** | One line per firm with questions waiting; the detail lists each question, the contact, Email the firm and Mark as asked |
 | **New File Format** | Files waiting for a mapping; Activate mapping |
@@ -389,13 +408,13 @@ copy of the repository before running them.
 5. `lwc_xref.py` checks every LWC Apex import exists as @AuraEnabled, every call passes exactly the parameter names
    (shorthand properties included), and every `@salesforce/schema` import exists. A call is matched by its whole
    name, so `uploadFile(` is not read as `loadFile(`.
-6. Jest (sfdx-lwc-jest) with ESLint and Prettier (double quotes, no trailing commas): 62 tests (53 tradeReview, 3 reviewQueueTable, 6 aiSuggestionTable).
+6. Jest (sfdx-lwc-jest) with ESLint and Prettier (double quotes, no trailing commas): 65 tests (56 tradeReview, 3 reviewQueueTable, 6 aiSuggestionTable).
 7. Python ports and vectors: `check_vectors.py`, `check_claude_vectors.py`.
 8. Negative controls: break something on purpose and confirm the check fails.
 
-**Dry-run command** (29 test classes, 206 tests; run `scripts/apex/unschedule-sweeper.apex` first):
+**Dry-run command** (31 test classes, 219 tests; `scripts\deploy.ps1 -DryRun` runs it with the sweeper paused):
 ```powershell
-sf project deploy start --source-dir force-app --target-org tradeDemo --dry-run --verbose --test-level RunSpecifiedTests --tests AiSettingsTest --tests AnthropicApiClientTest --tests ClaudeServiceTest --tests ClaudeSuggestionTest --tests ClaudeValidationVectorTest --tests CsvParserTest --tests DemoScenarioTest --tests FileIntakeServiceTest --tests ImportBatchProcessorTest --tests MappingProposalTest --tests MappingServiceTest --tests MatchingRuleTest --tests NameMatcherTest --tests NameNormalizerTest --tests ProductDeleteGuardTest --tests ReviewControllerTest --tests ReviewDecisionTest --tests RosterApprovalTest --tests TradeIngestResourceTest --tests TradeMatcherTest --tests SystemWriterTest --tests SecurityModelTest --tests StrandedWorkSweeperTest --tests TradeAllocatorTest --tests TradeLoaderTest --tests TradeViewNotifierTest --tests HolderConfirmationTest --tests TradeRowNormalizerTest --tests TradeRowNormalizerVectorTest
+sf project deploy start --source-dir force-app --target-org tradeDemo --dry-run --verbose --test-level RunSpecifiedTests --tests AiSettingsTest --tests AnthropicApiClientTest --tests ClaudeServiceTest --tests ClaudeSuggestionTest --tests ClaudeValidationVectorTest --tests CsvParserTest --tests DemoScenarioTest --tests FileIntakeServiceTest --tests ImportBatchProcessorTest --tests MappingProposalTest --tests MappingServiceTest --tests MatchingRuleTest --tests NameMatcherTest --tests NameNormalizerTest --tests ProductDeleteGuardTest --tests ReviewControllerTest --tests ReviewDecisionTest --tests RosterApprovalTest --tests TradeIngestResourceTest --tests TradeMatcherTest --tests SystemWriterTest --tests SecurityModelTest --tests StrandedWorkSweeperTest --tests TradeAllocatorTest --tests TradeLoaderTest --tests TradeViewNotifierTest --tests HolderConfirmationTest --tests CloudPullTest --tests S3StorageTest --tests TradeRowNormalizerTest --tests TradeRowNormalizerVectorTest
 ```
 To deploy for real, run the same command without `--dry-run --verbose`.
 

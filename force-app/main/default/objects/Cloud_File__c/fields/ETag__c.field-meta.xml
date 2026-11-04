@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>ETag__c</fullName>
+    <description>The storage provider's version tag (ETag) for the file when it was taken. A file replaced in the bucket gets a new tag and is taken again.</description>
+    <inlineHelpText>Identifies this version of the file. Set by the system.</inlineHelpText>
+    <label>Version Tag</label>
+    <length>100</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

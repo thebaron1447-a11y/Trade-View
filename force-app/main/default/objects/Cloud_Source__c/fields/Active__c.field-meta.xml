@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Active__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>Only active sources are pulled, on schedule or with Pull now.</description>
+    <inlineHelpText>Turn on to start pulling files from this folder.</inlineHelpText>
+    <label>Active</label>
+    <type>Checkbox</type>
+</CustomField>

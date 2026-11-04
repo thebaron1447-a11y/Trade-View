@@ -2,11 +2,11 @@
 
 One tab, **Trade Review**, for everything that needs a person:
 
-- **Needs Decision**: rows waiting for a person, grouped by file. Each shows what the file said, why it needs review in plain words,
+- **Data Review**: rows waiting for a person, grouped by file. Each shows what the file said, why it needs review in plain words,
   Claude's suggestion with its confidence, and the decision controls: firm, fund or advisor (prefilled with Claude's
   choice), *Remember this spelling*, **Accept** / **Approve roster entry**, **Reject**.
 - **Code Review**: rep codes with a problem (issue type, held trades and amount, Claude's suggestion). Every trade on
-  a code waits here until the code is fixed; Needs Decision shows how many. Resolve on the follow-up record.
+  a code waits here until the code is fixed; Data Review shows how many. Resolve on the follow-up record.
 - **New File Format**: files whose columns no mapping recognises, with Claude's proposal and **Activate mapping**.
 - **Recent Files**: the last ten files and how their rows came out (including duplicates and damaged files).
 - **Upload file**: drop in a dealer CSV (up to 1 MB). It goes through exactly the same steps as files from the lake.
@@ -48,9 +48,9 @@ What you should see:
 
 | Tab | Items |
 |---|---|
-| Needs Decision | Barder: row 6 fund unknown, row 11 dated before the code started, row 12 fund could be Series A or F. Northgate: row 12 firm name unknown. Roster: Priya Nair as the new holder of 2210, Hannah Pierce on new code 3390 |
+| Data Review | Barder: row 6 fund unknown, row 11 dated before the code started, row 12 fund could be Series A or F. Northgate: row 12 firm name unknown. Roster: Priya Nair as the new holder of 2210, Hannah Pierce on new code 3390 |
 | Code Review | 2210 reassignment suspected, 3390 unknown code, 8800 team shares under 100%, 3102 code ended, 5521 dormant, 7700 someone not on the team |
-| New File Format | Kestrel, with Claude's proposed mapping. After **Activate mapping**: three Kestrel rows in Needs Decision (two firm ambiguous, one with no firm name) |
+| New File Format | Kestrel, with Claude's proposed mapping. After **Activate mapping**: three Kestrel rows in Data Review (two firm ambiguous, one with no firm name) |
 | Recent Files | The damaged Northgate file, **Failed**, with the reason |
 
 Suggested order for the demo: approve the roster rows first (watch 2210 and 3390 leave Code Review and their trades

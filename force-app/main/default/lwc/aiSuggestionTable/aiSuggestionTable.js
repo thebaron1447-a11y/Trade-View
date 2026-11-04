@@ -34,7 +34,7 @@ const FIELDS = {
 const CONFIDENCE_CLASS = {
   High: "slds-badge slds-theme_success",
   Medium: "slds-badge slds-theme_warning",
-  Low: "slds-badge"
+  Low: "slds-badge slds-theme_error"
 };
 const ACTION_LABELS = {
   Accept: "Claude recommends: Accept",

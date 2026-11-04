@@ -5,7 +5,7 @@ ROOT = "/home/claude/build/force-app/main/default/objects"
 LABEL = {"Account": "Account", "Contact": "Contact", "Product2": "Product2", "Rep_Code__c": "Rep Code", "User": "User",
          "Code_Follow_Up__c": "Code Follow-Up", "Import_Staging_Row__c": "Import Staging Row",
          "AI_Request_Log__c": "AI Request Log", "Import_Batch__c": "Import Batch", "Trade__c": "Trade",
-         "AUM_Balance__c": "AUM Balance"}
+         "AUM_Balance__c": "AUM Balance", "Cloud_Source__c": "Cloud Source"}
 WANT = {
     "Mapping_Profile__c": ["Feed_Type__c", "AUM_Indicator_Values__c"],
     "Import_Staging_Row__c": ["Row_Type__c", "Source_Branch_Name__c", "Match_Status__c", "Matched_Firm__c", "Matched_Rep_Code__c",
@@ -58,6 +58,14 @@ WANT_4E2 = {
     "Import_Batch__c": ["Notify_User__c"],
     "Rep_Code_Assignment__c": ["Holder_Confirmed_On__c", "Holder_Confirmed_By__c"],
 }
+WANT_4C = {
+    "Cloud_Source__c": ["Provider__c", "Named_Credential__c", "Folder__c", "Source_Firm__c", "Active__c", "Pull_Frequency__c",
+                        "Pull_Hour__c", "Next_Pull_At__c", "Last_Pull_At__c", "Last_Pull_Status__c", "Last_Pull_Message__c",
+                        "Notify_User__c"],
+    "Cloud_File__c": ["Cloud_Source__c", "Object_Key__c", "ETag__c", "File_Key__c", "Size_Bytes__c", "Status__c", "Message__c",
+                      "Import_Batch__c"],
+}
+WANT_4F = {"Code_Follow_Up__c": ["On_Hold__c", "On_Hold_Reason__c", "On_Hold_By__c", "On_Hold_Since__c"]}
 WANT_4E = {
     "AUM_Balance__c": ["Rep_Code__c", "Fund__c", "As_Of_Date__c", "Balance__c", "Balance_Key__c", "Source_Row__c"],
     "AUM_Allocation__c": ["AUM_Balance__c", "Advisor__c", "Allocation_Percent__c", "Allocated_Balance__c"],
@@ -110,7 +118,7 @@ def type_text(r):
 
 
 out = {}
-for obj, names in list(WANT.items()) + [(o + "@3B", n) for o, n in WANT_3B.items()] + [(o + "@4A", n) for o, n in WANT_4A.items()] + [(o + "@4B", n) for o, n in WANT_4B.items()] + [(o + "@4B2", n) for o, n in WANT_4B2.items()] + [(o + "@4B3", n) for o, n in WANT_4B3.items()] + [(o + "@4B4", n) for o, n in WANT_4B4.items()] + [(o + "@4E", n) for o, n in WANT_4E.items()] + [(o + "@4E2", n) for o, n in WANT_4E2.items()]:
+for obj, names in list(WANT.items()) + [(o + "@3B", n) for o, n in WANT_3B.items()] + [(o + "@4A", n) for o, n in WANT_4A.items()] + [(o + "@4B", n) for o, n in WANT_4B.items()] + [(o + "@4B2", n) for o, n in WANT_4B2.items()] + [(o + "@4B3", n) for o, n in WANT_4B3.items()] + [(o + "@4B4", n) for o, n in WANT_4B4.items()] + [(o + "@4E", n) for o, n in WANT_4E.items()] + [(o + "@4E2", n) for o, n in WANT_4E2.items()] + [(o + "@4C", n) for o, n in WANT_4C.items()] + [(o + "@4F", n) for o, n in WANT_4F.items()]:
     out[obj] = []
     for n in names:
         obj_dir = obj.split("@")[0]

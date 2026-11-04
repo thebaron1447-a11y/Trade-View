@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>On_Hold_By__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The reviewer who put the code review on hold. Set by the system and shown in the "Waiting on [firm] since … by …" banner.</description>
+    <inlineHelpText>Who put this code review on hold.</inlineHelpText>
+    <label>On Hold By</label>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>Held Code Follow-Ups</relationshipLabel>
+    <relationshipName>Held_Code_Follow_Ups</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

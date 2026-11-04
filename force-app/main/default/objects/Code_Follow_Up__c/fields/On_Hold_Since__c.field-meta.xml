@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>On_Hold_Since__c</fullName>
+    <description>When the code review was put on hold. Set by the system; orders the On Hold tab and is shown in the banner.</description>
+    <inlineHelpText>When this code review was put on hold.</inlineHelpText>
+    <label>On Hold Since</label>
+    <required>false</required>
+    <type>DateTime</type>
+</CustomField>

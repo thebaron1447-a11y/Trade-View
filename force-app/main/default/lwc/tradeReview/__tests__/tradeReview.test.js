@@ -13,7 +13,8 @@ import TradeReview, {
   heldText,
   claudeCredit,
   dayText,
-  rosterState
+  rosterState,
+  pullText
 } from "c/tradeReview";
 import getQueue from "@salesforce/apex/ReviewController.getQueue";
 import decideRow from "@salesforce/apex/ReviewController.decideRow";
@@ -29,6 +30,10 @@ import creditCodeReview from "@salesforce/apex/ReviewController.creditCodeReview
 import closeCodeReview from "@salesforce/apex/ReviewController.closeCodeReview";
 import loadFile from "@salesforce/apex/ReviewController.loadFile";
 import confirmHolder from "@salesforce/apex/ReviewController.confirmHolder";
+import pullNow from "@salesforce/apex/ReviewController.pullNow";
+import setPullSchedule from "@salesforce/apex/ReviewController.setPullSchedule";
+import holdCodeReview from "@salesforce/apex/ReviewController.holdCodeReview";
+import releaseCodeReviewHold from "@salesforce/apex/ReviewController.releaseCodeReviewHold";
 import { subscribe, unsubscribe } from "lightning/empApi";
 import { encodeDefaultFieldValues } from "lightning/pageReferenceUtils";
 import { navigate } from "lightning/navigation";
@@ -113,6 +118,26 @@ jest.mock(
 );
 jest.mock(
   "@salesforce/apex/ReviewController.confirmHolder",
+  () => ({ default: jest.fn() }),
+  { virtual: true }
+);
+jest.mock(
+  "@salesforce/apex/ReviewController.pullNow",
+  () => ({ default: jest.fn() }),
+  { virtual: true }
+);
+jest.mock(
+  "@salesforce/apex/ReviewController.setPullSchedule",
+  () => ({ default: jest.fn() }),
+  { virtual: true }
+);
+jest.mock(
+  "@salesforce/apex/ReviewController.holdCodeReview",
+  () => ({ default: jest.fn() }),
+  { virtual: true }
+);
+jest.mock(
+  "@salesforce/apex/ReviewController.releaseCodeReviewHold",
   () => ({ default: jest.fn() }),
   { virtual: true }
 );
@@ -224,7 +249,7 @@ async function openTab(element, value) {
   await flush();
 }
 
-/** Renders the app and opens a tab (Needs Decision unless another is named). */
+/** Renders the app and opens a tab (Data Review unless another is named). */
 async function render(tab = "rows") {
   const element = createElement("c-trade-review", { is: TradeReview });
   document.body.appendChild(element);
@@ -251,6 +276,30 @@ function button(element, cls) {
   return element.shadowRoot.querySelector(`lightning-button.${cls}`);
 }
 
+/** The code review fixes on offer, as the reviewer sees them. */
+function fixes(element) {
+  return [...element.shadowRoot.querySelectorAll(".fix-option")].map((o) => {
+    const radio = o.querySelector("input.fix-radio");
+    return {
+      value: radio.value,
+      checked: radio.checked,
+      disabled: radio.disabled,
+      title: o.querySelector(".fix-title").textContent,
+      help: o.querySelector(".fix-help").textContent
+    };
+  });
+}
+
+/** Picks a fix, as clicking its radio does. */
+async function pickFix(element, value) {
+  const radio = [
+    ...element.shadowRoot.querySelectorAll("input.fix-radio")
+  ].find((r) => r.value === value);
+  radio.checked = true;
+  radio.dispatchEvent(new CustomEvent("change"));
+  await flush();
+}
+
 describe("c-trade-review", () => {
   afterEach(() => {
     while (document.body.firstChild) {
@@ -270,7 +319,7 @@ describe("c-trade-review", () => {
     );
     expect(tabs).toEqual([
       "Dealer Code Review (1)",
-      "Needs Decision (1)",
+      "Data Review (1)",
       "On Hold (0)",
       "Email Firms (0)",
       "New File Format (0)",
@@ -473,7 +522,7 @@ describe("c-trade-review", () => {
     });
   });
 
-  it("opens on Dealer Code Review, with Needs Decision in the same table form", async () => {
+  it("opens on Dealer Code Review, with Data Review in the same table form", async () => {
     getQueue.mockResolvedValue(queue());
     const element = await render(null);
 
@@ -498,7 +547,7 @@ describe("c-trade-review", () => {
     );
   });
 
-  it("puts code issues in Dealer Code Review and everything else in Needs Decision", async () => {
+  it("puts code issues in Dealer Code Review and everything else in Data Review", async () => {
     getQueue.mockResolvedValue(
       queue({
         rows: [
@@ -540,7 +589,7 @@ describe("c-trade-review", () => {
       )
     ).toEqual([
       "Dealer Code Review (2)",
-      "Needs Decision (1)",
+      "Data Review (1)",
       "On Hold (0)",
       "Email Firms (0)",
       "New File Format (0)",
@@ -641,14 +690,28 @@ describe("c-trade-review", () => {
     expect(
       [...held[0].querySelectorAll("td")].map((td) => td.textContent)
     ).toEqual([
-      "2026-09-15",
+      "Sep 15, 2026",
       "Trade",
-      "None named",
+      "5521Dormant",
+      "None namedNot named",
       "Wealth World ETF",
       "$25,000.00"
     ]);
+    // The cells that need a person are marked, as on a row.
+    expect(
+      [...held[0].querySelectorAll("td.problem-cell .cell-note")].map(
+        (n) => n.textContent
+      )
+    ).toEqual(["Dormant", "Not named"]);
+    const sections = [
+      ...element.shadowRoot.querySelectorAll(".followup-detail .section-title")
+    ].map((h) => h.textContent);
+    expect(sections).toEqual([
+      "1 · What came in",
+      "2 · Claude's answer",
+      "3 · Your decision"
+    ]);
     const issue = element.shadowRoot.querySelector(".issue-box");
-    expect(issue.querySelector("h3").textContent.trim()).toBe("Issue");
     expect(issue.querySelector(".followup-issue").textContent.trim()).toBe(
       "The code has been dormant and the row names no advisor"
     );
@@ -725,7 +788,7 @@ describe("c-trade-review", () => {
     ].map((tr) => tr.querySelectorAll("td")[1].textContent);
     expect(types).toEqual(["AUM balance", "Trade"]);
     expect(
-      element.shadowRoot.querySelector(".held-table tbody td:nth-child(4)")
+      element.shadowRoot.querySelector(".held-table tbody td:nth-child(5)")
         .textContent
     ).toBe("None given");
   });
@@ -748,12 +811,20 @@ describe("c-trade-review", () => {
     confirmHolder.mockResolvedValue(2);
     const element = await render("codes");
 
-    const confirm = button(element, "confirm-holder");
-    expect(confirm.disabled).toBe(false);
-    expect(
-      element.shadowRoot.querySelector(".fix-options").textContent
-    ).toContain("Use when the firm confirms Tom Reilly still uses code 5521");
-    confirm.click();
+    const offered = fixes(element);
+    expect(offered[0]).toMatchObject({
+      value: "confirm",
+      checked: true,
+      disabled: false,
+      title: "Confirm Tom Reilly still uses code 5521 · Claude's answer"
+    });
+    expect(offered[0].help).toContain(
+      "Use when the firm confirms Tom Reilly still uses code 5521"
+    );
+    const apply = button(element, "apply-fix");
+    expect(apply.label).toBe("Confirm Tom Reilly");
+    expect(apply.disabled).toBe(false);
+    apply.click();
     await flush();
     expect(confirmHolder).toHaveBeenCalledWith({
       followUpId: "a0D000000000001AAA"
@@ -763,7 +834,7 @@ describe("c-trade-review", () => {
   it("offers Confirm holder only for a dormant code someone holds", async () => {
     getQueue.mockResolvedValue(queue({ rows: [] }));
     const element = await render("codes");
-    expect(button(element, "confirm-holder")).toBeNull();
+    expect(fixes(element).map((o) => o.value)).toEqual(["rematch", "send"]);
   });
 
   it("credits one advisor for a code review, with Claude's choice filled in", async () => {
@@ -792,7 +863,12 @@ describe("c-trade-review", () => {
     );
     expect(combo.options).toHaveLength(2);
     expect(combo.value).toBe("003000000000002AAA");
-    const credit = button(element, "credit");
+    expect(fixes(element)[0]).toMatchObject({
+      value: "credit",
+      checked: true,
+      title: "Credit an advisor for these rows · Claude's answer"
+    });
+    const credit = button(element, "apply-fix");
     expect(credit.label).toBe("Credit all 2 rows");
     expect(credit.disabled).toBe(false);
 
@@ -829,31 +905,37 @@ describe("c-trade-review", () => {
     );
     const element = await render("codes");
 
-    expect(button(element, "credit").label).toBe("Credit the row");
-    expect(button(element, "credit").disabled).toBe(true);
+    // Claude's pick cannot be credited, so the first fix is chosen and nothing is marked as Claude's.
+    expect(fixes(element).some((o) => o.title.includes("Claude"))).toBe(false);
+    await pickFix(element, "credit");
+    expect(button(element, "apply-fix").label).toBe("Credit the row");
+    expect(button(element, "apply-fix").disabled).toBe(true);
   });
 
-  it("re-matches a fixed code, or sends its rows to Needs Decision", async () => {
+  it("re-matches a fixed code, or sends its rows to Data Review", async () => {
     getQueue.mockResolvedValue(queue({ rows: [] }));
     closeCodeReview.mockResolvedValue(1);
     const element = await render("codes");
 
-    expect(button(element, "credit")).toBeNull();
-    const help = [...element.shadowRoot.querySelectorAll(".fix-help")].map(
-      (p) => p.textContent.trim()
-    );
+    expect(
+      element.shadowRoot.querySelector("lightning-combobox.credit-choice")
+    ).toBeNull();
+    const help = fixes(element).map((o) => o.help.trim());
     expect(help).toHaveLength(2);
     expect(help[0]).toContain("Use after code 5521 is set up or corrected");
-    expect(help[1]).toContain("The 1 row move to Needs Decision");
+    expect(help[1]).toContain("The 1 row move to Data Review");
 
-    button(element, "rematch").click();
+    expect(button(element, "apply-fix").label).toBe("Re-match");
+    button(element, "apply-fix").click();
     await flush();
     expect(closeCodeReview).toHaveBeenLastCalledWith({
       followUpId: "a0D000000000001AAA",
       fixed: true
     });
 
-    button(element, "send-to-review").click();
+    await pickFix(element, "send");
+    expect(button(element, "apply-fix").label).toBe("Send to Data Review");
+    button(element, "apply-fix").click();
     await flush();
     expect(closeCodeReview).toHaveBeenLastCalledWith({
       followUpId: "a0D000000000001AAA",
@@ -908,9 +990,8 @@ describe("c-trade-review", () => {
 
     const box = element.shadowRoot.querySelector(".roster-first");
     expect(box.textContent).toContain("Priya Nair · BARDER row 2");
-    expect(button(element, "credit").disabled).toBe(true);
-    expect(button(element, "rematch").disabled).toBe(true);
-    expect(button(element, "send-to-review").disabled).toBe(true);
+    expect(fixes(element).every((o) => o.disabled)).toBe(true);
+    expect(button(element, "apply-fix").disabled).toBe(true);
     expect(
       element.shadowRoot.querySelector("lightning-combobox.credit-choice")
         .disabled
@@ -1004,16 +1085,19 @@ describe("c-trade-review", () => {
     expect(badges).toHaveLength(1);
     expect(badges[0].textContent).toBe("Waits for the roster change");
 
-    expect(button(element, "credit").label).toBe("Credit the other 2 rows");
-    expect(button(element, "rematch").disabled).toBe(true);
-    expect(button(element, "send-to-review").disabled).toBe(false);
+    const byValue = Object.fromEntries(fixes(element).map((o) => [o.value, o]));
+    expect(byValue.rematch.disabled).toBe(true);
+    expect(byValue.send.disabled).toBe(false);
+    expect(byValue.credit.checked).toBe(true);
+    expect(button(element, "apply-fix").label).toBe("Credit the other 2 rows");
+    expect(button(element, "apply-fix").disabled).toBe(true);
     element.shadowRoot
       .querySelector("lightning-combobox.credit-choice")
       .dispatchEvent(
         new CustomEvent("change", { detail: { value: "003000000000001AAA" } })
       );
     await flush();
-    expect(button(element, "credit").disabled).toBe(false);
+    expect(button(element, "apply-fix").disabled).toBe(false);
   });
 
   it("says why a waiting roster change holds nothing back", async () => {
@@ -1041,8 +1125,7 @@ describe("c-trade-review", () => {
     ).toContain(
       "but it cannot be approved as it stands, so nothing here waits for it"
     );
-    expect(button(element, "rematch").disabled).toBe(false);
-    expect(button(element, "send-to-review").disabled).toBe(false);
+    expect(fixes(element).every((o) => !o.disabled)).toBe(true);
     expect(table(element, "codes-table").items[0].issueDetail).toBe("");
   });
 
@@ -1122,7 +1205,7 @@ describe("c-trade-review", () => {
       element.shadowRoot.querySelector(".row-detail .origin").textContent
     ).toContain("KESTREL · row 1 · kestrel_export.csv");
     const why = [
-      ...element.shadowRoot.querySelectorAll(".row-detail .reasons li")
+      ...element.shadowRoot.querySelectorAll(".row-detail .reasons .issue-text")
     ].map((li) => li.textContent);
     expect(why).toEqual([
       "Kestrel Capital fits two firms.",
@@ -1152,7 +1235,7 @@ describe("c-trade-review", () => {
 
     expect(
       element.shadowRoot.querySelector(".row-detail .ai-action").textContent
-    ).toContain("Claude recommends: Accept");
+    ).toContain("Recommended: accept.");
     const cells = [
       ...element.shadowRoot.querySelectorAll(".field-table tbody td")
     ].map((td) => td.textContent);
@@ -1262,6 +1345,144 @@ describe("c-trade-review", () => {
     button(element, "release").dispatchEvent(new CustomEvent("click"));
     await flush();
     expect(releaseHold).toHaveBeenCalledWith({ rowId: "a0E000000000001AAA" });
+  });
+
+  it("puts a code review on hold with its question filled in", async () => {
+    const fu = queue().followUps[0];
+    getQueue.mockResolvedValue(
+      queue({
+        rows: [],
+        followUps: [
+          {
+            ...fu,
+            question: "Please confirm who holds code 5521 today."
+          }
+        ]
+      })
+    );
+    holdCodeReview.mockResolvedValue(undefined);
+    const element = await render("codes");
+
+    expect(button(element, "release")).toBeNull();
+    button(element, "hold").dispatchEvent(new CustomEvent("click"));
+    await flush();
+    expect(
+      element.shadowRoot.querySelector(".hold-intro").textContent
+    ).toContain("Code 5521 moves to the On Hold tab");
+    const text = element.shadowRoot.querySelector(
+      "lightning-textarea.hold-text"
+    );
+    expect(text.value).toBe("Please confirm who holds code 5521 today.");
+    button(element, "hold-submit").dispatchEvent(new CustomEvent("click"));
+    await flush();
+
+    expect(holdCodeReview).toHaveBeenCalledWith({
+      followUpId: "a0D000000000001AAA",
+      homework: "Please confirm who holds code 5521 today."
+    });
+    expect(getQueue).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows a code review on hold on the On Hold tab, where it can be released or settled", async () => {
+    const fu = queue().followUps[0];
+    getQueue.mockResolvedValue(
+      queue({
+        rows: [],
+        followUps: [
+          {
+            ...fu,
+            onHold: true,
+            holdReason: "Who holds 5521 today?",
+            heldByName: "Dana Ops",
+            heldSince: "2026-11-03T15:00:00.000Z",
+            canConfirmHolder: true,
+            holderNames: "Tom Reilly"
+          }
+        ]
+      })
+    );
+    releaseCodeReviewHold.mockResolvedValue(undefined);
+    const element = await render("hold");
+
+    expect(element.shadowRoot.querySelectorAll("lightning-tab")[0].label).toBe(
+      "Dealer Code Review (0)"
+    );
+    expect(element.shadowRoot.querySelectorAll("lightning-tab")[2].label).toBe(
+      "On Hold (1)"
+    );
+    const items = table(element, "hold-table").items;
+    expect(items[0]).toMatchObject({
+      key: "fu:a0D000000000001AAA",
+      title: "Code 5521",
+      issueDetail: "Who holds 5521 today?"
+    });
+    const box = element.shadowRoot.querySelector(".followup-detail .hold-box");
+    expect(box.querySelector(".hold-title").textContent).toContain(
+      "Waiting on Northgate Wealth Partners since"
+    );
+    expect(box.querySelector(".hold-title").textContent).toContain(
+      "put on hold by Dana Ops"
+    );
+    expect(box.querySelector(".hold-homework").textContent).toBe(
+      "Who holds 5521 today?"
+    );
+    expect(
+      element.shadowRoot.querySelector(".followup-detail .chips").textContent
+    ).toContain("On hold");
+    // Settling stays possible while it waits.
+    expect(button(element, "apply-fix").label).toBe("Confirm Tom Reilly");
+    expect(button(element, "hold")).toBeNull();
+
+    button(element, "release").dispatchEvent(new CustomEvent("click"));
+    await flush();
+    expect(releaseCodeReviewHold).toHaveBeenCalledWith({
+      followUpId: "a0D000000000001AAA"
+    });
+  });
+
+  it("shows the row as one line, with the cell that needs a person marked", async () => {
+    getQueue.mockResolvedValue(
+      queue({
+        rows: [
+          kestrelRow({
+            tradeDate: "2026-09-29",
+            branchName: "Calgary",
+            transactionType: "B"
+          })
+        ]
+      })
+    );
+    const element = await render();
+
+    const heads = [
+      ...element.shadowRoot.querySelectorAll(".file-table thead th")
+    ].map((th) => th.textContent.trim());
+    expect(heads).toEqual([
+      "Date",
+      "Code",
+      "Advisor",
+      "Firm",
+      "Fund",
+      "Amount"
+    ]);
+    const problems = element.shadowRoot.querySelectorAll(
+      ".file-table td.problem-cell"
+    );
+    expect(problems).toHaveLength(1);
+    expect(problems[0].textContent).toContain("Kestrel Capital");
+    expect(problems[0].querySelector(".cell-note").textContent).toBe(
+      "Fits more than one"
+    );
+    expect(element.shadowRoot.querySelector(".row-extra").textContent).toBe(
+      "Branch: Calgary · Type: B"
+    );
+    expect(
+      element.shadowRoot.querySelector("lightning-combobox.firm-choice").label
+    ).toBe("Firm · filled in from Claude");
+    expect(
+      element.shadowRoot.querySelector(".row-detail .claude-box .tv-chip")
+        .textContent
+    ).toBe("High confidence");
   });
 
   it("lists what approving a roster row will do, and blocks what cannot be approved", async () => {
@@ -1653,6 +1874,86 @@ describe("c-trade-review", () => {
     );
   });
 
+  it("shows cloud folders, pulls one now and changes how often it is checked", async () => {
+    const source = {
+      id: "a0X000000000001AAA",
+      name: "Dealer drop",
+      provider: "Amazon S3",
+      folder: "inbox/",
+      active: true,
+      frequency: "Hourly",
+      pullHour: null,
+      nextPullAt: "2026-11-03T15:00:00.000Z",
+      lastPullAt: "2026-11-03T14:00:00.000Z",
+      lastStatus: "Succeeded",
+      lastMessage: "2 new files taken."
+    };
+    getQueue.mockResolvedValue(queue({ cloudSources: [source] }));
+    pullNow.mockResolvedValue();
+    setPullSchedule.mockResolvedValue();
+    const element = await render("files");
+
+    const item = element.shadowRoot.querySelector(".cloud-source");
+    expect(item.textContent).toContain("Dealer drop · inbox/");
+    expect(item.querySelector(".cloud-status").textContent).toContain(
+      "2 new files taken."
+    );
+    expect(item.querySelector(".cloud-status").textContent).toContain(
+      "Next check"
+    );
+    expect(item.querySelector("lightning-combobox.pull-hour")).toBeNull();
+
+    item.querySelector("lightning-button.pull-now").click();
+    await flush();
+    expect(pullNow).toHaveBeenCalledWith({ sourceId: source.id });
+
+    item
+      .querySelector("lightning-combobox.pull-frequency")
+      .dispatchEvent(new CustomEvent("change", { detail: { value: "Daily" } }));
+    await flush();
+    expect(setPullSchedule).toHaveBeenCalledWith({
+      sourceId: source.id,
+      frequency: "Daily",
+      pullHour: null
+    });
+  });
+
+  it("asks for the hour of a daily pull, and says when nothing is connected", async () => {
+    getQueue.mockResolvedValueOnce(
+      queue({
+        cloudSources: [
+          {
+            id: "a0X000000000001AAA",
+            name: "Dealer drop",
+            active: true,
+            frequency: "Daily",
+            pullHour: 6,
+            lastStatus: "Pulling"
+          }
+        ]
+      })
+    );
+    setPullSchedule.mockResolvedValue();
+    const element = await render("files");
+    const hour = element.shadowRoot.querySelector(
+      "lightning-combobox.pull-hour"
+    );
+    expect(hour.value).toBe("6");
+    expect(button(element, "pull-now").disabled).toBe(true);
+    expect(element.shadowRoot.querySelector(".cloud-status").textContent).toBe(
+      "Checking for new files now…"
+    );
+    getQueue.mockResolvedValue(queue({ cloudSources: [] }));
+    hour.dispatchEvent(new CustomEvent("change", { detail: { value: "18" } }));
+    await flush();
+    expect(setPullSchedule).toHaveBeenCalledWith({
+      sourceId: "a0X000000000001AAA",
+      frequency: "Daily",
+      pullHour: 18
+    });
+    expect(element.shadowRoot.querySelector(".no-cloud")).not.toBeNull();
+  });
+
   it("offers Load file for matched rows and loads the file", async () => {
     const file = {
       id: "a01000000000001AAA",
@@ -1759,6 +2060,22 @@ describe("helpers", () => {
     expect(askedText("2026-10-19T12:00:00.000Z", now)).toContain(
       "no answer after 4 days, send a reminder"
     );
+  });
+
+  it("describes a cloud folder's state", () => {
+    expect(pullText({ active: false })).toContain("Not active");
+    expect(pullText({ active: true, frequency: "Manual only" })).toBe(
+      "Not checked yet. Checked only when you click Pull now."
+    );
+    expect(
+      pullText({
+        active: true,
+        lastPullAt: "2026-11-03T14:00:00.000Z",
+        lastStatus: "Failed",
+        lastMessage:
+          "The pull failed: S3 refused the request (403 AccessDenied)"
+      })
+    ).toContain("(failed): The pull failed");
   });
 
   it("counts nouns and describes what a code review holds", () => {

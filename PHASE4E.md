@@ -104,7 +104,7 @@ Give the reset two minutes, then open Trade Review → **Recent Files**.
 | Trades tab | One trade per loaded Trade row, each with its Source Row, and Trade Allocations that add up to the Signed Amount |
 | The Lumière file's 19 Sep trade on team code 7700 ($7,250.75, no advisor named) | Élise Gagnon 60% $4,350.45 and Marc-André Roy 40% $2,900.30. Its 30 Sep SOLDE row becomes one AUM Balance for all funds, split the same way |
 | AUM Balances tab | One balance per code, fund and as-of date, split the same way |
-| Decide a row in Needs Decision, then back to Recent Files | **Load 1 matched row** on that file again |
+| Decide a row in Data Review, then back to Recent Files | **Load 1 matched row** on that file again |
 | Open a loaded staging row | *Loaded At*, *Loaded Trade* or *Loaded AUM Balance* in its Loaded section |
 
 ### Try 4e.2

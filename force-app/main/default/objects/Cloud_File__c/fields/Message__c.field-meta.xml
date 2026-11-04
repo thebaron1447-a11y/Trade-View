@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Message__c</fullName>
+    <description>Why a file was refused or failed, or the intake's reply.</description>
+    <inlineHelpText>Details about what happened to this file.</inlineHelpText>
+    <label>Message</label>
+    <length>2000</length>
+    <type>LongTextArea</type>
+    <visibleLines>2</visibleLines>
+</CustomField>

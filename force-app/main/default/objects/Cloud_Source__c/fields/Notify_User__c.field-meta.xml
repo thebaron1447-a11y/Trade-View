@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Notify_User__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Who clicked Pull now. Each file the pull takes is marked for them, so they get a bell when it is read and matched. Cleared when the pull finishes. Scheduled pulls notify nobody.</description>
+    <inlineHelpText>Who is waiting on the current pull. Set by the system.</inlineHelpText>
+    <label>Notify User</label>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>Notified Cloud Sources</relationshipLabel>
+    <relationshipName>Notified_Cloud_Sources</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

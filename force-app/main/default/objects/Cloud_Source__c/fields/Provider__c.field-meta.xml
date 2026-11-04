@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Provider__c</fullName>
+    <description>Which cloud storage the source is. Chooses the code that lists and reads files (CloudStorage implementations). Only Amazon S3 is built so far.</description>
+    <inlineHelpText>The kind of cloud storage this folder is in.</inlineHelpText>
+    <label>Provider</label>
+    <required>true</required>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Amazon S3</fullName>
+                <default>true</default>
+                <label>Amazon S3</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

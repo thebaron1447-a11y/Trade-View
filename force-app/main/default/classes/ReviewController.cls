@@ -387,6 +387,15 @@ public with sharing class ReviewController {
         public String holderNames;
         @AuraEnabled
         public Boolean canConfirmHolder = false;
+        /** Put on hold until the firm answers (phase 4f): shown on the On Hold tab with on-hold rows. */
+        @AuraEnabled
+        public Boolean onHold = false;
+        @AuraEnabled
+        public String holdReason;
+        @AuraEnabled
+        public String heldByName;
+        @AuraEnabled
+        public Datetime heldSince;
         // Earliest and latest held row dates, for advisorOptions.
         private Date firstHeld;
         private Date lastHeld;
@@ -445,6 +454,32 @@ public with sharing class ReviewController {
         public String message;
         @AuraEnabled
         public Datetime receivedAt;
+    }
+
+    /** A cloud folder (phase 4c). */
+    public class CloudSourceItem {
+        @AuraEnabled
+        public Id id;
+        @AuraEnabled
+        public String name;
+        @AuraEnabled
+        public String provider;
+        @AuraEnabled
+        public String folder;
+        @AuraEnabled
+        public Boolean active;
+        @AuraEnabled
+        public String frequency;
+        @AuraEnabled
+        public Integer pullHour;
+        @AuraEnabled
+        public Datetime nextPullAt;
+        @AuraEnabled
+        public Datetime lastPullAt;
+        @AuraEnabled
+        public String lastStatus;
+        @AuraEnabled
+        public String lastMessage;
     }
 
     /** One question waiting for a firm's answer: a row on hold or an open code review. */
@@ -515,6 +550,9 @@ public with sharing class ReviewController {
         public List<MappingItem> mappings = new List<MappingItem>();
         @AuraEnabled
         public List<FileItem> recentFiles = new List<FileItem>();
+        /** Cloud folders files are pulled from, with their schedule and last pull. */
+        @AuraEnabled
+        public List<CloudSourceItem> cloudSources = new List<CloudSourceItem>();
         @AuraEnabled
         public List<Option> firmOptions = new List<Option>();
         @AuraEnabled
@@ -586,6 +624,7 @@ public with sharing class ReviewController {
             q.firmFollowUps = firmFollowUps(q.holdRows, q.followUps);
             q.mappings = mappingItems();
             q.recentFiles = recentFiles();
+            q.cloudSources = cloudSources();
             q.firmOptions = firmOptions();
             q.fundOptions = fundOptions();
             q.sourceFirms = sourceFirms();
@@ -1103,7 +1142,11 @@ public with sharing class ReviewController {
                     Firm__c,
                     AI_Homework__c,
                     AI_Field_Suggestions__c,
-                    Asked_Firm_At__c
+                    Asked_Firm_At__c,
+                    On_Hold__c,
+                    On_Hold_Reason__c,
+                    On_Hold_By__r.Name,
+                    On_Hold_Since__c
                 FROM Code_Follow_Up__c
                 WHERE Status__c IN ('Open', 'In Progress') AND Assigned_To__c = :me
                 WITH USER_MODE
@@ -1135,7 +1178,11 @@ public with sharing class ReviewController {
                     Firm__c,
                     AI_Homework__c,
                     AI_Field_Suggestions__c,
-                    Asked_Firm_At__c
+                    Asked_Firm_At__c,
+                    On_Hold__c,
+                    On_Hold_Reason__c,
+                    On_Hold_By__r.Name,
+                    On_Hold_Since__c
                 FROM Code_Follow_Up__c
                 WHERE Status__c IN ('Open', 'In Progress') AND Assigned_To__c = NULL
                 WITH USER_MODE
@@ -1167,7 +1214,11 @@ public with sharing class ReviewController {
                     Firm__c,
                     AI_Homework__c,
                     AI_Field_Suggestions__c,
-                    Asked_Firm_At__c
+                    Asked_Firm_At__c,
+                    On_Hold__c,
+                    On_Hold_Reason__c,
+                    On_Hold_By__r.Name,
+                    On_Hold_Since__c
                 FROM Code_Follow_Up__c
                 WHERE Status__c IN ('Open', 'In Progress')
                 WITH USER_MODE
@@ -1201,6 +1252,10 @@ public with sharing class ReviewController {
             it.firmId = f.Firm__c;
             it.repCodeId = f.Rep_Code__c;
             it.askedAt = f.Asked_Firm_At__c;
+            it.onHold = f.On_Hold__c == true;
+            it.holdReason = f.On_Hold_Reason__c;
+            it.heldByName = f.On_Hold_By__r?.Name;
+            it.heldSince = f.On_Hold_Since__c;
             it.question = String.isNotBlank(f.AI_Homework__c) ? f.AI_Homework__c : standardQuestion(f.Reason__c, f.Rep_Code_Value__c);
             byId.put(f.Id, it);
             result.add(it);
@@ -1516,6 +1571,7 @@ public with sharing class ReviewController {
     private static Integer inFlight(Boolean claudeEnabled) {
         Integer count =
             [SELECT COUNT() FROM Import_Batch__c WHERE Status__c IN ('Received', 'Processing', 'Loading') WITH USER_MODE] +
+            [SELECT COUNT() FROM Cloud_Source__c WHERE Last_Pull_Status__c = :CloudPullService.PULLING WITH USER_MODE] +
             [SELECT COUNT() FROM Import_Staging_Row__c WHERE Match_Status__c = :TradeMatcher.PENDING WITH USER_MODE];
         if (claudeEnabled) {
             count +=
@@ -1933,7 +1989,7 @@ public with sharing class ReviewController {
             if (fixed == true) {
                 noteReview(f, CodeFollowUpService.STATUS_RESOLVED, 'Re-matched ' + heldRows(held) + ' after the code was fixed');
             } else {
-                noteReview(f, CodeFollowUpService.STATUS_CLOSED, 'Sent ' + heldRows(held) + ' to Needs Decision');
+                noteReview(f, CodeFollowUpService.STATUS_CLOSED, 'Sent ' + heldRows(held) + ' to Data Review');
             }
             return held;
         }
@@ -1952,7 +2008,7 @@ public with sharing class ReviewController {
             null,
             'Sent ' +
                 heldRows(changes.size()) +
-                ' to Needs Decision; ' +
+                ' to Data Review; ' +
                 heldRows(waiting.size()) +
                 (waiting.size() == 1 ? ' waits' : ' wait') +
                 ' for the roster change'
@@ -1987,7 +2043,7 @@ public with sharing class ReviewController {
     private static Code_Follow_Up__c openCodeReview(Id followUpId) {
         requireType(followUpId, Code_Follow_Up__c.SObjectType, 'Choose a code review.');
         List<Code_Follow_Up__c> found = [
-            SELECT Id, Status__c, Reason__c, Rep_Code__c, Rep_Code_Value__c, Resolution_Notes__c, Firm__c
+            SELECT Id, Status__c, Reason__c, Rep_Code__c, Rep_Code_Value__c, Resolution_Notes__c, Firm__c, On_Hold__c
             FROM Code_Follow_Up__c
             WHERE Id = :followUpId
             WITH USER_MODE
@@ -2010,11 +2066,7 @@ public with sharing class ReviewController {
      * (the trigger then re-matches or releases the held rows).
      */
     private static void noteReview(Code_Follow_Up__c f, String status, String what) {
-        String note = what + ' (' + UserInfo.getName() + ', ' + System.now().format() + ', Trade Review).';
-        Code_Follow_Up__c change = new Code_Follow_Up__c(
-            Id = f.Id,
-            Resolution_Notes__c = (String.isBlank(f.Resolution_Notes__c) ? note : note + '\n' + f.Resolution_Notes__c).abbreviate(5000)
-        );
+        Code_Follow_Up__c change = noted(f, what);
         if (status != null) {
             change.Status__c = status;
         }
@@ -2023,6 +2075,15 @@ public with sharing class ReviewController {
         } catch (DmlException e) {
             throw fail(e.getDmlMessage(0));
         }
+    }
+
+    /** The change that adds a dated "who did what" line to the top of the review's Resolution Notes. */
+    private static Code_Follow_Up__c noted(Code_Follow_Up__c f, String what) {
+        String note = what + ' (' + UserInfo.getName() + ', ' + System.now().format() + ', Trade Review).';
+        return new Code_Follow_Up__c(
+            Id = f.Id,
+            Resolution_Notes__c = (String.isBlank(f.Resolution_Notes__c) ? note : note + '\n' + f.Resolution_Notes__c).abbreviate(5000)
+        );
     }
 
     private static String heldRows(Integer n) {
@@ -2167,6 +2228,93 @@ public with sharing class ReviewController {
         return ready;
     }
 
+    // ================================================================== cloud pulls (phase 4c)
+
+    private static List<CloudSourceItem> cloudSources() {
+        List<CloudSourceItem> result = new List<CloudSourceItem>();
+        for (Cloud_Source__c s : [
+            SELECT
+                Id,
+                Name,
+                Provider__c,
+                Folder__c,
+                Active__c,
+                Pull_Frequency__c,
+                Pull_Hour__c,
+                Next_Pull_At__c,
+                Last_Pull_At__c,
+                Last_Pull_Status__c,
+                Last_Pull_Message__c
+            FROM Cloud_Source__c
+            WITH USER_MODE
+            ORDER BY Name
+            LIMIT 20
+        ]) {
+            CloudSourceItem it = new CloudSourceItem();
+            it.id = s.Id;
+            it.name = s.Name;
+            it.provider = s.Provider__c;
+            it.folder = s.Folder__c;
+            it.active = s.Active__c;
+            it.frequency = s.Pull_Frequency__c;
+            it.pullHour = toInteger(s.Pull_Hour__c);
+            it.nextPullAt = s.Next_Pull_At__c;
+            it.lastPullAt = s.Last_Pull_At__c;
+            it.lastStatus = s.Last_Pull_Status__c;
+            it.lastMessage = s.Last_Pull_Message__c;
+            result.add(it);
+        }
+        return result;
+    }
+
+    /**
+     * Pull now: checks a cloud folder for new files at once, in the background. Whoever clicks it gets a bell for each
+     * file it takes once that file is read and matched.
+     */
+    @AuraEnabled
+    public static void pullNow(Id sourceId) {
+        requireType(sourceId, Cloud_Source__c.SObjectType, 'Choose a cloud folder.');
+        List<Cloud_Source__c> found = [
+            SELECT Id, Active__c, Last_Pull_Status__c, LastModifiedDate
+            FROM Cloud_Source__c
+            WHERE Id = :sourceId
+            WITH USER_MODE
+            LIMIT 1
+            FOR UPDATE
+        ];
+        if (found.isEmpty()) {
+            throw fail('This cloud folder no longer exists or is not visible to you.');
+        }
+        Cloud_Source__c s = found[0];
+        if (s.Active__c != true) {
+            throw fail('This cloud folder is not active. An admin turns it on in its Cloud Source record.');
+        }
+        // A pull that has said nothing for 10 minutes has stopped; another may start.
+        if (s.Last_Pull_Status__c == CloudPullService.PULLING && s.LastModifiedDate > System.now().addMinutes(-10)) {
+            throw fail('This folder is being checked now. The page updates when it is done.');
+        }
+        if (Limits.getQueueableJobs() >= Limits.getLimitQueueableJobs()) {
+            throw fail('Salesforce is busy with other background work. Try Pull now again in a minute.');
+        }
+        SystemWriter.updateOne(new Cloud_Source__c(Id = s.Id, Last_Pull_Status__c = CloudPullService.PULLING, Notify_User__c = UserInfo.getUserId()));
+        System.enqueueJob(new CloudPullJob(s.Id));
+    }
+
+    /** Sets how often a cloud folder is checked; the next pull time follows (CloudSourceTrigger). */
+    @AuraEnabled
+    public static void setPullSchedule(Id sourceId, String frequency, Integer pullHour) {
+        requireType(sourceId, Cloud_Source__c.SObjectType, 'Choose a cloud folder.');
+        Cloud_Source__c change = new Cloud_Source__c(Id = sourceId, Pull_Frequency__c = frequency);
+        if (frequency == CloudPullService.FREQ_DAILY) {
+            change.Pull_Hour__c = pullHour == null ? 6 : pullHour;
+        }
+        try {
+            update as user change;
+        } catch (DmlException e) {
+            throw fail(e.getDmlMessage(0));
+        }
+    }
+
     /** Activates a Draft mapping profile; MappingProfileTrigger then processes the files waiting for it. */
     @AuraEnabled
     public static void activateMapping(Id profileId) {
@@ -2231,11 +2379,43 @@ public with sharing class ReviewController {
         );
     }
 
-    /** Sends an on-hold row back to Needs Decision. Its homework stays on the row for the record. */
+    /** Sends an on-hold row back to Data Review. Its homework stays on the row for the record. */
     @AuraEnabled
     public static Integer releaseHold(Id rowId) {
         requireType(rowId, Import_Staging_Row__c.SObjectType, 'Choose a row to release.');
         return saveAll(sameIssueRows(rowId), new Import_Staging_Row__c(On_Hold__c = false));
+    }
+
+    /**
+     * Parks a code review until the firm answers (phase 4f). homework is the question for the firm; it replaces
+     * Claude's in the firm follow-up email. The held rows stay held (the code holds them); the review moves to On Hold
+     * and to In Progress, and comes off hold when it is settled or released. Who and when are stamped by its trigger.
+     */
+    @AuraEnabled
+    public static void holdCodeReview(Id followUpId, String homework) {
+        if (String.isBlank(homework)) {
+            throw fail('Say what needs to be found out before putting the code review on hold.');
+        }
+        Code_Follow_Up__c f = openCodeReview(followUpId);
+        Code_Follow_Up__c change = noted(f, f.On_Hold__c == true ? 'Changed the question for the firm' : 'Put on hold until the firm answers');
+        change.On_Hold__c = true;
+        change.On_Hold_Reason__c = homework.trim().abbreviate(MAX_HOMEWORK);
+        if (f.Status__c == CodeFollowUpService.STATUS_OPEN) {
+            change.Status__c = CodeFollowUpService.STATUS_IN_PROGRESS;
+        }
+        save(change);
+    }
+
+    /** Takes a code review off hold, back to Dealer Code Reviews. Its question stays on the record. */
+    @AuraEnabled
+    public static void releaseCodeReviewHold(Id followUpId) {
+        Code_Follow_Up__c f = openCodeReview(followUpId);
+        if (f.On_Hold__c != true) {
+            throw fail('This code review is not on hold. Refresh to see its current state.');
+        }
+        Code_Follow_Up__c change = noted(f, 'Released from hold');
+        change.On_Hold__c = false;
+        save(change);
     }
 
     private static Import_Staging_Row__c currentRow(Id rowId) {
@@ -2287,7 +2467,14 @@ public with sharing class ReviewController {
             );
         }
         for (FollowUpItem f : followUps) {
-            addQuestion(byFirm, f.firmId, f.firmName, question(f.id, f.question, 'Code ' + f.repCode + ' · ' + f.reason, f.askedAt));
+            // On hold, the reviewer's own wording is the question; otherwise Claude's, or the standard one.
+            Boolean held = f.onHold && String.isNotBlank(f.holdReason);
+            addQuestion(
+                byFirm,
+                f.firmId,
+                f.firmName,
+                question(f.id, held ? f.holdReason : f.question, (held ? 'On hold · Code ' : 'Code ') + f.repCode + ' · ' + f.reason, f.askedAt)
+            );
         }
         if (byFirm.isEmpty()) {
             return new List<FirmFollowUp>();

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Last_Pull_Message__c</fullName>
+    <description>What the last pull did, in plain words: files taken, skipped or refused, or why it failed.</description>
+    <inlineHelpText>What happened the last time this folder was checked. Set by the system.</inlineHelpText>
+    <label>Last Pull Message</label>
+    <length>2000</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

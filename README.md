@@ -17,7 +17,9 @@ fund is fictional.
 
 ## What it does
 
-- **Takes files in from three routes:** a push job, a file upload in the app, and (next) a pull from cloud storage.
+- **Takes files in from three routes:** a push job, a file upload in the app, and a pull from cloud storage (Amazon S3
+  now, built so Azure Blob and Google Cloud Storage plug in the same way), on a schedule each folder's users choose or
+  with Pull now.
   Every route goes through one intake service, which rejects duplicates by checksum and enforces a 1 MB limit.
 - **Reads any dealer's layout.** A mapping profile per file format turns columns into fields. When a new format
   arrives, Claude proposes a mapping and a person activates it.
@@ -31,7 +33,7 @@ fund is fictional.
     settled in place: credit one advisor who holds the code, confirm a dormant code's holder with the firm, re-match
     after fixing it, or send its rows to be decided one by one. When the firm's roster changes the same code, the rows it covers wait for that decision
     (approving it settles them); rows it does not cover can be settled straight away. Each roster change shows exactly what approving it will create or end.
-  - **Needs Decision:** firm, fund and other data questions. Rows with the same problem (the same misspelt fund from
+  - **Data Review:** firm, fund and other data questions. Rows with the same problem (the same misspelt fund from
     the same dealer, say) show as one line with their row count and total, and one decision settles them all.
   - **On Hold:** items only the dealer can answer.
   - **Email Firms:** one email per firm covering all of its open questions. Claude drafts it, it never includes
@@ -56,7 +58,7 @@ flowchart LR
     subgraph Intake
         A[Push job<br/>Python, JWT] --> I
         B[Upload in app] --> I
-        C[Cloud storage pull<br/>next phase] -.-> I
+        C[Cloud storage pull<br/>S3, scheduled or Pull now] --> I
         I[FileIntakeService<br/>duplicate check, 1 MB limit]
     end
     I --> P[ImportBatchProcessor<br/>mapping profile, normalise, validate]
@@ -114,9 +116,9 @@ Firms and branches are Accounts, advisors are Contacts, and funds are Products.
 
 ## Quality
 
-- **206 Apex tests** in 29 test classes. One test runs every reviewer action as a Standard User holding only the
+- **219 Apex tests** in 31 test classes. One test runs every reviewer action as a Standard User holding only the
   Reviewer permission set, to prove the permissions are complete.
-- **62 LWC Jest tests** across the three components.
+- **65 LWC Jest tests** across the three components.
 - **Python ports with shared test vectors** for CSV parsing, normalisation, name matching and Claude-answer validation.
 - **Checks before every deploy:**
   - Apex parse;
@@ -146,7 +148,7 @@ Firms and branches are Accounts, advisors are Contacts, and funds are Products.
 | `tools/gen/` | Generators for the metadata, seed data and build log |
 | `tools/verify/` | Lint, cross-reference checks, Python ports and test-vector generators |
 | `ARCHITECTURE.md` | How it is built: pipeline, data model, matching rules, Claude integration, review app, checks |
-| `PHASE*.md` | Step-by-step run guide for each build phase (1, 2, 3A, 3B, 4A, 4B, 4B.2, 4E: loading, then notifications and holder confirmation) |
+| `PHASE*.md` | Step-by-step run guide for each build phase (1, 2, 3A, 3B, 4A, 4B, 4B.2, 4E: loading, then notifications and holder confirmation; 4C: cloud storage pull; 4F: one review layout and code reviews on hold) |
 
 ## Try it
 
@@ -179,7 +181,7 @@ review still work, just without suggestions.
 
 ## Roadmap
 
-- **Cloud storage pull:** S3, Azure Blob and Google Cloud Storage.
+- **More cloud storage:** Azure Blob and Google Cloud Storage, behind the same interface as S3.
 - **Setup Assistant:** a guided first-time configuration covering all three intake routes.
 - **One Claude call per shared issue** instead of per row, to cut cost on large files.
 - **Audit history:** a permanent, read-only record of every change and approval (who, when, what changed from

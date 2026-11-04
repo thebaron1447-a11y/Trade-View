@@ -7,6 +7,11 @@
  * Claude is asked to propose one, and activating a profile for this layout re-processes the batch),
  * Failed (the file could not be read or parsed; Error_Message__c says why).
  * All-or-nothing: on failure no staging rows are kept.
+ *
+ * Several files received together (a cloud pull) are read one after another in one job while limits allow, and the
+ * rest in a follow-on job; the files that reach Staged are then matched together in one TradeMatcher job. An
+ * asynchronous job may queue only one more, so the next step is queued once, at the end. If that fails (for example
+ * the chain is too deep in a Developer Edition), the stranded work sweeper picks the files and rows up.
  */
 public with sharing class ImportBatchProcessor implements Queueable {
     public class ImportException extends Exception {
@@ -22,13 +27,64 @@ public with sharing class ImportBatchProcessor implements Queueable {
     @TestVisible
     private static final Integer MAX_ROWS = 5000;
 
-    private final Id batchId;
+    private final List<Id> batchIds;
+    // Files read to Staged by earlier jobs of the same chain, matched together at the end.
+    private final Set<Id> staged;
+    // Files that reached Mapping Review with no profile at all, for Claude to propose one.
+    private final List<Id> needProposal = new List<Id>();
 
     public ImportBatchProcessor(Id batchId) {
-        this.batchId = batchId;
+        this(new List<Id>{ batchId }, new Set<Id>());
+    }
+
+    /** Several files received together, read in order. */
+    public ImportBatchProcessor(List<Id> batchIds) {
+        this(batchIds, new Set<Id>());
+    }
+
+    private ImportBatchProcessor(List<Id> batchIds, Set<Id> staged) {
+        this.batchIds = batchIds;
+        this.staged = staged;
     }
 
     public void execute(QueueableContext context) {
+        List<Id> left = new List<Id>(batchIds);
+        Boolean readOne = false;
+        while (!left.isEmpty() && (!readOne || roomForAnother())) {
+            readFile(left.remove(0));
+            readOne = true;
+        }
+        queueNext(left);
+    }
+
+    /** The one job this one may queue: the rest of the files, else matching for the staged ones, else a proposal. */
+    private void queueNext(List<Id> left) {
+        if (Test.isRunningTest() || Limits.getQueueableJobs() >= Limits.getLimitQueueableJobs()) {
+            return;
+        }
+        try {
+            if (!left.isEmpty()) {
+                System.enqueueJob(new ImportBatchProcessor(left, staged));
+            } else if (!staged.isEmpty()) {
+                System.enqueueJob(new TradeMatcher(staged));
+            } else if (!needProposal.isEmpty() && AiSettings.get().enabled) {
+                System.enqueueJob(new MappingProposalJob(needProposal[0]));
+            }
+        } catch (System.AsyncException e) {
+            // Chain too deep: the sweeper restarts Received files and Pending rows within 15 minutes.
+            return;
+        }
+    }
+
+    /** Reading a file uses at most a third of each limit, so another fits when this much is left. */
+    private static Boolean roomForAnother() {
+        return Limits.getCpuTime() < Limits.getLimitCpuTime() / 3 &&
+            Limits.getHeapSize() < Limits.getLimitHeapSize() / 3 &&
+            Limits.getQueries() < Limits.getLimitQueries() / 2 &&
+            Limits.getDmlStatements() < Limits.getLimitDmlStatements() / 2;
+    }
+
+    private void readFile(Id batchId) {
         // The batch is locked and moved to Processing before anything else, so a second job for the same batch
         // (a mapping activated twice, a manual re-queue) waits for this one and then finds it no longer Received.
         List<Import_Batch__c> batches = [
@@ -51,6 +107,10 @@ public with sharing class ImportBatchProcessor implements Queueable {
         } catch (Exception e) {
             Database.rollback(sp);
             markFailed(batch.Id, e);
+            batch.Status__c = STATUS_FAILED;
+        }
+        if (batch.Status__c == STATUS_STAGED) {
+            staged.add(batch.Id);
         }
         TradeViewNotifier.changed(TradeViewNotifier.KIND_FILE, batch.Id);
         TradeViewNotifier.fileSettled(new Set<Id>{ batch.Id }, TradeViewNotifier.MOMENT_READ);
@@ -93,9 +153,7 @@ public with sharing class ImportBatchProcessor implements Queueable {
             batch.Header_Fingerprint__c = fingerprint;
             batch.Error_Message__c = 'No Active mapping profile matches this file layout. A mapping must be confirmed before the file can be read.';
             SystemWriter.updateOne(batch);
-            if (AiSettings.get().enabled && !Test.isRunningTest()) {
-                System.enqueueJob(new MappingProposalJob(batch.Id));
-            }
+            needProposal.add(batch.Id);
             return;
         }
 
@@ -111,12 +169,9 @@ public with sharing class ImportBatchProcessor implements Queueable {
         batch.Mapping_Profile__c = profile.Id;
         batch.Status__c = STATUS_STAGED;
         batch.Error_Message__c = null;
-        SystemWriter.updateOne(batch);
-        // Matching runs as its own job so each stage has full limits. Apex tests cannot chain queueable
+        // Matching runs as its own job (queueNext) so each stage has full limits. Apex tests cannot chain queueable
         // jobs, so tests run TradeMatcher directly.
-        if (!Test.isRunningTest()) {
-            System.enqueueJob(new TradeMatcher(new Set<Id>{ batch.Id }));
-        }
+        SystemWriter.updateOne(batch);
     }
 
     /** The text of the file attached to the batch. Also used by MappingProposalJob to read sample rows. */

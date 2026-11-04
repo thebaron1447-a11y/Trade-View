@@ -156,6 +156,87 @@
               value="files"
               onactive={handleTabActive}
             >
+              <h3 class="slds-text-title_caps slds-m-bottom_x-small">
+                Cloud folders
+              </h3>
+              <template lwc:if={hasCloudSources}>
+                <ul class="slds-m-bottom_medium">
+                  <template for:each={cloudViews} for:item="src">
+                    <li
+                      key={src.key}
+                      class="queue-item slds-p-around_x-small cloud-source"
+                    >
+                      <span class="slds-text-title_bold slds-show"
+                        >{src.title}</span
+                      >
+                      <template lwc:if={src.failed}>
+                        <span
+                          class="slds-text-body_small slds-text-color_error slds-show cloud-status"
+                          >{src.statusText}</span
+                        >
+                      </template>
+                      <template lwc:else>
+                        <span
+                          class="slds-text-body_small slds-show cloud-status"
+                          >{src.statusText}</span
+                        >
+                      </template>
+                      <div
+                        class="slds-grid slds-gutters_x-small slds-wrap slds-grid_vertical-align-end slds-m-top_x-small"
+                      >
+                        <div
+                          class="slds-col slds-size_1-of-2 slds-medium-size_1-of-3"
+                        >
+                          <lightning-combobox
+                            class="pull-frequency"
+                            label="Check for new files"
+                            options={pullFrequencies}
+                            value={src.frequency}
+                            data-id={src.id}
+                            disabled={busy}
+                            onchange={handlePullFrequency}
+                          ></lightning-combobox>
+                        </div>
+                        <template lwc:if={src.isDaily}>
+                          <div
+                            class="slds-col slds-size_1-of-2 slds-medium-size_1-of-4"
+                          >
+                            <lightning-combobox
+                              class="pull-hour"
+                              label="At"
+                              options={pullHours}
+                              value={src.hourValue}
+                              data-id={src.id}
+                              disabled={busy}
+                              onchange={handlePullHour}
+                            ></lightning-combobox>
+                          </div>
+                        </template>
+                        <div class="slds-col slds-no-flex">
+                          <lightning-button
+                            class="pull-now"
+                            label="Pull now"
+                            data-id={src.id}
+                            disabled={src.pullDisabled}
+                            onclick={handlePullNow}
+                          ></lightning-button>
+                        </div>
+                      </div>
+                    </li>
+                  </template>
+                </ul>
+              </template>
+              <template lwc:else>
+                <p
+                  class="slds-text-body_small slds-text-color_weak slds-m-bottom_medium no-cloud"
+                >
+                  No cloud folders are connected. An admin adds one as a Cloud
+                  Source record (see PHASE4C.md).
+                </p>
+              </template>
+              <h3 class="slds-text-title_caps slds-m-bottom_x-small">
+                Recent files
+              </h3>
               <template lwc:if={hasFiles}>
                 <ul>
                   <template for:each={fileViews} for:item="file">
@@ -214,158 +295,291 @@
             </div>
           </template>
 
-          <!-- A review row -->
-          <template lwc:if={selectedRow}>
-            <div class="row-detail">
-              <h2
-                class="slds-text-heading_medium slds-m-bottom_xx-small headline"
-              >
-                {selectedRow.title}
-              </h2>
-              <p
-                class="slds-text-body_small slds-text-color_weak slds-m-bottom_small origin"
-              >
-                {selectedRow.rowType} · {selectedRow.subtitle} ·
-                {selectedRow.name}
-              </p>
-              <template lwc:if={selectedIsOnHold}>
-                <div
-                  class="slds-box slds-box_x-small slds-theme_warning slds-m-bottom_small hold-box"
-                >
-                  <p class="slds-text-title_bold">
-                    On hold since {selectedRow.heldSinceText} by
-                    {selectedRow.heldByName}
+          <!-- A row or a code review: one layout (header, what came in, Claude's answer, your decision, actions) -->
+          <template lwc:if={detail}>
+            <div class={detail.cssClass}>
+              <div class="tv-section item-header">
+                <div class="item-heading">
+                  <div class="chips">
+                    <span class="tv-chip kind-chip">{detail.kindLabel}</span>
+                    <span class={detail.statusClass}>{detail.statusLabel}</span>
+                  </div>
+                  <h2 class="slds-text-heading_medium headline">
+                    {detail.title}
+                  </h2>
+                  <p class="slds-text-body_small slds-text-color_weak origin">
+                    {detail.origin}
                   </p>
-                  <p class="hold-homework">{selectedRow.holdReason}</p>
-                  <template lwc:if={selectedRow.askedLabel}>
-                    <p class="slds-text-body_small">{selectedRow.askedLabel}</p>
-                  </template>
                 </div>
-              </template>
-
-              <template lwc:if={selectedIsGroup}>
-                <div
-                  class="slds-box slds-box_x-small slds-theme_shade slds-m-bottom_small group-box"
-                >
-                  <p class="slds-text-title_bold group-summary">
-                    {groupSummary}
-                  </p>
-                  <template lwc:if={issueRows}>
-                    <table
-                      class="slds-table slds-table_cell-buffer slds-table_bordered slds-m-top_x-small issue-rows"
-                    >
-                      <thead>
-                        <tr>
-                          <th scope="col">File and row</th>
-                          <th scope="col">Date</th>
-                          <th scope="col">Code</th>
-                          <th scope="col">Advisor</th>
-                          <th scope="col">Firm</th>
-                          <th scope="col">Fund</th>
-                          <th scope="col">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <template for:each={issueRows} for:item="i">
-                          <tr key={i.key}>
-                            <td class="slds-cell-wrap">{i.where}</td>
-                            <td>{i.tradeDate}</td>
-                            <td>{i.repCode}</td>
-                            <td class="slds-cell-wrap">{i.advisorName}</td>
-                            <td class="slds-cell-wrap">{i.firmName}</td>
-                            <td class="slds-cell-wrap">{i.fundName}</td>
-                            <td>{i.amountText}</td>
-                          </tr>
-                        </template>
-                      </tbody>
-                    </table>
-                    <template lwc:if={issueRowsNote}>
-                      <p
-                        class="slds-text-body_small slds-text-color_weak slds-m-top_xx-small"
+                <div class="assignee">
+                  <span class="slds-text-body_small slds-text-color_weak"
+                    >Assigned to</span
+                  >
+                  <div class="assignee-line">
+                    <template lwc:if={isUnassigned}>
+                      <span class="slds-text-color_weak">Nobody</span>
+                      <lightning-button
+                        class="assign"
+                        label="Assign to me"
+                        disabled={busy}
+                        onclick={handleAssignToMe}
+                      ></lightning-button>
+                    </template>
+                    <template lwc:if={isMine}>
+                      <span>You</span>
+                      <lightning-button
+                        class="unassign"
+                        label="Unassign"
+                        disabled={busy}
+                        onclick={handleUnassign}
+                      ></lightning-button>
+                    </template>
+                    <template lwc:if={assignedToOther}>
+                      <span class="assigned-other"
+                        >{detail.assignedToName}</span
                       >
-                        {issueRowsNote}
-                      </p>
                     </template>
-                  </template>
-                </div>
-              </template>
-              <div class="slds-grid slds-wrap slds-gutters_small">
-                <div class="slds-col slds-size_1-of-1 slds-large-size_1-of-2">
-                  <h3 class="slds-text-title_caps slds-m-bottom_x-small">
-                    {fileHeading}
-                  </h3>
-                  <dl class="slds-list_horizontal slds-wrap">
-                    <template for:each={fileFields} for:item="f">
-                      <dt
-                        key={f.labelKey}
-                        class="slds-item_label slds-text-color_weak"
-                      >
-                        {f.label}
-                      </dt>
-                      <dd key={f.valueKey} class="slds-item_detail">
-                        {f.value}
-                      </dd>
-                    </template>
-                  </dl>
-                </div>
-                <div class="slds-col slds-size_1-of-1 slds-large-size_1-of-2">
-                  <h3 class="slds-text-title_caps slds-m-bottom_x-small">
-                    Why it needs review
-                  </h3>
-                  <ul class="slds-list_dotted reasons">
-                    <template for:each={selectedRow.whyLines} for:item="reason">
-                      <li key={reason}>{reason}</li>
-                    </template>
-                  </ul>
+                  </div>
                 </div>
               </div>
 
-              <div class="slds-box slds-m-top_medium claude-box">
-                <h3 class="slds-text-title_caps slds-m-bottom_x-small">
-                  Claude's suggestion
-                  <template lwc:if={selectedRow.hasConfidence}>
-                    <span class={confidenceClass}>
-                      <span class="slds-badge slds-m-left_x-small"
-                        >{selectedRow.aiConfidence} confidence</span
-                      >
-                    </span>
-                  </template>
-                </h3>
-                <template lwc:if={hasSuggestion}>
-                  <template lwc:if={selectedRow.actionLabel}>
+              <template lwc:if={detail.onHold}>
+                <div class="tv-section hold-box" role="status">
+                  <lightning-icon
+                    icon-name="utility:clock"
+                    size="small"
+                    class="hold-icon"
+                  ></lightning-icon>
+                  <div class="hold-text-block">
+                    <p class="slds-text-title_bold hold-title">
+                      {detail.holdTitle}
+                    </p>
+                    <p class="hold-homework">{detail.holdReason}</p>
+                    <template lwc:if={detail.askedLabel}>
+                      <p class="slds-text-body_small slds-m-top_xx-small">
+                        {detail.askedLabel}
+                      </p>
+                    </template>
+                  </div>
+                </div>
+              </template>
+
+              <!-- 1 · What came in -->
+              <div class="tv-section came-in">
+                <h3 class="section-title">1 · What came in</h3>
+                <template lwc:if={selectedRow}>
+                  <div class="reasons">
+                    <template for:each={selectedRow.whyLines} for:item="reason">
+                      <p key={reason} class="issue-text">{reason}</p>
+                    </template>
+                  </div>
+                  <template lwc:if={selectedIsGroup}>
                     <p
-                      class="slds-text-title_bold slds-m-bottom_x-small ai-action"
+                      class="slds-text-body_small slds-text-color_weak slds-m-bottom_xx-small"
                     >
-                      {selectedRow.actionLabel}
+                      {fileHeading}
                     </p>
                   </template>
-                  <template lwc:if={hasFieldTable}>
+                  <div class="table-box">
                     <table
-                      class="slds-table slds-table_cell-buffer slds-table_bordered slds-m-bottom_x-small field-table"
+                      class="slds-table slds-table_cell-buffer slds-table_bordered file-table"
                     >
                       <thead>
                         <tr>
-                          <th scope="col">Field</th>
-                          <th scope="col">Suggestion</th>
-                          <th scope="col">Confidence</th>
-                          <th scope="col">Reason</th>
+                          <template for:each={rowCells} for:item="c">
+                            <th key={c.key} scope="col" class={c.headClass}>
+                              {c.label}
+                            </th>
+                          </template>
                         </tr>
                       </thead>
                       <tbody>
-                        <template for:each={fieldTable} for:item="l">
-                          <tr key={l.key}>
-                            <td>{l.field}</td>
-                            <td class={l.valueClass}>{l.value}</td>
-                            <td>
-                              <span class={l.confidenceClass}
-                                >{l.confidence}</span
-                              >
+                        <tr>
+                          <template for:each={rowCells} for:item="c">
+                            <td key={c.key} class={c.cellClass}>
+                              {c.value}
+                              <template lwc:if={c.note}>
+                                <span class="cell-note">{c.note}</span>
+                              </template>
                             </td>
-                            <td class="slds-cell-wrap">{l.reason}</td>
-                          </tr>
-                        </template>
+                          </template>
+                        </tr>
                       </tbody>
                     </table>
+                  </div>
+                  <template lwc:if={rowExtra}>
+                    <p
+                      class="slds-text-body_small slds-text-color_weak slds-m-top_x-small row-extra"
+                    >
+                      {rowExtra}
+                    </p>
+                  </template>
+                  <template lwc:if={selectedIsGroup}>
+                    <div class="slds-m-top_small group-box">
+                      <p class="slds-text-title_bold group-summary">
+                        {groupSummary}
+                      </p>
+                      <template lwc:if={issueRows}>
+                        <div class="table-box slds-m-top_x-small">
+                          <table
+                            class="slds-table slds-table_cell-buffer slds-table_bordered issue-rows"
+                          >
+                            <thead>
+                              <tr>
+                                <th scope="col">File and row</th>
+                                <th scope="col">Date</th>
+                                <th scope="col">Code</th>
+                                <th scope="col">Advisor</th>
+                                <th scope="col">Firm</th>
+                                <th scope="col">Fund</th>
+                                <th scope="col">Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <template for:each={issueRows} for:item="i">
+                                <tr key={i.key}>
+                                  <td class="slds-cell-wrap">{i.where}</td>
+                                  <td>{i.tradeDate}</td>
+                                  <td>{i.repCode}</td>
+                                  <td class="slds-cell-wrap">
+                                    {i.advisorName}
+                                  </td>
+                                  <td class="slds-cell-wrap">{i.firmName}</td>
+                                  <td class="slds-cell-wrap">{i.fundName}</td>
+                                  <td>{i.amountText}</td>
+                                </tr>
+                              </template>
+                            </tbody>
+                          </table>
+                        </div>
+                        <template lwc:if={issueRowsNote}>
+                          <p
+                            class="slds-text-body_small slds-text-color_weak slds-m-top_xx-small"
+                          >
+                            {issueRowsNote}
+                          </p>
+                        </template>
+                      </template>
+                    </div>
+                  </template>
+                </template>
+                <template lwc:if={selectedFollowUp}>
+                  <div class="issue-box">
+                    <p class="issue-text followup-issue">
+                      {selectedFollowUp.issueText}
+                    </p>
+                    <p class="issue-sub followup-held">
+                      {selectedFollowUp.subtitle}
+                    </p>
+                  </div>
+                  <template lwc:if={hasHeldRows}>
+                    <div class="table-box">
+                      <table
+                        class="slds-table slds-table_cell-buffer slds-table_bordered held-table"
+                      >
+                        <thead>
+                          <tr>
+                            <th scope="col">Date</th>
+                            <th scope="col">Type</th>
+                            <th scope="col">Code</th>
+                            <th scope="col">Advisor named</th>
+                            <th scope="col">Fund</th>
+                            <th scope="col" class="amount-cell">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <template for:each={heldRowViews} for:item="h">
+                            <tr key={h.key}>
+                              <td>{h.tradeDate}</td>
+                              <td>
+                                {h.typeText}
+                                <template lwc:if={h.waitText}>
+                                  <span
+                                    class="slds-badge slds-m-left_xx-small wait-badge"
+                                    >{h.waitText}</span
+                                  >
+                                </template>
+                              </td>
+                              <td class={h.codeClass}>
+                                {h.codeText}
+                                <template lwc:if={h.codeNote}>
+                                  <span class="cell-note">{h.codeNote}</span>
+                                </template>
+                              </td>
+                              <td class={h.advisorClass}>
+                                {h.advisorText}
+                                <template lwc:if={h.advisorNote}>
+                                  <span class="cell-note">{h.advisorNote}</span>
+                                </template>
+                              </td>
+                              <td class="slds-cell-wrap">{h.fundText}</td>
+                              <td class="amount-cell">{h.amountText}</td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+                    <template lwc:if={heldRowsNote}>
+                      <p
+                        class="slds-text-body_small slds-text-color_weak slds-m-top_xx-small"
+                      >
+                        {heldRowsNote}
+                      </p>
+                    </template>
+                  </template>
+                </template>
+              </div>
+
+              <!-- 2 · Claude's answer -->
+              <div class="tv-section claude-box">
+                <div class="section-head">
+                  <h3 class="section-title">2 · Claude's answer</h3>
+                  <template lwc:if={detail.hasConfidence}>
+                    <span class={detail.confidenceBadge}
+                      >{detail.aiConfidence} confidence</span
+                    >
+                  </template>
+                  <span class="section-spacer"></span>
+                  <template lwc:if={detail.aiRequestId}>
+                    <button
+                      class="slds-button request-link"
+                      data-id={detail.aiRequestId}
+                      onclick={handleOpenRecord}
+                    >
+                      See the request ({detail.aiRequestName})
+                    </button>
+                  </template>
+                </div>
+                <template lwc:if={hasSuggestion}>
+                  <template lwc:if={hasFieldTable}>
+                    <div class="table-box">
+                      <table
+                        class="slds-table slds-table_cell-buffer slds-table_bordered field-table"
+                      >
+                        <thead>
+                          <tr>
+                            <th scope="col">Field</th>
+                            <th scope="col">Claude says</th>
+                            <th scope="col">Confidence</th>
+                            <th scope="col">Why</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <template for:each={fieldTable} for:item="l">
+                            <tr key={l.key}>
+                              <td>{l.field}</td>
+                              <td class={l.valueClass}>{l.value}</td>
+                              <td>
+                                <span class={l.confidenceClass}
+                                  >{l.confidence}</span
+                                >
+                              </td>
+                              <td class="slds-cell-wrap">{l.reason}</td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
                   </template>
                   <template lwc:else>
                     <template for:each={suggestedChoices} for:item="c">
@@ -376,485 +590,285 @@
                       </p>
                     </template>
                   </template>
-                  <template lwc:if={suggestionText}>
-                    <h3
-                      class="slds-text-title_caps slds-m-top_small slds-m-bottom_xx-small"
-                    >
-                      Why
-                    </h3>
-                    <p class="suggestion">{suggestionText}</p>
+                  <template lwc:if={detail.actionLabel}>
+                    <p class="slds-text-title_bold slds-m-top_small ai-action">
+                      {detail.actionLabel}
+                    </p>
                   </template>
-                  <template lwc:if={selectedRow.aiHomework}>
-                    <h3
-                      class="slds-text-title_caps slds-m-top_small slds-m-bottom_xx-small"
-                    >
-                      Question for the firm
-                    </h3>
-                    <p class="homework">{selectedRow.aiHomework}</p>
+                  <template lwc:if={suggestionText}>
+                    <h3 class="sub-title slds-m-top_small">Why</h3>
+                    <p class="suggestion">{suggestionText}</p>
                   </template>
                 </template>
                 <template lwc:else>
                   <p class="slds-text-color_weak claude-state">{claudeState}</p>
                 </template>
-                <template lwc:if={selectedRow.aiRequestId}>
-                  <button
-                    class="slds-button slds-m-top_x-small"
-                    data-id={selectedRow.aiRequestId}
-                    onclick={handleOpenRecord}
-                  >
-                    See the request ({selectedRow.aiRequestName})
-                  </button>
+                <template lwc:if={claudeQuestion}>
+                  <div class="question-box">
+                    <h3 class="sub-title">Question for the firm</h3>
+                    <p class="homework">{claudeQuestion}</p>
+                    <template lwc:if={questionAskedLabel}>
+                      <p class="slds-text-body_small slds-text-color_weak">
+                        {questionAskedLabel}
+                      </p>
+                    </template>
+                  </div>
                 </template>
               </div>
 
-              <template lwc:if={selectedRow.settlesFollowUpId}>
-                <div
-                  class="slds-box slds-box_x-small slds-theme_shade slds-m-top_medium settles-box"
-                >
-                  <p class="slds-text-title_bold">Also settles a code review</p>
-                  <p class="slds-m-top_xx-small settles-text">
-                    {selectedRow.settlesText}. Rows on that review dated from
-                    this change that name this advisor (or no one) wait for this
-                    decision.
-                  </p>
-                  <button
-                    class="slds-button slds-m-top_xx-small go-review"
-                    data-key={selectedRow.settlesKey}
-                    onclick={handleGoTo}
+              <!-- 3 · Your decision -->
+              <div class="tv-section decision">
+                <h3 class="section-title">3 · Your decision</h3>
+                <template lwc:if={selectedRow}>
+                  <template lwc:if={selectedRow.settlesFollowUpId}>
+                    <div
+                      class="slds-box slds-box_x-small slds-theme_shade slds-m-bottom_small settles-box"
+                    >
+                      <p class="slds-text-title_bold">
+                        Also settles a code review
+                      </p>
+                      <p class="slds-m-top_xx-small settles-text">
+                        {selectedRow.settlesText}. Rows on that review dated
+                        from this change that name this advisor (or no one) wait
+                        for this decision.
+                      </p>
+                      <button
+                        class="slds-button slds-m-top_xx-small go-review"
+                        data-key={selectedRow.settlesKey}
+                        onclick={handleGoTo}
+                      >
+                        View the code review
+                      </button>
+                    </div>
+                  </template>
+                  <template lwc:if={selectedRow.hasPlan}>
+                    <div class="slds-m-bottom_small approval-plan">
+                      <p class="slds-text-title_bold slds-m-bottom_xx-small">
+                        Approving will
+                      </p>
+                      <ul class="slds-list_dotted">
+                        <template
+                          for:each={selectedRow.planLines}
+                          for:item="line"
+                        >
+                          <li key={line.key}>{line.text}</li>
+                        </template>
+                      </ul>
+                    </div>
+                  </template>
+                  <p
+                    class="slds-text-body_small slds-m-bottom_x-small decision-help"
                   >
-                    View the code review
-                  </button>
-                </div>
-              </template>
-              <template lwc:if={selectedRow.hasPlan}>
-                <div class="slds-box slds-m-top_medium approval-plan">
-                  <h3 class="slds-text-title_caps slds-m-bottom_x-small">
-                    Approving will
-                  </h3>
-                  <ul class="slds-list_dotted">
-                    <template for:each={selectedRow.planLines} for:item="line">
-                      <li key={line.key}>{line.text}</li>
+                    {decisionHelp}
+                  </p>
+                  <div class="choices">
+                    <template lwc:if={selectedRow.needsFirm}>
+                      <lightning-combobox
+                        class="firm-choice"
+                        label={firmChoiceLabel}
+                        placeholder="Choose the firm"
+                        options={firmOptions}
+                        value={firmChoice}
+                        onchange={handleFirmChoice}
+                      ></lightning-combobox>
                     </template>
-                  </ul>
-                </div>
-              </template>
+                    <template lwc:if={selectedRow.needsFund}>
+                      <lightning-combobox
+                        class="fund-choice"
+                        label={fundChoiceLabel}
+                        placeholder="Choose the fund"
+                        options={fundOptions}
+                        value={fundChoice}
+                        onchange={handleFundChoice}
+                      ></lightning-combobox>
+                    </template>
+                    <template lwc:if={selectedRow.needsAdvisor}>
+                      <lightning-combobox
+                        class="advisor-choice"
+                        label={advisorChoiceLabel}
+                        placeholder="Choose the advisor"
+                        options={selectedRow.advisorOptions}
+                        value={advisorChoice}
+                        onchange={handleAdvisorChoice}
+                      ></lightning-combobox>
+                    </template>
+                  </div>
+                  <template lwc:if={selectedRow.canRemember}>
+                    <lightning-input
+                      class="slds-m-top_x-small remember"
+                      type="checkbox"
+                      label="Remember this spelling for future files"
+                      checked={remember}
+                      onchange={handleRemember}
+                    ></lightning-input>
+                  </template>
+                </template>
+                <template lwc:if={selectedFollowUp}>
+                  <template lwc:if={rosterFirst}>
+                    <div
+                      class="slds-box slds-box_x-small slds-theme_warning slds-m-bottom_small roster-first"
+                    >
+                      <p class="slds-text-title_bold">
+                        Decide the roster change first
+                      </p>
+                      <p class="slds-m-top_xx-small">
+                        The firm's roster changes code
+                        {selectedFollowUp.repCode}
+                        ({selectedFollowUp.rosterText}). Approving it updates
+                        who holds the code, closes this review and re-matches
+                        these rows. Rejecting it unlocks the options below.
+                      </p>
+                      <template lwc:if={rosterVisible}>
+                        <button
+                          class="slds-button slds-m-top_xx-small go-roster"
+                          data-key={rosterKey}
+                          onclick={handleGoTo}
+                        >
+                          Open the roster change
+                        </button>
+                      </template>
+                      <template lwc:else>
+                        <p class="slds-text-body_small slds-m-top_xx-small">
+                          It is not in this view. Choose All to see it.
+                        </p>
+                      </template>
+                    </div>
+                  </template>
+                  <template lwc:if={rosterPartial}>
+                    <div
+                      class="slds-box slds-box_x-small slds-theme_warning slds-m-bottom_small roster-partial"
+                    >
+                      <p class="slds-text-title_bold">
+                        The roster change comes first for some rows
+                      </p>
+                      <p class="slds-m-top_xx-small">{rosterPartialText}</p>
+                      <template lwc:if={rosterVisible}>
+                        <button
+                          class="slds-button slds-m-top_xx-small go-roster"
+                          data-key={rosterKey}
+                          onclick={handleGoTo}
+                        >
+                          Open the roster change
+                        </button>
+                      </template>
+                    </div>
+                  </template>
+                  <template lwc:if={rosterInfo}>
+                    <div
+                      class="slds-box slds-box_x-small slds-theme_shade slds-m-bottom_small roster-info"
+                    >
+                      <p>{rosterInfoText}</p>
+                      <template lwc:if={rosterVisible}>
+                        <button
+                          class="slds-button slds-m-top_xx-small go-roster"
+                          data-key={rosterKey}
+                          onclick={handleGoTo}
+                        >
+                          Open the roster change
+                        </button>
+                      </template>
+                    </div>
+                  </template>
+                  <fieldset class="fix-options">
+                    <legend
+                      class="slds-text-body_small slds-m-bottom_x-small code-help"
+                    >
+                      {codeReviewHelp}
+                    </legend>
+                    <template for:each={fixOptions} for:item="o">
+                      <div key={o.value} class={o.cardClass}>
+                        <label class="fix-label">
+                          <input
+                            type="radio"
+                            name="fix"
+                            class="fix-radio"
+                            value={o.value}
+                            checked={o.checked}
+                            disabled={o.disabled}
+                            onchange={handleFixChoice}
+                          />
+                          <span class="fix-text">
+                            <span class="fix-title"
+                              >{o.title}<span class="from-claude"
+                                >{o.claudeTag}</span
+                              ></span
+                            >
+                            <span class="fix-help">{o.help}</span>
+                          </span>
+                        </label>
+                        <template lwc:if={o.isCredit}>
+                          <lightning-combobox
+                            class="credit-choice slds-m-top_x-small"
+                            label="Advisor to credit"
+                            placeholder="Choose the advisor"
+                            options={selectedFollowUp.creditOptions}
+                            value={creditChoice}
+                            disabled={rosterFirst}
+                            onchange={handleCreditChoice}
+                          ></lightning-combobox>
+                        </template>
+                      </div>
+                    </template>
+                  </fieldset>
+                </template>
+              </div>
 
-              <div class="slds-m-top_medium decision">
-                <h3 class="slds-text-title_caps slds-m-bottom_x-small">
-                  Your decision
-                </h3>
-                <p class="slds-text-body_small slds-m-bottom_x-small">
-                  {decisionHelp}
-                </p>
-                <template lwc:if={selectedRow.needsFirm}>
-                  <lightning-combobox
-                    class="firm-choice"
-                    label="Firm"
-                    placeholder="Choose the firm"
-                    options={firmOptions}
-                    value={firmChoice}
-                    onchange={handleFirmChoice}
-                  ></lightning-combobox>
-                </template>
-                <template lwc:if={selectedRow.needsFund}>
-                  <lightning-combobox
-                    class="fund-choice"
-                    label="Fund"
-                    placeholder="Choose the fund"
-                    options={fundOptions}
-                    value={fundChoice}
-                    onchange={handleFundChoice}
-                  ></lightning-combobox>
-                </template>
-                <template lwc:if={selectedRow.needsAdvisor}>
-                  <lightning-combobox
-                    class="advisor-choice"
-                    label="Advisor"
-                    placeholder="Choose the advisor"
-                    options={selectedRow.advisorOptions}
-                    value={advisorChoice}
-                    onchange={handleAdvisorChoice}
-                  ></lightning-combobox>
-                </template>
-                <template lwc:if={selectedRow.canRemember}>
-                  <lightning-input
-                    class="slds-m-top_x-small remember"
-                    type="checkbox"
-                    label="Remember this spelling for future files"
-                    checked={remember}
-                    onchange={handleRemember}
-                  ></lightning-input>
-                </template>
-                <div class="slds-m-top_small">
+              <!-- Actions: always in the same place, the main action first -->
+              <div class="action-bar">
+                <template lwc:if={selectedRow}>
                   <lightning-button
-                    class="accept slds-m-right_x-small"
+                    class="accept"
                     variant="brand"
                     label={acceptLabel}
                     disabled={acceptDisabled}
                     onclick={handleAccept}
                   ></lightning-button>
+                </template>
+                <template lwc:if={selectedFollowUp}>
                   <lightning-button
-                    class="reject slds-m-right_x-small"
+                    class="apply-fix"
+                    variant="brand"
+                    label={fixApplyLabel}
+                    disabled={fixApplyDisabled}
+                    onclick={handleApplyFix}
+                  ></lightning-button>
+                </template>
+                <template lwc:if={selectedIsOpen}>
+                  <lightning-button
+                    class="hold"
+                    label={holdButtonLabel}
+                    icon-name="utility:clock"
+                    disabled={busy}
+                    onclick={handleOpenHold}
+                  ></lightning-button>
+                </template>
+                <template lwc:if={selectedIsOnHold}>
+                  <lightning-button
+                    class="release"
+                    label={releaseLabel}
+                    disabled={busy}
+                    onclick={handleRelease}
+                  ></lightning-button>
+                </template>
+                <template lwc:if={selectedRow}>
+                  <lightning-button
+                    class="reject"
                     variant="destructive-text"
                     label={rejectLabel}
                     disabled={busy}
                     onclick={handleReject}
                   ></lightning-button>
-                  <template lwc:if={selectedIsOpen}>
-                    <lightning-button
-                      class="hold slds-m-right_x-small"
-                      label={holdButtonLabel}
-                      icon-name="utility:clock"
-                      disabled={busy}
-                      onclick={handleOpenHold}
-                    ></lightning-button>
-                  </template>
-                  <template lwc:if={selectedIsOnHold}>
-                    <lightning-button
-                      class="release slds-m-right_x-small"
-                      label={releaseLabel}
-                      disabled={busy}
-                      onclick={handleRelease}
-                    ></lightning-button>
-                  </template>
-                  <template lwc:if={isUnassigned}>
-                    <lightning-button
-                      class="assign"
-                      label="Assign to me"
-                      disabled={busy}
-                      onclick={handleAssignToMe}
-                    ></lightning-button>
-                  </template>
-                  <template lwc:if={isMine}>
-                    <lightning-button
-                      class="unassign"
-                      label="Unassign"
-                      disabled={busy}
-                      onclick={handleUnassign}
-                    ></lightning-button>
-                  </template>
-                  <template lwc:if={assignedToOther}>
-                    <span class="slds-text-body_small slds-m-left_small"
-                      >Assigned to {selectedRow.assignedToName}</span
-                    >
-                  </template>
-                </div>
-              </div>
-            </div>
-          </template>
-
-          <!-- A follow-up -->
-          <template lwc:if={selectedFollowUp}>
-            <div class="followup-detail">
-              <h2 class="slds-text-heading_medium slds-m-bottom_x-small">
-                {selectedFollowUp.title}
-              </h2>
-              <div
-                class="slds-box slds-box_x-small slds-m-bottom_small issue-box"
-              >
-                <h3 class="slds-text-title_caps slds-m-bottom_xx-small">
-                  Issue
-                </h3>
-                <p class="slds-text-body_regular followup-issue">
-                  {selectedFollowUp.issueText}
-                </p>
-                <p
-                  class="slds-text-body_small slds-text-color_weak followup-held"
-                >
-                  {selectedFollowUp.subtitle}
-                </p>
-              </div>
-              <template lwc:if={hasHeldRows}>
-                <h3 class="slds-text-title_caps slds-m-bottom_x-small">
-                  Held rows
-                </h3>
-                <table
-                  class="slds-table slds-table_cell-buffer slds-table_bordered slds-m-bottom_small held-table"
-                >
-                  <thead>
-                    <tr>
-                      <th scope="col">Date</th>
-                      <th scope="col">Type</th>
-                      <th scope="col">Advisor named</th>
-                      <th scope="col">Fund</th>
-                      <th scope="col">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <template for:each={heldRowViews} for:item="h">
-                      <tr key={h.key}>
-                        <td>{h.tradeDate}</td>
-                        <td>
-                          {h.typeText}
-                          <template lwc:if={h.waitText}>
-                            <span
-                              class="slds-badge slds-m-left_xx-small wait-badge"
-                              >{h.waitText}</span
-                            >
-                          </template>
-                        </td>
-                        <td>{h.advisorText}</td>
-                        <td>{h.fundText}</td>
-                        <td>{h.amountText}</td>
-                      </tr>
-                    </template>
-                  </tbody>
-                </table>
-                <template lwc:if={heldRowsNote}>
-                  <p
-                    class="slds-text-body_small slds-text-color_weak slds-m-top_xx-small slds-m-bottom_small"
+                </template>
+                <span class="section-spacer"></span>
+                <template lwc:if={selectedFollowUp}>
+                  <button
+                    class="slds-button open-followup"
+                    data-id={selectedFollowUp.id}
+                    onclick={handleOpenRecord}
                   >
-                    {heldRowsNote}
-                  </p>
+                    Open {selectedFollowUp.name}
+                  </button>
                 </template>
-              </template>
-              <div
-                class="slds-box slds-box_x-small slds-m-bottom_small question-box"
-              >
-                <h3 class="slds-text-title_caps slds-m-bottom_xx-small">
-                  Question for the firm
-                </h3>
-                <p class="followup-question">{selectedFollowUp.question}</p>
-                <template lwc:if={selectedFollowUp.askedLabel}>
-                  <p class="slds-text-body_small slds-text-color_weak">
-                    {selectedFollowUp.askedLabel}
-                  </p>
-                </template>
-              </div>
-              <div class="slds-box claude-box">
-                <h3 class="slds-text-title_caps slds-m-bottom_x-small">
-                  Claude's suggestion
-                  <template lwc:if={selectedFollowUp.hasConfidence}>
-                    <span class={confidenceClass}>
-                      <span class="slds-badge slds-m-left_x-small"
-                        >{selectedFollowUp.aiConfidence} confidence</span
-                      >
-                    </span>
-                  </template>
-                </h3>
-                <template lwc:if={hasSuggestion}>
-                  <template lwc:if={hasFieldTable}>
-                    <table
-                      class="slds-table slds-table_cell-buffer slds-table_bordered slds-m-bottom_x-small field-table"
-                    >
-                      <thead>
-                        <tr>
-                          <th scope="col">Field</th>
-                          <th scope="col">Suggestion</th>
-                          <th scope="col">Confidence</th>
-                          <th scope="col">Reason</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <template for:each={fieldTable} for:item="l">
-                          <tr key={l.key}>
-                            <td>{l.field}</td>
-                            <td class={l.valueClass}>{l.value}</td>
-                            <td>
-                              <span class={l.confidenceClass}
-                                >{l.confidence}</span
-                              >
-                            </td>
-                            <td class="slds-cell-wrap">{l.reason}</td>
-                          </tr>
-                        </template>
-                      </tbody>
-                    </table>
-                  </template>
-                  <template lwc:else>
-                    <template for:each={suggestedChoices} for:item="c">
-                      <p key={c.label} class="choice">
-                        <span class="slds-text-color_weak choice-label"
-                          >{c.label}:</span
-                        ><span class="choice-value">{c.value}</span>
-                      </p>
-                    </template>
-                  </template>
-                  <template lwc:if={suggestionText}>
-                    <h3
-                      class="slds-text-title_caps slds-m-top_small slds-m-bottom_xx-small"
-                    >
-                      Why
-                    </h3>
-                    <p class="suggestion">{suggestionText}</p>
-                  </template>
-                </template>
-                <template lwc:else>
-                  <p class="slds-text-color_weak claude-state">{claudeState}</p>
-                </template>
-              </div>
-              <div class="slds-m-top_medium decision">
-                <h3 class="slds-text-title_caps slds-m-bottom_x-small">
-                  Your decision
-                </h3>
-                <template lwc:if={rosterFirst}>
-                  <div
-                    class="slds-box slds-box_x-small slds-theme_warning slds-m-bottom_small roster-first"
-                  >
-                    <p class="slds-text-title_bold">
-                      Decide the roster change first
-                    </p>
-                    <p class="slds-m-top_xx-small">
-                      The firm's roster changes code {selectedFollowUp.repCode}
-                      ({selectedFollowUp.rosterText}). Approving it updates who
-                      holds the code, closes this review and re-matches these
-                      rows. Rejecting it unlocks the options below.
-                    </p>
-                    <template lwc:if={rosterVisible}>
-                      <button
-                        class="slds-button slds-m-top_xx-small go-roster"
-                        data-key={rosterKey}
-                        onclick={handleGoTo}
-                      >
-                        Open the roster change
-                      </button>
-                    </template>
-                    <template lwc:else>
-                      <p class="slds-text-body_small slds-m-top_xx-small">
-                        It is not in this view. Choose All to see it.
-                      </p>
-                    </template>
-                  </div>
-                </template>
-                <template lwc:if={rosterPartial}>
-                  <div
-                    class="slds-box slds-box_x-small slds-theme_warning slds-m-bottom_small roster-partial"
-                  >
-                    <p class="slds-text-title_bold">
-                      The roster change comes first for some rows
-                    </p>
-                    <p class="slds-m-top_xx-small">{rosterPartialText}</p>
-                    <template lwc:if={rosterVisible}>
-                      <button
-                        class="slds-button slds-m-top_xx-small go-roster"
-                        data-key={rosterKey}
-                        onclick={handleGoTo}
-                      >
-                        Open the roster change
-                      </button>
-                    </template>
-                  </div>
-                </template>
-                <template lwc:if={rosterInfo}>
-                  <div
-                    class="slds-box slds-box_x-small slds-theme_shade slds-m-bottom_small roster-info"
-                  >
-                    <p>{rosterInfoText}</p>
-                    <template lwc:if={rosterVisible}>
-                      <button
-                        class="slds-button slds-m-top_xx-small go-roster"
-                        data-key={rosterKey}
-                        onclick={handleGoTo}
-                      >
-                        Open the roster change
-                      </button>
-                    </template>
-                  </div>
-                </template>
-                <p class="slds-text-body_small slds-m-bottom_x-small code-help">
-                  {codeReviewHelp}
-                </p>
-                <template lwc:if={selectedFollowUp.canCredit}>
-                  <lightning-combobox
-                    class="credit-choice slds-m-bottom_small"
-                    label="Advisor to credit"
-                    placeholder="Choose the advisor"
-                    options={selectedFollowUp.creditOptions}
-                    value={creditChoice}
-                    disabled={rosterFirst}
-                    onchange={handleCreditChoice}
-                  ></lightning-combobox>
-                </template>
-                <ul class="fix-options">
-                  <template lwc:if={selectedFollowUp.canConfirmHolder}>
-                    <li class="slds-grid slds-gutters_x-small fix-option">
-                      <div class="slds-col slds-no-flex fix-button">
-                        <lightning-button
-                          class="confirm-holder"
-                          variant="brand"
-                          label="Confirm holder"
-                          disabled={confirmHolderDisabled}
-                          onclick={handleConfirmHolder}
-                        ></lightning-button>
-                      </div>
-                      <p class="slds-col slds-text-body_small fix-help">
-                        {confirmHolderHelp}
-                      </p>
-                    </li>
-                  </template>
-                  <template lwc:if={selectedFollowUp.canCredit}>
-                    <li class="slds-grid slds-gutters_x-small fix-option">
-                      <div class="slds-col slds-no-flex fix-button">
-                        <lightning-button
-                          class="credit"
-                          variant="brand"
-                          label={creditLabel}
-                          disabled={creditDisabled}
-                          onclick={handleCredit}
-                        ></lightning-button>
-                      </div>
-                      <p class="slds-col slds-text-body_small fix-help">
-                        {creditHelp}
-                      </p>
-                    </li>
-                  </template>
-                  <li class="slds-grid slds-gutters_x-small fix-option">
-                    <div class="slds-col slds-no-flex fix-button">
-                      <lightning-button
-                        class="rematch"
-                        label="Code fixed: re-match"
-                        disabled={rematchDisabled}
-                        onclick={handleRematch}
-                      ></lightning-button>
-                    </div>
-                    <p class="slds-col slds-text-body_small fix-help">
-                      {rematchHelp}
-                    </p>
-                  </li>
-                  <li class="slds-grid slds-gutters_x-small fix-option">
-                    <div class="slds-col slds-no-flex fix-button">
-                      <lightning-button
-                        class="send-to-review"
-                        label="Decide rows one by one"
-                        disabled={codeActionDisabled}
-                        onclick={handleSendToReview}
-                      ></lightning-button>
-                    </div>
-                    <p class="slds-col slds-text-body_small fix-help">
-                      {sendHelp}
-                    </p>
-                  </li>
-                </ul>
-                <div class="slds-m-top_small">
-                  <template lwc:if={isUnassigned}>
-                    <lightning-button
-                      class="assign"
-                      label="Assign to me"
-                      disabled={busy}
-                      onclick={handleAssignToMe}
-                    ></lightning-button>
-                  </template>
-                  <template lwc:if={isMine}>
-                    <lightning-button
-                      class="unassign"
-                      label="Unassign"
-                      disabled={busy}
-                      onclick={handleUnassign}
-                    ></lightning-button>
-                  </template>
-                  <template lwc:if={assignedToOther}>
-                    <span class="slds-text-body_small slds-m-left_small"
-                      >Assigned to {selectedFollowUp.assignedToName}</span
-                    >
-                  </template>
-                </div>
-                <button
-                  class="slds-button slds-m-top_x-small open-followup"
-                  data-id={selectedFollowUp.id}
-                  onclick={handleOpenRecord}
-                >
-                  Open the follow-up record
-                </button>
               </div>
             </div>
           </template>
@@ -1012,11 +1026,7 @@
           </h2>
         </header>
         <div class="slds-modal__content slds-p-around_medium">
-          <p class="slds-m-bottom_small">
-            The row waits on the On Hold tab until you accept, reject or release
-            it. Say what needs to be found out; it becomes the question in the
-            firm's follow-up email.
-          </p>
+          <p class="slds-m-bottom_small hold-intro">{holdIntro}</p>
           <template lwc:if={selectedIsGroup}>
             <p class="slds-text-title_bold slds-m-bottom_x-small hold-group">
               {holdGroupText}
@@ -1026,12 +1036,12 @@
             <p
               class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small"
             >
-              Filled in from Claude's suggestion. Edit it as needed.
+              {holdPrefillText}
             </p>
           </template>
           <lightning-textarea
             class="hold-text"
-            label="What needs to be found out"
+            label="Question for the firm"
             value={holdText}
             max-length="2000"
             onchange={handleHoldText}

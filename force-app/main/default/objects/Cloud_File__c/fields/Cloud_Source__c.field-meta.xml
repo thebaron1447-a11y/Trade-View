@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Cloud_Source__c</fullName>
+    <description>The source the file was taken from. Master-detail so the record of taken files goes with the source.</description>
+    <inlineHelpText>The cloud folder this file came from.</inlineHelpText>
+    <label>Cloud Source</label>
+    <referenceTo>Cloud_Source__c</referenceTo>
+    <relationshipLabel>Cloud Files</relationshipLabel>
+    <relationshipName>Cloud_Files</relationshipName>
+    <relationshipOrder>0</relationshipOrder>
+    <reparentableMasterDetail>false</reparentableMasterDetail>
+    <type>MasterDetail</type>
+    <writeRequiresMasterRead>false</writeRequiresMasterRead>
+</CustomField>

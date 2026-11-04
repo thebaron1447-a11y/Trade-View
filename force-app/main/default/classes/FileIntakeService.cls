@@ -43,6 +43,14 @@ public with sharing class FileIntakeService {
      * corrupted in transit.
      */
     public static Receipt receive(String sourceFirm, String fileName, Blob file, String expectedHash) {
+        return receive(sourceFirm, fileName, file, expectedHash, true);
+    }
+
+    /**
+     * As receive, but with queueProcessing false the batch is left Received for the caller to process together with
+     * others (a cloud pull queues one ImportBatchProcessor for every file it takes).
+     */
+    public static Receipt receive(String sourceFirm, String fileName, Blob file, String expectedHash, Boolean queueProcessing) {
         String firm = sourceFirmCode(sourceFirm);
         String name = fileName == null ? '' : fileName.trim();
         if (name.length() == 0) {
@@ -94,7 +102,9 @@ public with sharing class FileIntakeService {
             throw e;
         }
         SystemWriter.insertOne(new ContentVersion(Title = name, PathOnClient = name, VersionData = file, FirstPublishLocationId = batch.Id));
-        System.enqueueJob(new ImportBatchProcessor(batch.Id));
+        if (queueProcessing) {
+            System.enqueueJob(new ImportBatchProcessor(batch.Id));
+        }
         return receipt(batch, false);
     }
 

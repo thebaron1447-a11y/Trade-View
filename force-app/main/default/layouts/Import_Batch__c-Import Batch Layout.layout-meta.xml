@@ -107,6 +107,13 @@
         <fields>Match_Flags__c</fields>
         <relatedList>Import_Staging_Row__c.Import_Batch__c</relatedList>
     </relatedLists>
+    <relatedLists>
+        <fields>NAME</fields>
+        <fields>Cloud_Source__c</fields>
+        <fields>Object_Key__c</fields>
+        <fields>Status__c</fields>
+        <relatedList>Cloud_File__c.Import_Batch__c</relatedList>
+    </relatedLists>
     <showEmailCheckbox>false</showEmailCheckbox>
     <showHighlightsPanel>false</showHighlightsPanel>
     <showInteractionLogPanel>false</showInteractionLogPanel>

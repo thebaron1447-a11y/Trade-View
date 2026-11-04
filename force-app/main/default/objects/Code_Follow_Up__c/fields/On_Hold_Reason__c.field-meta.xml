@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>On_Hold_Reason__c</fullName>
+    <description>What must be found out from the dealer before the code can be settled. Pre-filled from AI Homework in the Put on hold dialog and required to put a review on hold. Used as this code's question in the firm follow-up email. Kept after release for the record.</description>
+    <inlineHelpText>What needs to be found out from the dealer before this code can be settled.</inlineHelpText>
+    <label>On Hold Reason</label>
+    <length>2000</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

@@ -72,7 +72,7 @@ private class ReviewControllerTest {
         Assert.areEqual('Kestrel Capital Inc.', kestrel.aiFirmName, 'suggested firm by name');
         Assert.areEqual('Firm unclear', kestrel.issueType, 'issue type column');
         Assert.areEqual(1, kestrel.issueCount, 'one issue');
-        Assert.isFalse(kestrel.isCodeIssue, 'a firm question stays in Needs Decision');
+        Assert.isFalse(kestrel.isCodeIssue, 'a firm question stays in Data Review');
         Assert.areEqual(new List<String>{ 'The firm name fits more than one firm' }, kestrel.reasons, 'reason in plain words');
         Assert.areEqual('MIXED', kestrel.sourceFirm, 'file it came from');
         Assert.areEqual(50000, kestrel.amount.intValue(), 'amount');
@@ -588,7 +588,7 @@ private class ReviewControllerTest {
             new Import_Staging_Row__c(Match_Flags__c = 'FUND_AMBIGUOUS;FIRM_FUZZY', Row_Type__c = 'Trade', Match_Status__c = 'Needs Review'),
             none
         );
-        Assert.isFalse(fund.isCodeIssue, 'data issues stay in Needs Decision');
+        Assert.isFalse(fund.isCodeIssue, 'data issues stay in Data Review');
         Assert.areEqual('Fund unclear', fund.issueType, 'informational flags do not name the type');
         Assert.areEqual(1, fund.issueCount, 'only issues that need review are counted');
         ReviewController.RowItem odd = ReviewController.rowItem(
@@ -631,7 +631,7 @@ private class ReviewControllerTest {
         ReviewController.holdRow(fundRowId, '  Ask Barder which fund "ETF Wealth World Fund A" is.  ');
 
         ReviewController.Queue q = ReviewController.getQueue('all');
-        Assert.isNull(rowOf(q, fundRowId), 'no longer in Needs Decision');
+        Assert.isNull(rowOf(q, fundRowId), 'no longer in Data Review');
         Assert.areEqual(1, q.holdRows.size(), 'on the On Hold tab');
         ReviewController.RowItem held = q.holdRows[0];
         Assert.areEqual('Ask Barder which fund "ETF Wealth World Fund A" is.', held.holdReason, 'homework kept, trimmed');
@@ -641,7 +641,7 @@ private class ReviewControllerTest {
 
         ReviewController.releaseHold(fundRowId);
         q = ReviewController.getQueue('all');
-        Assert.isNotNull(rowOf(q, fundRowId), 'back in Needs Decision');
+        Assert.isNotNull(rowOf(q, fundRowId), 'back in Data Review');
         Assert.areEqual(0, q.holdRows.size(), 'nothing on hold');
         Import_Staging_Row__c released = [SELECT On_Hold__c, On_Hold_Reason__c FROM Import_Staging_Row__c WHERE Id = :fundRowId];
         Assert.isFalse(released.On_Hold__c, 'released');
@@ -1054,7 +1054,7 @@ private class ReviewControllerTest {
 
         Assert.areEqual(1, ReviewController.closeCodeReview(unfixable.Id, false), 'one row was waiting');
         Import_Staging_Row__c sent = TradeTestWorld.row(batch.Id, 1);
-        Assert.areEqual('Needs Review', sent.Match_Status__c, 'sent to Needs Decision');
+        Assert.areEqual('Needs Review', sent.Match_Status__c, 'sent to Data Review');
         Assert.isTrue(sent.Match_Flags__c.contains('FOLLOW_UP_CLOSED'), 'and says why: ' + sent.Match_Flags__c);
         Assert.areEqual('Closed - No Action', [SELECT Status__c FROM Code_Follow_Up__c WHERE Id = :unfixable.Id].Status__c, 'closed');
 

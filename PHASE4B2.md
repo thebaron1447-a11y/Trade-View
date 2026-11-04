@@ -38,7 +38,7 @@ Code issues and roster rows are still decided one by one in Dealer Code Review. 
 time; a bigger group stays in the queue with the rest, ready for the next click. **Run the full demo reset after
 deploying**: existing rows get their issue key only when they are matched again.
 
-**Update 4b.2a (tab layout):** the tabs are now **Dealer Code Review, Needs Decision, On Hold, Email Firms, New File
+**Update 4b.2a (tab layout):** the tabs are now **Dealer Code Review, Data Review, On Hold, Email Firms, New File
 Format, Recent Files**, and every tab uses the same table: the item, its issue type (with Claude's confidence and
 recommendation) and the amount or count.
 
@@ -46,7 +46,7 @@ recommendation) and the amount or count.
   roster row or trade row whose issue is the code (new holder, new code, unknown or ended code, dated before the code
   started, dormant code, reassignment, team change, shares under 100%). A row with a code issue and another issue
   goes here; its other issues are listed in its detail.
-- **Needs Decision** holds the rest (firm, fund and other data questions), grouped by file.
+- **Data Review** holds the rest (firm, fund and other data questions), grouped by file.
 - **Email Firms** is its own tab: one line per firm with questions waiting, its Operations Contact and how many were
   asked. Selecting a firm lists each question (where it came from, and when it was asked) with **Email the firm**.
 
@@ -57,7 +57,7 @@ What changes in Trade Review:
 - **Why it needs review** lists each specific note once.
 - **Put on hold**: a fourth decision for rows only the dealer can settle. Say what needs to be found out (Claude
   pre-fills it when it recommends Hold). The row moves to the new **On Hold** tab, where you can **Accept**,
-  **Reject** or **Release** it back to Needs Decision.
+  **Reject** or **Release** it back to Data Review.
 - **Roster rows show what approving will do**: create the advisor, create the code, end the old holder's assignment,
   assign the code, close the code review and re-match its trades. If a row cannot be approved, it says why and
   Approve is switched off.
@@ -109,12 +109,12 @@ Give it two minutes, then open Trade Review.
 
 | Try | You should see |
 |---|---|
-| Needs Decision titles | *Priya Nair · Rep code mismatch on 2210*, *Hannah Pierce · New advisor, new code 3390*, *Unknown fund · "…"*, then Claude's own headlines once it answers |
+| Data Review titles | *Priya Nair · Rep code mismatch on 2210*, *Hannah Pierce · New advisor, new code 3390*, *Unknown fund · "…"*, then Claude's own headlines once it answers |
 | Priya Nair's roster row | *Approving will* lists: end Marcus Lee's assignment, assign 2210 to Priya Nair, close the 2210 code review and re-match its held trades |
 | Any row Claude has answered | The Field / Suggestion / Confidence / Reason table and *Claude recommends: …* |
 | Barder row 11 (dated before the code started) | Put on hold; the dialog is pre-filled if Claude recommended Hold. The row moves to On Hold |
 | Email Firms tab | *Barder & Company* with its questions listed. Click **Email the firm**: the Send Email window opens addressed to your contact. Send it, then **Mark as asked** |
-| On Hold tab | The held row shows *Asked* with the date; **Release** sends it back to Needs Decision |
+| On Hold tab | The held row shows *Asked* with the date; **Release** sends it back to Data Review |
 | The firm Account | The email in its activity history |
 | AI Request Logs | Input, Output and Cached Input Tokens on every new log; a *Firm Follow-up* log for the email |
 

@@ -831,5 +831,179 @@
    "desc": "Who recorded the firm's confirmation that this advisor still holds the code (Confirm holder in Trade Review).",
    "help": "Who recorded the confirmation. Set by the system."
   }
+ ],
+ "Cloud_Source__c@4C": [
+  {
+   "name": "Provider",
+   "api": "Provider__c",
+   "type": "Picklist (values: Amazon S3), required, default Amazon S3",
+   "desc": "Which cloud storage the source is. Chooses the code that lists and reads files (CloudStorage implementations). Only Amazon S3 is built so far.",
+   "help": "The kind of cloud storage this folder is in."
+  },
+  {
+   "name": "Named Credential",
+   "api": "Named_Credential__c",
+   "type": "Text(80)",
+   "desc": "API name of the Named Credential for the bucket (for S3: URL https://BUCKET.s3.REGION.amazonaws.com, AWS Signature Version 4 external credential with a read-only access key). The key itself is entered in Setup and never stored on this record or in code.",
+   "help": "The API name of the Named Credential that connects to the bucket, for example Trade_View_S3."
+  },
+  {
+   "name": "Folder",
+   "api": "Folder__c",
+   "type": "Text(255)",
+   "desc": "Folder (key prefix) in the bucket to read, for example inbox/. Blank reads the whole bucket. Under it, each dealer's files are in a subfolder named with the dealer code (BARDER/barder_trades.csv), unless Source Firm is set.",
+   "help": "The folder in the bucket to read, for example inbox/. Leave blank for the whole bucket."
+  },
+  {
+   "name": "Source Firm",
+   "api": "Source_Firm__c",
+   "type": "Text(80)",
+   "desc": "Dealer code for a folder that holds a single dealer's files directly. Blank means each dealer has its own subfolder, named with its code.",
+   "help": "Fill in only if this folder holds one dealer's files directly. Otherwise leave blank and use one subfolder per dealer."
+  },
+  {
+   "name": "Active",
+   "api": "Active__c",
+   "type": "Checkbox (default unchecked)",
+   "desc": "Only active sources are pulled, on schedule or with Pull now.",
+   "help": "Turn on to start pulling files from this folder."
+  },
+  {
+   "name": "Pull Frequency",
+   "api": "Pull_Frequency__c",
+   "type": "Picklist (values: Manual only, Every 15 minutes, Hourly, Every 4 hours, Daily), required, default Manual only",
+   "desc": "How often the source is checked for new files. The stranded work sweeper runs every 15 minutes and starts each active source whose Next Pull At has passed, so times are accurate to about 15 minutes. Manual only means Pull now in Trade Review.",
+   "help": "How often to check this folder for new files. Choose Manual only to pull only when you click Pull now."
+  },
+  {
+   "name": "Pull Hour",
+   "api": "Pull_Hour__c",
+   "type": "Number(2,0)",
+   "desc": "For a Daily pull: the hour of day (0 to 23, in the time zone of the user who scheduled the sweeper) to pull at.",
+   "help": "For a daily pull, the hour to pull at, from 0 (midnight) to 23 (11 pm)."
+  },
+  {
+   "name": "Next Pull At",
+   "api": "Next_Pull_At__c",
+   "type": "Date/Time",
+   "desc": "When the source is next due, worked out from Pull Frequency and Pull Hour whenever they change and after every pull. Blank for Manual only or inactive sources.",
+   "help": "When this folder will next be checked. Set by the system."
+  },
+  {
+   "name": "Last Pull At",
+   "api": "Last_Pull_At__c",
+   "type": "Date/Time",
+   "desc": "When the last pull finished.",
+   "help": "When this folder was last checked. Set by the system."
+  },
+  {
+   "name": "Last Pull Status",
+   "api": "Last_Pull_Status__c",
+   "type": "Picklist (values: Pulling, Succeeded, Failed)",
+   "desc": "Pulling while a pull is running, then Succeeded or Failed. Failed keeps the source scheduled; the reason is in Last Pull Message.",
+   "help": "How the last check of this folder went. Set by the system."
+  },
+  {
+   "name": "Last Pull Message",
+   "api": "Last_Pull_Message__c",
+   "type": "Long Text Area(2000)",
+   "desc": "What the last pull did, in plain words: files taken, skipped or refused, or why it failed.",
+   "help": "What happened the last time this folder was checked. Set by the system."
+  },
+  {
+   "name": "Notify User",
+   "api": "Notify_User__c",
+   "type": "Lookup(User), optional, clear value if deleted",
+   "desc": "Who clicked Pull now. Each file the pull takes is marked for them, so they get a bell when it is read and matched. Cleared when the pull finishes. Scheduled pulls notify nobody.",
+   "help": "Who is waiting on the current pull. Set by the system."
+  }
+ ],
+ "Cloud_File__c@4C": [
+  {
+   "name": "Cloud Source",
+   "api": "Cloud_Source__c",
+   "type": "Master-Detail(Cloud Source)",
+   "desc": "The source the file was taken from. Master-detail so the record of taken files goes with the source.",
+   "help": "The cloud folder this file came from."
+  },
+  {
+   "name": "Path",
+   "api": "Object_Key__c",
+   "type": "Text(255)",
+   "desc": "The file's full path (object key) in the bucket, shortened to 255 characters if longer.",
+   "help": "Where the file is in the bucket."
+  },
+  {
+   "name": "Version Tag",
+   "api": "ETag__c",
+   "type": "Text(100)",
+   "desc": "The storage provider's version tag (ETag) for the file when it was taken. A file replaced in the bucket gets a new tag and is taken again.",
+   "help": "Identifies this version of the file. Set by the system."
+  },
+  {
+   "name": "File Key",
+   "api": "File_Key__c",
+   "type": "Text(100), Unique, External ID",
+   "desc": "Source Id plus a SHA-256 of the path and version tag. Unique, so each version of each file is taken once.",
+   "help": "System-generated key that stops a file being taken twice. Do not edit."
+  },
+  {
+   "name": "Size (Bytes)",
+   "api": "Size_Bytes__c",
+   "type": "Number(12,0)",
+   "desc": "The file's size as listed by the provider. Files over the 1 MB intake limit are refused without downloading.",
+   "help": "How big the file is."
+  },
+  {
+   "name": "Status",
+   "api": "Status__c",
+   "type": "Picklist (values: Received, Duplicate, Refused, Failed), required",
+   "desc": "Received: a new Import Batch was made. Duplicate: the same contents were received before. Refused: not taken (too large, no dealer folder, not a CSV or text file). Failed: the download or intake failed and it is tried again on the next pull.",
+   "help": "What happened to this file."
+  },
+  {
+   "name": "Message",
+   "api": "Message__c",
+   "type": "Long Text Area(2000)",
+   "desc": "Why a file was refused or failed, or the intake's reply.",
+   "help": "Details about what happened to this file."
+  },
+  {
+   "name": "Import Batch",
+   "api": "Import_Batch__c",
+   "type": "Lookup(Import Batch), optional, clear value if deleted",
+   "desc": "The batch the file became (or the earlier batch with the same contents, for a duplicate).",
+   "help": "The import this file became."
+  }
+ ],
+ "Code_Follow_Up__c@4F": [
+  {
+   "name": "On Hold",
+   "api": "On_Hold__c",
+   "type": "Checkbox (default unchecked)",
+   "desc": "Checked when a reviewer has parked this code review until the dealer answers. On-hold reviews show on the On Hold tab with on-hold rows instead of under Dealer Code Reviews. Cleared when the review is settled (confirm holder, credit, re-match, decide rows one by one) or released. The held rows stay held either way, because the code itself holds them.",
+   "help": "Checked while this code review waits for an answer from the dealer."
+  },
+  {
+   "name": "On Hold Reason",
+   "api": "On_Hold_Reason__c",
+   "type": "Long Text Area(2000)",
+   "desc": "What must be found out from the dealer before the code can be settled. Pre-filled from AI Homework in the Put on hold dialog and required to put a review on hold. Used as this code's question in the firm follow-up email. Kept after release for the record.",
+   "help": "What needs to be found out from the dealer before this code can be settled."
+  },
+  {
+   "name": "On Hold By",
+   "api": "On_Hold_By__c",
+   "type": "Lookup(User), optional, clear value if deleted",
+   "desc": "The reviewer who put the code review on hold. Set by the system and shown in the \"Waiting on [firm] since … by …\" banner.",
+   "help": "Who put this code review on hold."
+  },
+  {
+   "name": "On Hold Since",
+   "api": "On_Hold_Since__c",
+   "type": "Date/Time",
+   "desc": "When the code review was put on hold. Set by the system; orders the On Hold tab and is shown in the banner.",
+   "help": "When this code review was put on hold."
+  }
  ]
 }

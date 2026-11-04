@@ -16,6 +16,7 @@ public with sharing class TradeViewNotifier {
     public static final String KIND_ROWS = 'Rows';
     public static final String KIND_CLAUDE = 'Claude';
     public static final String KIND_LOAD = 'Load';
+    public static final String KIND_PULL = 'Pull';
     public static final String NOTIFICATION_TYPE = 'Trade_View';
     /** What the bell says, by moment. */
     public static final String MOMENT_READ = 'read';

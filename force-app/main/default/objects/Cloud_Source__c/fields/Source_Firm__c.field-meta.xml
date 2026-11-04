@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Source_Firm__c</fullName>
+    <description>Dealer code for a folder that holds a single dealer's files directly. Blank means each dealer has its own subfolder, named with its code.</description>
+    <inlineHelpText>Fill in only if this folder holds one dealer's files directly. Otherwise leave blank and use one subfolder per dealer.</inlineHelpText>
+    <label>Source Firm</label>
+    <length>80</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>
